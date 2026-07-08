@@ -26,17 +26,58 @@ export type ProofConnectorId =
   | "salesforce_crm"
   | "zoho_crm"
   | "zendesk_ticket"
+  | "intercom"
+  | "freshdesk_ticket"
   | "jira_issue"
   | "stripe_refund"
   | "stripe_payment"
   | "razorpay_refund"
   | "netsuite_finance"
+  | "quickbooks_ledger"
+  | "generic_finance"
   | "shopify_admin"
   | "ledger_template"
   | "customer_template"
   | "postgres_read";
 export type SupportConnectorId = "github" | "slack";
 export type ConnectorInventoryId = ProofConnectorId | SupportConnectorId;
+
+export const LAUNCH_VISIBLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
+  "generic_rest",
+  "stripe_refund",
+  "postgres_read",
+  "github",
+  "slack",
+]);
+
+export const CONNECTOR_DISPLAY_LABELS: Record<string, string> = {
+  accounting_system: "Accounting system",
+  commerce_platform: "Commerce platform",
+  crm_record: "CRM record",
+  customer_identity: "Customer identity",
+  erp_finance: "ERP finance",
+  email_delivery: "Email/messages",
+  freshdesk_ticket: "Freshdesk tickets",
+  generic_finance: "Generic Finance API",
+  generic_rest: "Generic REST",
+  github_ci: "GitHub CI",
+  inventory_system: "Inventory system",
+  intercom: "Intercom",
+  ledger_refund: "Refund ledger",
+  netsuite_finance: "NetSuite finance",
+  order_management: "Order management",
+  payments_ledger: "Payments ledger",
+  postgres_read: "Postgres Read",
+  quickbooks_ledger: "QuickBooks template",
+  razorpay_refund: "Razorpay refund",
+  shopify_admin: "Shopify Admin",
+  slack_approval_alert: "Slack approval",
+  subscription_billing: "Subscription billing",
+  stripe_payment: "Stripe payment",
+  stripe_refund: "Stripe refund",
+  ticket_status: "Support tickets",
+  zendesk_ticket: "Zendesk tickets",
+};
 
 export type ConnectorTransport = "rest_http" | "sql_read" | "webhook_bridge" | "workflow";
 export type ConnectorTemplateKind =
@@ -45,11 +86,15 @@ export type ConnectorTemplateKind =
   | "salesforce_crm"
   | "zoho_crm"
   | "zendesk_ticket"
+  | "intercom"
+  | "freshdesk_ticket"
   | "jira_issue"
   | "stripe_refund"
   | "stripe_payment"
   | "razorpay_refund"
   | "netsuite_finance"
+  | "quickbooks_ledger"
+  | "generic_finance"
   | "shopify_admin"
   | "refund_ledger"
   | "customer_record"
@@ -209,6 +254,7 @@ export type BuildConnectorInventoryInput = {
   registry?: ToolRegistryResponse | null;
   actionTypes?: string[];
   partialFailure?: boolean;
+  visibleConnectorIds?: ReadonlySet<ConnectorInventoryId>;
 };
 
 type ProofConnectorDefinition = {
@@ -295,11 +341,15 @@ const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCateg
   salesforce_crm: "crm",
   zoho_crm: "crm",
   zendesk_ticket: "support_itsm",
+  intercom: "support_itsm",
+  freshdesk_ticket: "support_itsm",
   jira_issue: "support_itsm",
   stripe_refund: "payments",
   stripe_payment: "payments",
   razorpay_refund: "payments",
   netsuite_finance: "finance_erp",
+  quickbooks_ledger: "finance_erp",
+  generic_finance: "finance_erp",
   shopify_admin: "commerce",
   ledger_template: "payments",
   customer_template: "crm",
@@ -548,10 +598,14 @@ function registryConnectorIds(item: ToolRegistryResponse["verification_connector
   if (haystack.includes("stripe_refund") || (haystack.includes("stripe") && haystack.includes("refund"))) ids.push("stripe_refund");
   if (haystack.includes("shopify")) ids.push("shopify_admin");
   if (haystack.includes("razorpay")) ids.push("razorpay_refund");
+  if (haystack.includes("quickbooks")) ids.push("quickbooks_ledger");
+  if (haystack.includes("generic_finance") || haystack.includes("finance_api") || haystack.includes("accounting_system")) ids.push("generic_finance");
   if (haystack.includes("netsuite") || haystack.includes("procurement") || haystack.includes("finance")) ids.push("netsuite_finance");
   if (haystack.includes("hubspot")) ids.push("hubspot_crm");
   if (haystack.includes("salesforce")) ids.push("salesforce_crm");
   if (haystack.includes("zoho")) ids.push("zoho_crm");
+  if (haystack.includes("intercom")) ids.push("intercom");
+  if (haystack.includes("freshdesk")) ids.push("freshdesk_ticket");
   if (haystack.includes("zendesk") || haystack.includes("ticket")) ids.push("zendesk_ticket");
   if (
     haystack.includes("jira")
@@ -852,6 +906,32 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       status: input.zendesk ?? null,
     },
     {
+      id: "intercom",
+      transport: "rest_http",
+      templateKind: "intercom",
+      title: "Intercom verifier",
+      category: "Native REST verifier",
+      description: "Intercom conversation and customer-message proof for support agents. Native credential setup is not enabled yet; use Custom REST until launch.",
+      href: "/integrations?connector=intercom",
+      ctaLabel: "Configure Intercom",
+      connectorTypes: ["intercom", "intercom_conversation", "intercom_ticket", "system_of_record.intercom"],
+      supportedActionTypes: ["ticket_close", "support", "ticket", "message", "email_send", "customer_message", "intercom"],
+      status: null,
+    },
+    {
+      id: "freshdesk_ticket",
+      transport: "rest_http",
+      templateKind: "freshdesk_ticket",
+      title: "Freshdesk ticket verifier",
+      category: "Native REST verifier",
+      description: "Freshdesk ticket and workflow proof for support agents. Native credential setup is not enabled yet; use Custom REST until launch.",
+      href: "/integrations?connector=freshdesk_ticket",
+      ctaLabel: "Configure Freshdesk",
+      connectorTypes: ["freshdesk_ticket", "freshdesk", "ticket_status", "system_of_record.freshdesk_ticket"],
+      supportedActionTypes: ["ticket_close", "support", "ticket", "freshdesk", "case", "customer_message"],
+      status: null,
+    },
+    {
       id: "jira_issue",
       transport: "rest_http",
       templateKind: "jira_issue",
@@ -938,6 +1018,53 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       status: input.netsuite ?? null,
     },
     {
+      id: "quickbooks_ledger",
+      transport: "rest_http",
+      templateKind: "quickbooks_ledger",
+      title: "QuickBooks ledger verifier",
+      category: "Native REST verifier",
+      description: "QuickBooks invoice, payment, and ledger proof for finance agents. Native OAuth setup is not enabled yet; use the finance template until launch.",
+      href: "/integrations?connector=quickbooks_ledger",
+      ctaLabel: "Configure QuickBooks",
+      connectorTypes: ["quickbooks_ledger", "quickbooks", "quickbooks_online", "accounting_system", "system_of_record.quickbooks_ledger"],
+      supportedActionTypes: [
+        "invoice_spend_approval",
+        "payment_adjustment",
+        "vendor_payout",
+        "journal_entry",
+        "finance",
+        "invoice",
+        "ledger",
+        "accounting",
+      ],
+      status: null,
+    },
+    {
+      id: "generic_finance",
+      transport: "rest_http",
+      templateKind: "generic_finance",
+      title: "Generic Finance API verifier",
+      category: "Finance REST verifier",
+      description: "Internal ERP, ledger, accounting, and finance-service proof through a read-only REST API.",
+      href: "/integrations?connector=generic_finance",
+      ctaLabel: "Configure Finance API",
+      connectorTypes: ["generic_finance", "finance_api", "erp_finance", "accounting_system", "system_of_record.generic_finance"],
+      supportedActionTypes: [
+        "invoice_spend_approval",
+        "payment_adjustment",
+        "vendor_payout",
+        "journal_entry",
+        "finance",
+        "procurement",
+        "vendor_bill",
+        "purchase_order",
+        "invoice",
+        "ledger",
+        "accounting",
+      ],
+      status: input.generic,
+    },
+    {
       id: "shopify_admin",
       transport: "rest_http",
       templateKind: "shopify_admin",
@@ -986,16 +1113,30 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       href: "/integrations#postgres-read-connector",
       ctaLabel: "Configure SQL verifier",
       connectorTypes: ["postgres_read", "postgres_read_model"],
-      supportedActionTypes: ["database", "sql", "record", "internal_api"],
+      supportedActionTypes: [
+        "database",
+        "sql",
+        "record",
+        "internal_api",
+        "finance",
+        "journal_entry",
+        "invoice_spend_approval",
+        "ledger",
+        "accounting",
+      ],
       status: input.postgres,
     },
   ];
 
-  const proofRows = proofDefinitions.map((definition) => proofRow(definition, checks));
+  const visibleConnectorIds = input.visibleConnectorIds ?? null;
+  const visibleProofDefinitions = visibleConnectorIds
+    ? proofDefinitions.filter((definition) => visibleConnectorIds.has(definition.id))
+    : proofDefinitions;
+  const proofRows = visibleProofDefinitions.map((definition) => proofRow(definition, checks));
   const supportRows = [
     supportRow("github", input.github),
     supportRow("slack", input.slack),
-  ];
+  ].filter((row) => !visibleConnectorIds || visibleConnectorIds.has(row.id));
   const actionTypes = actionTypesForCoverage(input);
   const coverageRows = buildCoverageRows(actionTypes, proofRows, registryConnectorHints(input.registry));
   const counts: ConnectorInventoryCounts = {

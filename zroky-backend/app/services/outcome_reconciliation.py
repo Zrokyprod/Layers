@@ -484,6 +484,27 @@ def verification_status_for_check(row: OutcomeReconciliationCheck) -> str:
     return VERIFICATION_UNVERIFIABLE
 
 
+REVERIFY_CONNECTORS = {
+    "customer_record_api",
+    "generic_rest_api",
+    "hubspot_crm",
+    "jira_issue",
+    "ledger_refund_api",
+    "netsuite_finance",
+    "postgres_read",
+    "razorpay_refund",
+    "salesforce_crm",
+    "stripe_refund",
+    "zendesk_ticket",
+    "zoho_crm",
+}
+
+
+def reverify_connector_for_check(row: OutcomeReconciliationCheck) -> str | None:
+    connector_type = (row.connector_type or "").strip().lower()
+    return connector_type if connector_type in REVERIFY_CONNECTORS else None
+
+
 def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -493,6 +514,7 @@ def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
         "runtime_policy_decision_id": row.runtime_policy_decision_id,
         "action_type": row.action_type,
         "connector_type": row.connector_type,
+        "reverify_connector": reverify_connector_for_check(row),
         "system_ref": row.system_ref,
         "verdict": row.verdict,
         "verification_status": verification_status_for_check(row),

@@ -75,15 +75,35 @@ def _pricing_contract_drift(contract: dict[str, Any]) -> list[str]:
         if enforcement.get("compatibility") != entry.compatibility:
             drift.append(f"{code}.compatibility")
 
+        expected_overage = {
+            "free": (None, "hard_cap"),
+            "starter": (0.03, "overage"),
+            "team": (0.025, "overage"),
+            "scale": (0.015, "overage"),
+            "enterprise": (None, "custom"),
+        }[code]
         expected_pricing = {
-            "calls_per_month": entry.limits["max_calls_per_month"],
-            "retention_days": entry.limits["retention_days"],
-            "replay_credits": entry.compatibility["replay.monthly_runs"],
-            "golden_traces": entry.limits["max_golden_traces"],
-            "golden_sets": entry.compatibility["goldens.max_sets"],
-            "non_blocking_ci": entry.entitlements["pro.ci_gate_nonblocking"],
-            "blocking_ci": entry.entitlements["pro.ci_gate_blocking"],
-            "provider_key_vault": entry.entitlements["enterprise.provider_key_vault"],
+            "protected_actions_per_month": entry.compatibility[
+                "actions.protected.monthly_quota"
+            ],
+            "managed_agents": entry.compatibility["agents.max"],
+            "connectors": entry.compatibility["connectors.system_of_record.max"],
+            "approver_seats": entry.compatibility["seats.included"],
+            "evidence_retention_days": entry.compatibility["retention.days"],
+            "slack_approvals": True,
+            "scoped_policy_rules_dry_run": entry.entitlements[
+                "pro.ci_gate_nonblocking"
+            ],
+            "bypass_detection": {
+                "free": "none",
+                "starter": "basic",
+                "team": "full",
+                "scale": "full",
+                "enterprise": "custom",
+            }[code],
+            "audit_manifest_export": entry.compatibility["compliance.export_enabled"],
+            "overage_per_action_usd": expected_overage[0],
+            "overage_policy": expected_overage[1],
         }
         for key, expected in expected_pricing.items():
             if pricing.get(key) != expected:

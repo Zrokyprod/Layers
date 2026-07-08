@@ -25,6 +25,28 @@ def consume_gateway_ingest_stream() -> dict:
     return {"enabled": True, **result.__dict__}
 
 
+@celery_app.task(name="app.worker.tasks.poll_source_mutations", queue="diagnosis_fast")
+def poll_source_mutations() -> dict:
+    """Beat task: poll connected systems of record for unreceipted mutations."""
+    settings = get_settings()
+    if not settings.SOURCE_MUTATION_POLLER_ENABLED:
+        return {"enabled": False}
+
+    from app.services.source_mutation_polling import poll_source_mutations_once
+
+    session = SessionLocal()
+    try:
+        result = poll_source_mutations_once(
+            session,
+            project_limit=settings.SOURCE_MUTATION_POLLER_PROJECT_LIMIT,
+            per_connector_limit=settings.SOURCE_MUTATION_POLLER_PER_CONNECTOR_LIMIT,
+            timeout_seconds=settings.SOURCE_MUTATION_POLLER_TIMEOUT_SECONDS,
+        )
+        return {"enabled": True, **result.__dict__}
+    finally:
+        session.close()
+
+
 @celery_app.task(
     name="app.worker.tasks.run_shadow_judge_task",
     queue="diagnosis_pattern",

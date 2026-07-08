@@ -95,6 +95,7 @@ const fixtures = vi.hoisted(() => {
         runtime_policy_decision_id: "decision_1",
         action_type: "refund",
         connector_type: "ledger_api",
+        reverify_connector: "ledger_refund_api",
         system_ref: "ledger:rf_100",
         verdict: "matched",
         reason: "all_compared_fields_matched",
@@ -161,6 +162,8 @@ const hookState = vi.hoisted(() => ({
   evidenceDecisionId: null as string | null,
   decisions: null as RuntimePolicyDecisionResponse[] | null,
   intents: null as ActionIntentResponse[] | null,
+  actionIntentOptions: null as Record<string, unknown> | null,
+  approvalsOptions: null as Record<string, unknown> | null,
   approvalsStatus: null as string | null,
   approvalsRefetch: vi.fn(),
   approve: vi.fn(),
@@ -185,8 +188,9 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/lib/hooks", () => ({
-  useRuntimePolicyApprovals: (status: string) => {
+  useRuntimePolicyApprovals: (status: string, options?: Record<string, unknown>) => {
     hookState.approvalsStatus = status;
+    hookState.approvalsOptions = options ?? null;
     return {
       data: {
         items: hookState.decisions ?? [fixtures.decision],
@@ -199,19 +203,22 @@ vi.mock("@/lib/hooks", () => ({
       refetch: hookState.approvalsRefetch,
     };
   },
-  useActionIntents: () => ({
-    data: {
-      items: hookState.intents ?? [fixtures.actionIntent],
-      total_in_page: hookState.intents?.length ?? 1,
-      limit: 100,
-      offset: 0,
-    },
-    isLoading: false,
-    isError: false,
-    error: null,
-    isFetching: false,
-    refetch: vi.fn(),
-  }),
+  useActionIntents: (_query: unknown, options?: Record<string, unknown>) => {
+    hookState.actionIntentOptions = options ?? null;
+    return {
+      data: {
+        items: hookState.intents ?? [fixtures.actionIntent],
+        total_in_page: hookState.intents?.length ?? 1,
+        limit: 100,
+        offset: 0,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      isFetching: false,
+      refetch: vi.fn(),
+    };
+  },
   useRuntimePolicyEvidencePack: (decisionId: string | null) => {
     hookState.evidenceDecisionId = decisionId;
     return {
@@ -241,6 +248,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     hookState.evidenceDecisionId = null;
     hookState.decisions = null;
     hookState.intents = null;
+    hookState.actionIntentOptions = null;
+    hookState.approvalsOptions = null;
     hookState.approvalsStatus = null;
     hookState.approvalsRefetch.mockClear();
     hookState.approve.mockClear();
@@ -262,6 +271,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
 
     expect(screen.getByRole("heading", { name: "Risky actions held before commit" })).toBeInTheDocument();
     expect(hookState.approvalsStatus).toBe("all");
+    expect(hookState.approvalsOptions?.refetchInterval).toBe(15_000);
+    expect(hookState.actionIntentOptions?.refetchInterval).toBe(15_000);
     const metrics = screen.getByRole("region", { name: "Approval control metrics" });
     expect(within(metrics).getByText("Pending holds")).toBeInTheDocument();
     expect(within(metrics).getByText("Expiring soon")).toBeInTheDocument();
@@ -291,6 +302,23 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(within(evidence).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
     expect(within(evidence).getByText("ledger:rf_100")).toBeInTheDocument();
     expect(hookState.evidenceDecisionId).toBe("decision_1");
+  });
+
+  it("keeps the runtime kill switch visible when the approval queue is empty", async () => {
+    hookState.decisions = [];
+    hookState.intents = [];
+
+    render(<RuntimeApprovalsPage />);
+
+    expect(screen.getByRole("heading", { name: "Approval gate clear" })).toBeInTheDocument();
+    expect(screen.getByText("No held actions in this view")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Runtime kill switch" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
+    expect(hookState.killSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+    await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
   });
 
   it("opens a blocked-only approval set on the visible blocked queue", async () => {

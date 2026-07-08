@@ -149,11 +149,11 @@ function accountRisk({
   if (["drift", "missing", "fallback", "stale"].includes(tenant.pricing_cost_status?.state ?? "")) {
     return { label: "Cost metadata", detail: tenant.pricing_cost_status?.detail ?? "Tenant has stale or missing cost metadata.", tone: "warn" };
   }
-  if (tenant.provider_key_status.state === "missing" && plan.pricing.replay_credits !== 0) {
+  if (tenant.provider_key_status.state === "missing" && plan.pricing.connectors !== 0) {
     return { label: "Connector missing", detail: "Protected-action plan has no connector key.", tone: "warn" };
   }
-  if (plan.pricing.blocking_ci && tenant.golden_trace_count === 0) {
-    return { label: "Release proof missing", detail: "Blocking release checks are included but no receipt baseline exists.", tone: "warn" };
+  if (plan.pricing.audit_manifest_export && tenant.golden_trace_count === 0) {
+    return { label: "Receipt proof missing", detail: "Audit export is included but no receipt baseline exists.", tone: "warn" };
   }
   return { label: "Monitor", detail: "Billing and control-plane evidence are aligned.", tone: "ok" };
 }
@@ -586,13 +586,14 @@ export default function PricingPage() {
                   {[
                     "Plan",
                     "Price",
-                    "Calls/mo",
+                    "Protected actions/mo",
+                    "Agents",
+                    "Connectors",
+                    "Approvers",
                     "Retention",
-                    "Proof credits",
-                    "Receipt baselines",
-                    "Non-blocking release",
-                    "Blocking release",
-                    "Connector vault",
+                    "Bypass",
+                    "Audit export",
+                    "Overage",
                   ].map((header) => (
                     <th key={header} className="owner-th">{header}</th>
                   ))}
@@ -606,16 +607,20 @@ export default function PricingPage() {
                       <div className="hint"><code>{plan.code}</code></div>
                     </td>
                     <td className="owner-td">{fmtMoney(plan.price.monthly_usd)}{plan.price.period}</td>
-                    <td className="owner-td">{fmtCount(plan.pricing.calls_per_month)}</td>
-                    <td className="owner-td">{fmtCount(plan.pricing.retention_days)} days</td>
-                    <td className="owner-td">{fmtCount(plan.pricing.replay_credits)}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.protected_actions_per_month)}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.managed_agents)}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.connectors)}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.approver_seats)}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.evidence_retention_days)} days</td>
+                    <td className="owner-td">{plan.pricing.bypass_detection}</td>
+                    <td className="owner-td">{boolBadge(plan.pricing.audit_manifest_export)}</td>
                     <td className="owner-td">
-                      <div>{fmtCount(plan.pricing.golden_traces)} receipts</div>
-                      <span className="owner-td-secondary">{fmtCount(plan.pricing.golden_sets)} baseline sets</span>
+                      {plan.pricing.overage_policy === "hard_cap"
+                        ? "Hard cap"
+                        : plan.pricing.overage_policy === "custom"
+                          ? "Custom"
+                          : `$${plan.pricing.overage_per_action_usd?.toFixed(3)}/action`}
                     </td>
-                    <td className="owner-td">{boolBadge(plan.pricing.non_blocking_ci)}</td>
-                    <td className="owner-td">{boolBadge(plan.pricing.blocking_ci)}</td>
-                    <td className="owner-td">{boolBadge(plan.pricing.provider_key_vault)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -30,6 +30,7 @@ from app.services.action_packs import (
 from app.services.action_receipts import (
     ActionReceiptNotFound,
     ActionReceiptSigningError,
+    action_receipt_public_key_payload,
     generate_action_receipt,
     get_action_receipt,
 )
@@ -80,6 +81,11 @@ ACTION_EXECUTION_ATTEMPT_STATUSES = {
     "ambiguous",
     "cancelled",
 }
+
+
+@router.get("/.well-known/zroky/action-receipt-signing-key")
+def get_action_receipt_signing_key() -> dict[str, object]:
+    return action_receipt_public_key_payload()
 
 
 @router.get("/v1/action-execution-adapters", response_model=ActionExecutionAdapterListResponse)

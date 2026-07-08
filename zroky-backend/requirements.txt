@@ -8,6 +8,7 @@ alembic==1.15.2
 redis==5.2.1
 celery==5.4.0
 PyJWT[crypto]==2.13.0
+cryptography>=42.0.0
 python-dotenv==1.2.2
 httpx==0.28.1
 razorpay==2.0.1

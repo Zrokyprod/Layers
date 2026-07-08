@@ -1,16 +1,32 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+ActionOperationKind = Literal[
+    "READ_SENSITIVE",
+    "EXPORT",
+    "CREATE",
+    "UPDATE",
+    "DELETE",
+    "TRANSFER",
+    "SEND",
+    "APPROVE",
+    "GRANT",
+    "EXECUTE",
+    "DEPLOY",
+    "ROTATE_OR_REVOKE",
+]
 
 
 class ActionContractRegisterRequest(BaseModel):
     contract_key: str = Field(min_length=3, max_length=160)
     version: str = Field(min_length=1, max_length=32)
     action_type: str = Field(min_length=3, max_length=160)
-    operation_kind: str = Field(min_length=3, max_length=32)
+    operation_kind: ActionOperationKind
     domain_family: str = Field(min_length=3, max_length=64)
     schema_: dict[str, Any] = Field(alias="schema")
     risk_class: str = Field(default="R2", max_length=8)
@@ -231,6 +247,7 @@ class ActionReceiptResponse(BaseModel):
     signature: str
     signing_key_id: str
     signature_valid: bool
+    signed_payload: str
     generated_at: datetime
     receipt: dict[str, Any]
 

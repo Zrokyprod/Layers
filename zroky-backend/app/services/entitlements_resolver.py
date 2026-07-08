@@ -25,11 +25,12 @@ Caching (plan §11.2: O(1), Redis, 60s TTL):
   - TTL:        `Settings.ENTITLEMENT_CACHE_TTL_SECONDS` (default 60)
   - Hit:        return cached dict
   - Miss:       resolve from DB, write to cache, return
-  - Redis down: fall through to in-process memory cache, then DB. The
-                memory cache has the same key/TTL so a single process
-                still gets cache benefits when Redis is unreachable.
-                Mirrors `services/provider_status.py` and
-                `services/currency.py` patterns.
+  - Redis down: open a short process-local circuit breaker, fall through
+                to in-process memory cache, then DB. The circuit prevents
+                one Redis outage from adding a socket timeout to every
+                entitlement lookup in a dashboard request. The memory cache
+                has the same key/TTL so a single process still gets cache
+                benefits when Redis is unreachable.
 
 Cache invalidation:
   - The Module 5 write paths (`seed_plan_entitlements`,
@@ -86,6 +87,10 @@ _CACHE_KEY_PREFIX = "zroky:entitlements:v1"
 _MEMORY_LOCK = threading.Lock()
 _MEMORY_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
 
+_REDIS_BYPASS_SECONDS = 30.0
+_REDIS_LOCK = threading.Lock()
+_REDIS_BYPASS_UNTIL = 0.0
+
 
 # Source precedence — higher number wins.
 _SOURCE_RANK: dict[str, int] = {"plan": 1, "trial": 2, "override": 3}
@@ -125,9 +130,9 @@ def resolve_all(db: Session, org_id: str) -> dict[str, Any]:
     """Return the FULLY-MERGED entitlement dict for an org.
 
     Order of attempts:
-      1. Redis cache hit
-      2. In-process memory fallback hit (used when Redis is down)
-      3. DB resolve (also writes both caches)
+      1. Redis cache hit when Redis is enabled and the circuit is closed
+      2. In-process memory fallback hit
+      3. DB resolve (also writes memory, and Redis when the circuit is closed)
     """
     if not org_id or not isinstance(org_id, str):
         # Defensive — out-of-tenant context shouldn't reach the
@@ -143,15 +148,17 @@ def resolve_all(db: Session, org_id: str) -> dict[str, Any]:
 
     # Step 1: Redis
     cached_json = None
-    if use_redis:
+    if use_redis and _redis_circuit_closed(now_ts):
         try:
             cached_json = get_redis_client().get(cache_key)
         except redis.RedisError:
             cached_json = None
+            _redis_mark_failure(now_ts)
     if cached_json:
         try:
             parsed = json.loads(cached_json)
             if isinstance(parsed, dict):
+                _redis_mark_success()
                 return parsed
         except (json.JSONDecodeError, ValueError):
             pass  # corrupted cache entry — fall through to memory/DB
@@ -166,10 +173,12 @@ def resolve_all(db: Session, org_id: str) -> dict[str, Any]:
 
     # Best-effort write-through to both caches.
     serialized = json.dumps(resolved, separators=(",", ":"), sort_keys=True)
-    if use_redis:
+    if use_redis and _redis_circuit_closed(now_ts):
         try:
             get_redis_client().setex(cache_key, ttl, serialized)
+            _redis_mark_success()
         except redis.RedisError:
+            _redis_mark_failure(now_ts)
             pass  # Redis flapping; memory cache below still saves us.
     _memory_set(org_id, resolved, now_ts + ttl)
 
@@ -186,10 +195,13 @@ def invalidate(org_id: str) -> None:
     if not org_id:
         return
     cache_key = f"{_CACHE_KEY_PREFIX}:{org_id}"
-    if _redis_cache_enabled():
+    now_ts = time.time()
+    if _redis_cache_enabled() and _redis_circuit_closed(now_ts):
         try:
             get_redis_client().delete(cache_key)
+            _redis_mark_success()
         except redis.RedisError:
+            _redis_mark_failure(now_ts)
             pass  # Best-effort; the TTL is the safety net.
     with _MEMORY_LOCK:
         _MEMORY_CACHE.pop(org_id, None)
@@ -202,6 +214,7 @@ def invalidate_all() -> None:
     org TTL handles it within 60s anyway."""
     with _MEMORY_LOCK:
         _MEMORY_CACHE.clear()
+    _redis_mark_success()
 
 
 def get_plan_code(db: Session, org_id: str) -> str:
@@ -238,6 +251,28 @@ def _truthy(value: Any) -> bool:
 
 def _redis_cache_enabled() -> bool:
     return os.getenv("TESTING", "").strip().lower() != "true"
+
+
+def _redis_circuit_closed(now_ts: float) -> bool:
+    with _REDIS_LOCK:
+        return now_ts >= _REDIS_BYPASS_UNTIL
+
+
+def _redis_mark_failure(now_ts: float) -> None:
+    bypass_until = now_ts + _REDIS_BYPASS_SECONDS
+    with _REDIS_LOCK:
+        global _REDIS_BYPASS_UNTIL
+        _REDIS_BYPASS_UNTIL = max(_REDIS_BYPASS_UNTIL, bypass_until)
+    logger.warning(
+        "entitlements.redis_unavailable circuit_open_seconds=%s",
+        int(_REDIS_BYPASS_SECONDS),
+    )
+
+
+def _redis_mark_success() -> None:
+    with _REDIS_LOCK:
+        global _REDIS_BYPASS_UNTIL
+        _REDIS_BYPASS_UNTIL = 0.0
 
 
 def _memory_get(org_id: str, now_ts: float) -> dict[str, Any] | None:

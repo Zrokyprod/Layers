@@ -94,7 +94,7 @@ function receipt(): ActionReceiptResponse {
     action_id: "act_123",
     receipt_digest: "sha256:receipt",
     evidence_hash: "sha256:evidence",
-    signature_algorithm: "hmac-sha256",
+    signature_algorithm: "Ed25519",
     signature: "sig",
     signing_key_id: "local",
     signature_valid: true,
@@ -237,7 +237,7 @@ describe("EvidencePackView", () => {
     expect(screen.getByRole("button", { name: /Verification: Matched/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Receipt: signed/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Proof seal" })).toBeInTheDocument();
-    expect(screen.getAllByText("Signature valid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Server-attested signature valid").length).toBeGreaterThan(0);
     expect(screen.getByText("receipt_123")).toBeInTheDocument();
     expect(screen.getAllByText("Matched").length).toBeGreaterThan(0);
   });
@@ -276,7 +276,9 @@ describe("EvidencePackView", () => {
     expect(screen.getByText("Timeline")).toBeInTheDocument();
     expect(screen.getAllByText("Full receipt JSON").length).toBeGreaterThan(0);
     expect(screen.queryByText("Receipt payload")).not.toBeInTheDocument();
-    expect(screen.getByText("Signature validity is verified by the backend; the browser never receives the signing secret.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Signature validity is server-attested here and independently checkable with the published Ed25519 public key."),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Receipt digest").length).toBeGreaterThan(0);
     expect(screen.getAllByText("sha256:receipt").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Evidence hash").length).toBeGreaterThan(0);

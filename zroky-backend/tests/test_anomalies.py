@@ -1,12 +1,10 @@
-"""Tests for the new anomalies service + /v1/anomalies route surface.
+﻿"""Tests for the canonical anomalies service.
 
 Module 3 Phase B coverage:
   - Service-level: fingerprint determinism, failure_code mapping, upsert
     insert + upsert paths, sample-call-id merge, status transitions.
-  - Route-level: list filters, validation errors, cursor pagination,
-    detail 404/200, resolve/acknowledge/mute.
   - Issue-consolidation integration: public issue writes create canonical
-    `anomalies` rows, and `/v1/anomalies` advertises its deprecated status.
+    `anomalies` rows.
 """
 from __future__ import annotations
 
@@ -15,15 +13,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import Anomaly
-from app.db.session import get_db_session, get_db_session_read
-from app.main import app
 from app.services.anomalies import (
     VALID_DETECTORS,
     VALID_STATUSES,
@@ -36,7 +30,7 @@ from app.services.anomalies import (
 )
 
 
-# ── fixtures ─────────────────────────────────────────────────────────────────
+# â”€â”€ fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @pytest.fixture()
@@ -60,43 +54,9 @@ def db_session(tmp_path: Path):
         engine.dispose()
 
 
-@pytest.fixture()
-def client(tmp_path: Path):
-    """TestClient + per-test SQLite engine + dependency overrides."""
-    get_settings.cache_clear()
-    db_path = tmp_path / "test_anomalies_route.db"
-    engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
-        future=True,
-    )
-    Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
-
-    def override_get_db_session():
-        session = session_factory()
-        try:
-            yield session
-        finally:
-            session.close()
-
-    app.dependency_overrides[get_db_session] = override_get_db_session
-    app.dependency_overrides[get_db_session_read] = override_get_db_session
-
-    with TestClient(app) as test_client:
-        # expose the session factory so tests can seed rows directly
-        test_client._session_factory = session_factory  # type: ignore[attr-defined]
-        yield test_client
-
-    app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
-    get_settings.cache_clear()
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _seed_anomaly(
@@ -127,7 +87,7 @@ def _seed_anomaly(
         session.close()
 
 
-# ── service: pure helpers ────────────────────────────────────────────────────
+# â”€â”€ service: pure helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestFingerprintHelper:
@@ -198,7 +158,7 @@ class TestFailureCodeMapping:
         assert map_failure_code_to_detector(code) is None
 
 
-# ── service: upsert + transitions ────────────────────────────────────────────
+# â”€â”€ service: upsert + transitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestUpsertAnomaly:
@@ -374,258 +334,10 @@ class TestStatusTransitions:
         ) is None
 
 
-# ── routes ────────────────────────────────────────────────────────────────────
-
-
-PROJECT_HEADER = "X-Project-Id"
-
-
-class TestListAnomalies:
-    def test_empty_list(self, client: TestClient) -> None:
-        response = client.get(
-            "/v1/anomalies", headers={PROJECT_HEADER: "proj-empty"}
-        )
-        assert response.status_code == 200
-        assert response.headers["Deprecation"] == "true"
-        assert "use /v1/issues" in response.headers["X-Zroky-Deprecated"]
-        body = response.json()
-        assert body["items"] == []
-        assert body["next_cursor"] is None
-        assert body["total_in_page"] == 0
-
-    def test_list_returns_seeded_rows_newest_first(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        base = datetime(2026, 5, 14, 0, 0, 0, tzinfo=timezone.utc)
-        for n in range(3):
-            _seed_anomaly(
-                factory,
-                project_id="proj-list",
-                detector="LOOP_DETECTED",
-                prompt_fingerprint=f"fp-{n}",
-                agent_name="alpha",
-                call_id=f"call-{n}",
-                occurred_at=base + timedelta(minutes=n),
-            )
-
-        response = client.get(
-            "/v1/anomalies", headers={PROJECT_HEADER: "proj-list"}
-        )
-        assert response.status_code == 200
-        items = response.json()["items"]
-        assert len(items) == 3
-        # newest-first by last_seen_at
-        timestamps = [i["last_seen_at"] for i in items]
-        assert timestamps == sorted(timestamps, reverse=True)
-
-    def test_status_filter_default_is_open(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        anomaly = _seed_anomaly(factory, project_id="proj-filter")
-        # resolve it so it should be excluded by the default 'open' filter
-        with factory() as session:
-            resolve_anomaly(
-                session, project_id="proj-filter", anomaly_id=anomaly.id
-            )
-
-        # default filter (status=open) → empty
-        response = client.get(
-            "/v1/anomalies", headers={PROJECT_HEADER: "proj-filter"}
-        )
-        assert response.status_code == 200
-        assert response.json()["items"] == []
-
-        # status=all → returned
-        response = client.get(
-            "/v1/anomalies?status=all", headers={PROJECT_HEADER: "proj-filter"}
-        )
-        assert response.status_code == 200
-        assert len(response.json()["items"]) == 1
-
-        # status=resolved → returned
-        response = client.get(
-            "/v1/anomalies?status=resolved",
-            headers={PROJECT_HEADER: "proj-filter"},
-        )
-        assert response.status_code == 200
-        assert len(response.json()["items"]) == 1
-
-    def test_detector_filter(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        _seed_anomaly(
-            factory,
-            project_id="proj-det",
-            detector="LOOP_DETECTED",
-            prompt_fingerprint="fp-loop",
-        )
-        _seed_anomaly(
-            factory,
-            project_id="proj-det",
-            detector="COST_SPIKE",
-            prompt_fingerprint="fp-cost",
-        )
-
-        response = client.get(
-            "/v1/anomalies?detector=COST_SPIKE",
-            headers={PROJECT_HEADER: "proj-det"},
-        )
-        assert response.status_code == 200
-        items = response.json()["items"]
-        assert len(items) == 1
-        assert items[0]["detector"] == "COST_SPIKE"
-
-    def test_invalid_status_rejected(self, client: TestClient) -> None:
-        response = client.get(
-            "/v1/anomalies?status=bogus",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 422
-
-    def test_invalid_detector_rejected(self, client: TestClient) -> None:
-        response = client.get(
-            "/v1/anomalies?detector=NOT_A_DETECTOR",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 422
-
-    def test_invalid_severity_rejected(self, client: TestClient) -> None:
-        response = client.get(
-            "/v1/anomalies?severity=ultra",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 422
-
-    def test_invalid_cursor_rejected(self, client: TestClient) -> None:
-        response = client.get(
-            "/v1/anomalies?cursor=not-base64-json",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 422
-
-    def test_cursor_pagination(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        base = datetime(2026, 5, 14, 0, 0, 0, tzinfo=timezone.utc)
-        for n in range(5):
-            _seed_anomaly(
-                factory,
-                project_id="proj-page",
-                detector="LOOP_DETECTED",
-                prompt_fingerprint=f"fp-{n}",
-                occurred_at=base + timedelta(minutes=n),
-            )
-
-        first = client.get(
-            "/v1/anomalies?limit=2",
-            headers={PROJECT_HEADER: "proj-page"},
-        ).json()
-        assert len(first["items"]) == 2
-        assert first["next_cursor"] is not None
-
-        second = client.get(
-            f"/v1/anomalies?limit=2&cursor={first['next_cursor']}",
-            headers={PROJECT_HEADER: "proj-page"},
-        ).json()
-        assert len(second["items"]) == 2
-        assert second["next_cursor"] is not None
-
-        third = client.get(
-            f"/v1/anomalies?limit=2&cursor={second['next_cursor']}",
-            headers={PROJECT_HEADER: "proj-page"},
-        ).json()
-        assert len(third["items"]) == 1
-        assert third["next_cursor"] is None
-
-        seen_ids = (
-            [i["id"] for i in first["items"]]
-            + [i["id"] for i in second["items"]]
-            + [i["id"] for i in third["items"]]
-        )
-        assert len(set(seen_ids)) == 5  # no duplicates across pages
-
-    def test_tenant_isolation(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        _seed_anomaly(factory, project_id="proj-A")
-        _seed_anomaly(factory, project_id="proj-B")
-
-        a_response = client.get(
-            "/v1/anomalies", headers={PROJECT_HEADER: "proj-A"}
-        ).json()
-        assert {item["project_id"] for item in a_response["items"]} == {"proj-A"}
-
-
-class TestGetAnomaly:
-    def test_404_for_missing(self, client: TestClient) -> None:
-        response = client.get(
-            "/v1/anomalies/does-not-exist",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 404
-
-    def test_returns_seeded_row(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        anomaly = _seed_anomaly(factory, project_id="proj-detail")
-        response = client.get(
-            f"/v1/anomalies/{anomaly.id}",
-            headers={PROJECT_HEADER: "proj-detail"},
-        )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["id"] == anomaly.id
-        assert body["detector"] == "LOOP_DETECTED"
-        assert body["status"] == "open"
-
-    def test_cross_tenant_returns_404(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        anomaly = _seed_anomaly(factory, project_id="proj-A")
-        response = client.get(
-            f"/v1/anomalies/{anomaly.id}",
-            headers={PROJECT_HEADER: "proj-B"},
-        )
-        assert response.status_code == 404
-
-
-class TestStatusTransitionRoutes:
-    def test_resolve(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        anomaly = _seed_anomaly(factory, project_id="proj-1")
-        response = client.post(
-            f"/v1/anomalies/{anomaly.id}/resolve",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "resolved"
-
-    def test_acknowledge(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        anomaly = _seed_anomaly(factory, project_id="proj-1")
-        response = client.post(
-            f"/v1/anomalies/{anomaly.id}/acknowledge",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "acknowledged"
-
-    def test_mute(self, client: TestClient) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        anomaly = _seed_anomaly(factory, project_id="proj-1")
-        response = client.post(
-            f"/v1/anomalies/{anomaly.id}/mute",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "muted"
-
-    def test_resolve_unknown_returns_404(self, client: TestClient) -> None:
-        response = client.post(
-            "/v1/anomalies/missing-id/resolve",
-            headers={PROJECT_HEADER: "proj-1"},
-        )
-        assert response.status_code == 404
-
-
-# ── dual-write integration ───────────────────────────────────────────────────
+# â”€â”€ issue consolidation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestIssueConsolidation:
-    """Verify public issue writes now target the canonical anomaly model."""
 
     def test_upsert_issue_writes_canonical_anomaly(self, db_session) -> None:
         from app.services.issues import upsert_issue
@@ -682,7 +394,7 @@ class TestIssueConsolidation:
         assert anomalies[0].detector == "AUTH_FAILURE"
 
 
-# ── invariants ───────────────────────────────────────────────────────────────
+# â”€â”€ invariants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestInvariants:

@@ -155,7 +155,7 @@ def _validated_session_handoff_token(body: SessionHandoffRequest, db: Session) -
             detail="Invalid session handoff tokens.",
         )
 
-    if token_store.get(f"jwt_blacklisted_user:{access_user_id}"):
+    if token_store.is_user_token_revoked(access_user_id, access_claims.get("iat")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="All sessions for this user have been revoked.",
@@ -176,4 +176,3 @@ def _validated_session_handoff_token(body: SessionHandoffRequest, db: Session) -
 # ---------------------------------------------------------------------------
 # Register
 # ---------------------------------------------------------------------------
-

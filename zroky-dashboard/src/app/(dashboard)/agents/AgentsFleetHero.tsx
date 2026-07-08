@@ -40,7 +40,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
     return {
       tone: "danger",
       title: "Agent control bypass detected",
-      body: `${formatCount(fleet.totals.bypassed)} source mutation${fleet.totals.bypassed === 1 ? "" : "s"} happened without a matching protected action receipt.`,
+      body: `${formatCount(fleet.totals.bypassed)} connected source mutation${fleet.totals.bypassed === 1 ? "" : "s"} happened without a matching protected action receipt.`,
       cta: "Review bypass",
       ctaHref: "/actions?filter=bypassed",
     };
@@ -167,7 +167,7 @@ export function AgentsFleetHero({
             value: capLabel,
           },
           {
-            helper: "Observed high-risk paths protected by Zroky versus bypassed source mutations.",
+            helper: "Observed high-risk paths protected by Zroky versus connected bypass feeds.",
             label: "Coverage",
             tone: fleet.totals.bypassed > 0 ? "danger" : fleet.totals.coveragePercent === 100 ? "success" : "warning",
             value: coverageLabel,

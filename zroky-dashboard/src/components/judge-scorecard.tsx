@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 
+import { legacyProductSurfaceEnabled } from "@/lib/legacy-product-surfaces";
+
 /**
  * AI Advisory Scorecard - renders model-authored diagnostic scores in a compact,
  * visual format with bars, labels, and reasons. These scores are context for
@@ -177,7 +179,13 @@ function colorForScore(score: number, floor: number | null): string {
   return "judge-bar-green";
 }
 
-export function JudgeScorecard({ source, title = "AI advisory scorecard" }: JudgeScorecardProps) {
+export function JudgeScorecard(props: JudgeScorecardProps) {
+  if (!legacyProductSurfaceEnabled) return null;
+
+  return <JudgeScorecardInner {...props} />;
+}
+
+function JudgeScorecardInner({ source, title = "AI advisory scorecard" }: JudgeScorecardProps) {
   const dims = useMemo(
     () => (source ? extractDimensions(source as Record<string, unknown>) : []),
     [source],

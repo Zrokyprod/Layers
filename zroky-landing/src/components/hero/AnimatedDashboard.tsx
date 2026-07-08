@@ -138,7 +138,7 @@ export const moduleTour: ModuleTourItem[] = [
     ],
     panel: [
       { label: 'Receipt', value: 'rec_9f2c...b41', ok: true },
-      { label: 'Signature', value: 'HMAC verified', ok: true },
+      { label: 'Signature', value: 'Ed25519 signed', ok: true },
       { label: 'Format', value: 'Audit JSON and PDF' },
     ],
   },

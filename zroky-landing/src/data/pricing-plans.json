@@ -3,10 +3,17 @@
   "source_of_truth": "api-contracts/pricing-plans.json",
   "currency": "USD",
   "unlimited": -1,
-  "canonical_plan_order": ["free", "starter", "pro", "enterprise"],
+  "canonical_plan_order": [
+    "free",
+    "starter",
+    "team",
+    "scale",
+    "enterprise"
+  ],
   "aliases": {
     "pilot": "starter",
-    "plus": "pro"
+    "pro": "team",
+    "plus": "scale"
   },
   "plans": [
     {
@@ -17,22 +24,25 @@
         "monthly_usd": 0,
         "period": "/mo"
       },
-      "description": "For trying protected AI-agent actions with fail-closed policy checks, verification, and signed receipts.",
+      "description": "For proving the protected-action loop with one agent before production rollout.",
       "cta": {
         "label": "Start free",
         "href": "/auth/register"
       },
       "featured": false,
-      "note": "Best for a first managed agent and a small proof loop before upgrading control-plane volume.",
+      "note": "Hard-capped sandbox for one managed agent, one connector, and the first signed receipts.",
       "pricing": {
-        "calls_per_month": 5000,
-        "retention_days": 7,
-        "replay_credits": 0,
-        "golden_traces": 0,
-        "golden_sets": 0,
-        "non_blocking_ci": false,
-        "blocking_ci": false,
-        "provider_key_vault": false
+        "protected_actions_per_month": 500,
+        "managed_agents": 1,
+        "connectors": 1,
+        "approver_seats": 2,
+        "evidence_retention_days": 7,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": false,
+        "bypass_detection": "none",
+        "audit_manifest_export": false,
+        "overage_per_action_usd": null,
+        "overage_policy": "hard_cap"
       },
       "enforcement": {
         "limits": {
@@ -73,12 +83,12 @@
         },
         "compatibility": {
           "events.monthly_quota": 5000,
-          "actions.protected.monthly_quota": 25,
-          "actions.policy_checks.monthly_quota": 100,
-          "actions.runner_executions.monthly_quota": 25,
-          "actions.receipts.monthly_quota": 25,
-          "actions.verifications.monthly_quota": 50,
-          "actions.source_mutations.monthly_quota": 100,
+          "actions.protected.monthly_quota": 500,
+          "actions.policy_checks.monthly_quota": 1000,
+          "actions.runner_executions.monthly_quota": 500,
+          "actions.receipts.monthly_quota": 500,
+          "actions.verifications.monthly_quota": 1000,
+          "actions.source_mutations.monthly_quota": 1000,
           "connectors.system_of_record.max": 1,
           "agents.max": 1,
           "retention.days": 7,
@@ -105,22 +115,25 @@
         "monthly_usd": 49,
         "period": "/mo"
       },
-      "description": "For small teams putting the first production agent actions behind policy, verification, and receipt proof.",
+      "description": "For small teams putting first production agent actions behind policy, verification, and receipt proof.",
       "cta": {
         "label": "Start Starter",
         "href": "/auth/register"
       },
       "featured": false,
-      "note": "Use Starter to validate protected-action setup, source-of-record checks, and receipt workflow before scaling volume.",
+      "note": "Enough volume for a first production workflow without starving the agent during evaluation.",
       "pricing": {
-        "calls_per_month": 50000,
-        "retention_days": 30,
-        "replay_credits": 50,
-        "golden_traces": 250,
-        "golden_sets": 5,
-        "non_blocking_ci": true,
-        "blocking_ci": false,
-        "provider_key_vault": true
+        "protected_actions_per_month": 2000,
+        "managed_agents": 3,
+        "connectors": 3,
+        "approver_seats": -1,
+        "evidence_retention_days": 30,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "basic",
+        "audit_manifest_export": false,
+        "overage_per_action_usd": 0.03,
+        "overage_policy": "overage"
       },
       "enforcement": {
         "limits": {
@@ -131,7 +144,7 @@
           "max_real_replay_runs_per_month": 0,
           "max_mocked_tool_replay_runs_per_month": 50,
           "max_live_sandbox_replay_runs_per_month": 0,
-          "max_golden_traces": 250,
+          "max_golden_traces": 500,
           "retention_days": 30
         },
         "entitlements": {
@@ -156,7 +169,7 @@
           "enterprise.sso": false,
           "enterprise.audit_logs": false,
           "enterprise.custom_retention": false,
-          "enterprise.provider_key_vault": true,
+          "enterprise.provider_key_vault": false,
           "enterprise.custom_detectors": false
         },
         "compatibility": {
@@ -186,29 +199,32 @@
       }
     },
     {
-      "code": "pro",
-      "name": "Pro",
+      "code": "team",
+      "name": "Team",
       "price": {
-        "label": "$399",
-        "monthly_usd": 399,
+        "label": "$199",
+        "monthly_usd": 199,
         "period": "/mo"
       },
-      "description": "For teams putting high-risk AI-agent actions behind approval, isolated execution, system-of-record verification, and signed receipts.",
+      "description": "For teams scaling multiple AI agents that touch money, access, customer state, or production systems.",
       "cta": {
-        "label": "Start Pro",
+        "label": "Start Team",
         "href": "/auth/register"
       },
       "featured": true,
-      "note": "The main self-serve control-plane plan for production agent actions.",
+      "note": "Featured launch plan for real controlled execution, bypass detection, audit exports, and team rollout.",
       "pricing": {
-        "calls_per_month": 250000,
-        "retention_days": 90,
-        "replay_credits": 500,
-        "golden_traces": 2500,
-        "golden_sets": 25,
-        "non_blocking_ci": true,
-        "blocking_ci": true,
-        "provider_key_vault": true
+        "protected_actions_per_month": 10000,
+        "managed_agents": 10,
+        "connectors": 6,
+        "approver_seats": -1,
+        "evidence_retention_days": 90,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "full",
+        "audit_manifest_export": true,
+        "overage_per_action_usd": 0.025,
+        "overage_policy": "overage"
       },
       "enforcement": {
         "limits": {
@@ -218,7 +234,7 @@
           "max_diagnosis_jobs_per_month": 1000,
           "max_real_replay_runs_per_month": 500,
           "max_mocked_tool_replay_runs_per_month": 500,
-          "max_live_sandbox_replay_runs_per_month": 100,
+          "max_live_sandbox_replay_runs_per_month": 500,
           "max_golden_traces": 2500,
           "retention_days": 90
         },
@@ -249,14 +265,14 @@
         },
         "compatibility": {
           "events.monthly_quota": 250000,
-          "actions.protected.monthly_quota": 25000,
-          "actions.policy_checks.monthly_quota": 100000,
-          "actions.runner_executions.monthly_quota": 25000,
-          "actions.receipts.monthly_quota": 25000,
-          "actions.verifications.monthly_quota": 50000,
-          "actions.source_mutations.monthly_quota": 100000,
-          "connectors.system_of_record.max": 10,
-          "agents.max": 5,
+          "actions.protected.monthly_quota": 10000,
+          "actions.policy_checks.monthly_quota": 50000,
+          "actions.runner_executions.monthly_quota": 10000,
+          "actions.receipts.monthly_quota": 10000,
+          "actions.verifications.monthly_quota": 25000,
+          "actions.source_mutations.monthly_quota": 50000,
+          "connectors.system_of_record.max": 6,
+          "agents.max": 10,
           "retention.days": 90,
           "goldens.max_sets": 25,
           "replay.monthly_runs": 500,
@@ -274,29 +290,123 @@
       }
     },
     {
+      "code": "scale",
+      "name": "Scale",
+      "price": {
+        "label": "$499",
+        "monthly_usd": 499,
+        "period": "/mo"
+      },
+      "description": "For organizations running high-volume autonomous workflows across many systems of record.",
+      "cta": {
+        "label": "Start Scale",
+        "href": "/auth/register"
+      },
+      "featured": false,
+      "note": "Higher action volume, unlimited agents, all standard connectors, longer retention, and lower overage basis.",
+      "pricing": {
+        "protected_actions_per_month": 50000,
+        "managed_agents": -1,
+        "connectors": -1,
+        "approver_seats": -1,
+        "evidence_retention_days": 180,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "full",
+        "audit_manifest_export": true,
+        "overage_per_action_usd": 0.015,
+        "overage_policy": "overage"
+      },
+      "enforcement": {
+        "limits": {
+          "max_projects": -1,
+          "max_members": -1,
+          "max_calls_per_month": 1000000,
+          "max_diagnosis_jobs_per_month": -1,
+          "max_real_replay_runs_per_month": 2000,
+          "max_mocked_tool_replay_runs_per_month": 2000,
+          "max_live_sandbox_replay_runs_per_month": 2000,
+          "max_golden_traces": 10000,
+          "retention_days": 180
+        },
+        "entitlements": {
+          "watch.cloud_capture": true,
+          "watch.basic_trace_view": true,
+          "pilot.failure_inbox": true,
+          "pilot.issue_grouping": true,
+          "pilot.root_cause_diagnosis": true,
+          "pilot.replay_stub": true,
+          "pilot.replay_real_llm": true,
+          "pilot.replay_mocked_tool": true,
+          "pilot.goldens_basic": true,
+          "pilot.alerts_basic": true,
+          "pro.replay_live_sandbox": true,
+          "pro.replay_shadow": true,
+          "pro.ci_gate_nonblocking": true,
+          "pro.ci_gate_blocking": true,
+          "pro.outcome_attribution": true,
+          "pro.team_workflow": true,
+          "pro.advanced_goldens": true,
+          "enterprise.private_replay_worker": false,
+          "enterprise.sso": false,
+          "enterprise.audit_logs": true,
+          "enterprise.custom_retention": true,
+          "enterprise.provider_key_vault": true,
+          "enterprise.custom_detectors": false
+        },
+        "compatibility": {
+          "events.monthly_quota": 1000000,
+          "actions.protected.monthly_quota": 50000,
+          "actions.policy_checks.monthly_quota": 250000,
+          "actions.runner_executions.monthly_quota": 50000,
+          "actions.receipts.monthly_quota": 50000,
+          "actions.verifications.monthly_quota": 125000,
+          "actions.source_mutations.monthly_quota": 250000,
+          "connectors.system_of_record.max": -1,
+          "agents.max": -1,
+          "retention.days": 180,
+          "goldens.max_sets": 100,
+          "replay.monthly_runs": 2000,
+          "pilot.autopilot_enabled": true,
+          "pilot.tier2_pr_enabled": true,
+          "pilot.real_llm_replay_enabled": true,
+          "pilot.autofix_pr_enabled": false,
+          "judge.ensemble_enabled": true,
+          "digest.audience": "executive",
+          "compliance.export_enabled": true,
+          "selfhost.enabled": false,
+          "sso.enabled": false,
+          "seats.included": -1
+        }
+      }
+    },
+    {
       "code": "enterprise",
       "name": "Enterprise",
       "price": {
-        "label": "Custom",
-        "monthly_usd": null,
-        "period": ""
+        "label": "From $2,000",
+        "monthly_usd": 2000,
+        "period": "/mo"
       },
-      "description": "Internal custom-contract tier for organizations that need unlimited limits, private execution, and controls.",
+      "description": "For custom deployment, private runners, SSO, custom retention, procurement, and dedicated support.",
       "cta": {
         "label": "Talk to Zroky",
         "href": "mailto:sales@zroky.com?subject=Zroky%20Enterprise"
       },
       "featured": false,
-      "note": "Enterprise terms map to backend entitlement overrides instead of hidden public limits.",
+      "note": "Custom contract with volume pricing, DPA, private execution, and customer-specific connector scope.",
       "pricing": {
-        "calls_per_month": -1,
-        "retention_days": -1,
-        "replay_credits": -1,
-        "golden_traces": -1,
-        "golden_sets": -1,
-        "non_blocking_ci": true,
-        "blocking_ci": true,
-        "provider_key_vault": true
+        "protected_actions_per_month": -1,
+        "managed_agents": -1,
+        "connectors": -1,
+        "approver_seats": -1,
+        "evidence_retention_days": -1,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "custom",
+        "audit_manifest_export": true,
+        "overage_per_action_usd": null,
+        "overage_policy": "custom"
       },
       "enforcement": {
         "limits": {
@@ -329,7 +439,7 @@
           "pro.team_workflow": true,
           "pro.advanced_goldens": true,
           "enterprise.private_replay_worker": true,
-          "enterprise.sso": false,
+          "enterprise.sso": true,
           "enterprise.audit_logs": true,
           "enterprise.custom_retention": true,
           "enterprise.provider_key_vault": true,
@@ -356,7 +466,7 @@
           "digest.audience": "executive",
           "compliance.export_enabled": true,
           "selfhost.enabled": true,
-          "sso.enabled": false,
+          "sso.enabled": true,
           "seats.included": -1
         }
       }

@@ -125,7 +125,7 @@ def test_owner_money_path_health_aggregates_real_backend_state(
                 Subscription(
                     id="sub_good",
                     org_id="proj_good",
-                    plan_code="pro",
+                    plan_code="team",
                     status="active",
                     current_period_end=now + timedelta(days=30),
                 ),
@@ -327,7 +327,7 @@ def test_owner_money_path_health_aggregates_real_backend_state(
     assert set(tenants) == {"proj_good", "proj_gap"}
 
     good = tenants["proj_good"]
-    assert good["plan_code"] == "pro"
+    assert good["plan_code"] == "team"
     assert good["captures_24h"] == 1
     assert good["open_issue_count"] == 1
     assert good["replay_run_count_7d"] == 2

@@ -32,7 +32,6 @@ import {
   useAgentProfile,
   useOutcomeReconciliations,
   useProjectActionExecutionAttempts,
-  useReliabilityLeaderboard,
   useRuntimePolicyApprovals,
 } from "@/lib/hooks";
 
@@ -111,10 +110,10 @@ function AgentDetailHero({
               value: formatCount(detail.runners.length),
             },
             {
-              helper: "Operational health from recent protected-action signals.",
-              label: "Health score",
-              tone: detail.score?.health_score == null ? "neutral" : "success",
-              value: detail.score?.health_score == null ? "Not scored yet" : String(Math.round(detail.score.health_score)),
+              helper: "Signed receipts generated for this managed agent.",
+              label: "Signed receipts",
+              tone: detail.row.actionRollup.receiptsGenerated > 0 ? "success" : "neutral",
+              value: formatCount(detail.row.actionRollup.receiptsGenerated),
             },
           ]}
         />
@@ -247,7 +246,7 @@ function ProofPanel({ detail }: { detail: AgentDetailView }) {
       ) : (
         <div className="agents-empty-filter">
           <strong>No protected action yet</strong>
-          <span>Run this agent through verified_action() or the Action Intent API to populate proof and runner context.</span>
+          <span>Run this agent through zroky.protect() or the Action Intent API to populate proof and runner context.</span>
         </div>
       )}
     </aside>
@@ -425,7 +424,6 @@ export default function AgentDetailPage() {
   const params = useParams<{ agentId?: string }>();
   const agentId = typeof params.agentId === "string" ? params.agentId : null;
   const profileQuery = useAgentProfile(agentId);
-  const leaderboardQuery = useReliabilityLeaderboard(100, { enabled: Boolean(agentId) });
   const intentsQuery = useActionIntents({ agent_id: agentId, limit: 200 }, { enabled: Boolean(agentId) });
   const approvalsQuery = useRuntimePolicyApprovals("all", { enabled: Boolean(agentId) });
   const outcomesQuery = useOutcomeReconciliations("all", 200, { enabled: Boolean(agentId) });
@@ -438,8 +436,11 @@ export default function AgentDetailPage() {
     limit: 200,
   }, { enabled: Boolean(agentId) });
 
-  const attempts = attemptsQuery.data?.items ?? [];
-  const staleAttemptIds = (staleAttemptsQuery.data?.items ?? []).map((attempt) => attempt.attempt_id);
+  const attempts = useMemo(() => attemptsQuery.data?.items ?? [], [attemptsQuery.data?.items]);
+  const staleAttemptIds = useMemo(
+    () => (staleAttemptsQuery.data?.items ?? []).map((attempt) => attempt.attempt_id),
+    [staleAttemptsQuery.data?.items],
+  );
   const profile = profileQuery.data ?? null;
 
   const registryActionType = toolActionType(profile, null);
@@ -453,7 +454,6 @@ export default function AgentDetailPage() {
   const detail = useMemo(() => (
     profile ? buildAgentDetail({
       profile,
-      scores: leaderboardQuery.data ?? [],
       intents: intentsQuery.data?.items ?? [],
       decisions: approvalsQuery.data?.items ?? [],
       outcomes: outcomesQuery.data?.items ?? [],
@@ -464,7 +464,6 @@ export default function AgentDetailPage() {
     }) : null
   ), [
     profile,
-    leaderboardQuery.data,
     intentsQuery.data?.items,
     approvalsQuery.data?.items,
     outcomesQuery.data?.items,
@@ -486,7 +485,6 @@ export default function AgentDetailPage() {
 
   function refresh() {
     profileQuery.refetch();
-    leaderboardQuery.refetch();
     intentsQuery.refetch();
     approvalsQuery.refetch();
     outcomesQuery.refetch();

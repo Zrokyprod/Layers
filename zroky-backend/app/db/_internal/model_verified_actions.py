@@ -264,7 +264,7 @@ class ActionReceipt(Base):
     receipt_digest: Mapped[str] = mapped_column(String(80), nullable=False)
     receipt_json: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    signature_algorithm: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'HMAC-SHA256'"))
+    signature_algorithm: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'Ed25519'"))
     signature: Mapped[str] = mapped_column(String(128), nullable=False)
     signing_key_id: Mapped[str] = mapped_column(String(128), nullable=False)
     generated_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)

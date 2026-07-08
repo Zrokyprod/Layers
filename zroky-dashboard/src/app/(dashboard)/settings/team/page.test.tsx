@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import TeamPage from "./page";
@@ -12,19 +13,42 @@ const api = vi.hoisted(() => ({
   upsertProjectMember: vi.fn(),
 }));
 
+const membershipState = vi.hoisted(() => ({
+  role: "owner",
+}));
+
 vi.mock("@/lib/store", () => ({
   useDashboardStore: () => ({
     selectedProject: "proj_1",
   }),
 }));
 
-vi.mock("@/lib/hooks", () => ({
-  useProjectSettings: () => ({
-    data: { project_id: "proj_1" },
-    isLoading: false,
-    error: null,
-  }),
-}));
+vi.mock("@/lib/hooks", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/hooks")>("@/lib/hooks");
+  return {
+    ...actual,
+    useMyProjects: () => ({
+      data: [
+        {
+          membership_id: "mem_current",
+          project_id: "proj_1",
+          project_name: "My Project",
+          role: membershipState.role,
+          is_active: true,
+          created_at: "2026-05-29T10:00:00.000Z",
+          updated_at: "2026-05-29T10:00:00.000Z",
+        },
+      ],
+      isLoading: false,
+      error: null,
+    }),
+    useProjectSettings: () => ({
+      data: { project_id: "proj_1" },
+      isLoading: false,
+      error: null,
+    }),
+  };
+});
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -36,9 +60,25 @@ vi.mock("@/lib/api", async () => {
 
 const now = "2026-05-29T10:00:00.000Z";
 
+function renderTeamPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <TeamPage />
+    </QueryClientProvider>,
+  );
+}
+
 describe("TeamPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    membershipState.role = "owner";
     api.listProjectMembers.mockResolvedValue([
       {
         membership_id: "m_1",
@@ -70,7 +110,7 @@ describe("TeamPage", () => {
   });
 
   it("renders backend array membership responses directly", async () => {
-    render(<TeamPage />);
+    renderTeamPage();
 
     expect(await screen.findByText("owner@example.com")).toBeInTheDocument();
     expect(screen.getByLabelText("Workspace access command center")).toBeInTheDocument();
@@ -117,7 +157,7 @@ describe("TeamPage", () => {
       updated_at: now,
     });
 
-    render(<TeamPage />);
+    renderTeamPage();
 
     expect(await screen.findByText("member@example.com")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "Change role for member@example.com" }), {
@@ -131,5 +171,43 @@ describe("TeamPage", () => {
         role: "admin",
       }),
     );
+  });
+
+  it("renders member management read-only for non-admin roles", async () => {
+    membershipState.role = "viewer";
+    api.listProjectMembers.mockResolvedValue([
+      {
+        membership_id: "m_1",
+        project_id: "proj_1",
+        user_id: "u_1",
+        subject: "user:owner@example.com",
+        email: "owner@example.com",
+        role: "owner",
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      },
+      {
+        membership_id: "m_2",
+        project_id: "proj_1",
+        user_id: "u_2",
+        subject: "user:member@example.com",
+        email: "member@example.com",
+        role: "member",
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      },
+    ]);
+
+    renderTeamPage();
+
+    expect(await screen.findByText("member@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Your role is Viewer. Member access is read-only for this account.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Send invite" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("combobox", { name: "Change role for member@example.com" })).toHaveProperty("disabled", true);
+    expect(screen.getAllByRole("button", { name: "Remove" })[0]).toHaveProperty("disabled", true);
+    expect(api.upsertProjectMember).not.toHaveBeenCalled();
   });
 });

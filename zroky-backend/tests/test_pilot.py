@@ -866,6 +866,38 @@ class TestPutPolicyRoute:
         assert response.status_code == 200
         assert response.json()["policy"]["tier1_daily_cap"] == 99
 
+    def test_put_accepts_matching_update_precondition(self, client: TestClient) -> None:
+        seeded = client.get(
+            "/v1/pilot/policy", headers={PROJECT_HEADER: "proj-1"}
+        ).json()
+
+        payload = dict(DEFAULT_POLICY)
+        payload["tier1_daily_cap"] = 42
+        payload["expected_updated_at"] = seeded["updated_at"]
+        response = client.put(
+            "/v1/pilot/policy",
+            headers={PROJECT_HEADER: "proj-1"},
+            json=payload,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["policy"]["tier1_daily_cap"] == 42
+
+    def test_put_rejects_stale_update_precondition(self, client: TestClient) -> None:
+        client.get("/v1/pilot/policy", headers={PROJECT_HEADER: "proj-1"})
+
+        payload = dict(DEFAULT_POLICY)
+        payload["tier1_daily_cap"] = 42
+        payload["expected_updated_at"] = "2000-01-01T00:00:00Z"
+        response = client.put(
+            "/v1/pilot/policy",
+            headers={PROJECT_HEADER: "proj-1"},
+            json=payload,
+        )
+
+        assert response.status_code == 409
+        assert "Refresh before saving" in response.json()["detail"]
+
     def test_put_partial_patch_preserves_runtime_mandate(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]
         with factory() as session:

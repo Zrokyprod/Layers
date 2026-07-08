@@ -284,7 +284,7 @@ export default function OwnerSettingsPage() {
           </div>
           <div>
             <strong>Queue purge and task revoke</strong>
-            <span>Backend rate limits and allowlists protect infrastructure actions.</span>
+            <span>Require typed confirmation, backend rate limits, allowlists, and audit events.</span>
           </div>
         </div>
       </section>

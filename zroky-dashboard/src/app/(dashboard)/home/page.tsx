@@ -3,22 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  getBillingUsage,
-  getOutcomeReconciliationSummary,
-  getSourceMutationSummary,
-  listActionRunners,
-  listActionIntents,
-  listAgentProfiles,
-  listOutcomeReconciliations,
-  listProjectActionExecutionAttempts,
-  listProjectApiKeys,
-  listRuntimePolicyApprovals,
-  listUnreceiptedSourceMutations,
+  getHomeSummary,
   type ActionExecutionAttemptResponse,
   type ActionIntentResponse,
   type ActionRunnerResponse,
   type AgentProfileListResponse,
   type AgentProfileResponse,
+  type HomeSummaryResponse,
   type OutcomeReconciliationSummaryResponse,
   type OutcomeReconciliationView,
   type RuntimePolicyDecisionResponse,
@@ -34,6 +25,7 @@ import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/
 import { ControlLoopStrip, type ControlLoopStats } from "./ControlLoopStrip";
 import { DecisionQueue, type HomeQueueFilter } from "./DecisionQueue";
 import { FleetContextLine } from "./FleetContextLine";
+import { FIRST_RUN_PREVIEW_DATA, PREVIEW_TIME } from "./first-run-preview";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
 import { ProofStrip, type ProofMetric } from "./ProofStrip";
 import { SelectedProofRail } from "./SelectedProofRail";
@@ -52,7 +44,24 @@ type MissionData = {
   actionRunners: ActionRunnerResponse[];
   apiKeys: ApiKeyResponse[];
   billingUsage: BillingUsageResponse | null;
+  homeSummary: HomeSummaryResponse | null;
 };
+
+type MissionSource =
+  | "homeSummary"
+  | "intents"
+  | "approvals"
+  | "outcomes"
+  | "outcomeSummary"
+  | "sourceSummary"
+  | "mutations"
+  | "staleAttempts"
+  | "agentProfiles"
+  | "actionRunners"
+  | "apiKeys"
+  | "billingUsage";
+
+type MissionAvailability = Record<MissionSource, boolean>;
 
 const EMPTY_DATA: MissionData = {
   intents: [],
@@ -67,243 +76,38 @@ const EMPTY_DATA: MissionData = {
   actionRunners: [],
   apiKeys: [],
   billingUsage: null,
+  homeSummary: null,
 };
 
-const PREVIEW_TIME = "2026-07-02T16:30:00.000Z";
-
-const FIRST_RUN_PREVIEW_DATA: MissionData = {
-  intents: [
-    {
-      action_id: "act_preview_refund",
-      project_id: "proj_preview",
-      agent_id: "agent_preview_refunds",
-      agent_profile: {
-        id: "agent_preview_refunds",
-        display_name: "Refund Agent",
-        slug: "refund-agent",
-        runtime_path: "sdk",
-        environment: "production",
-      },
-      contract_version: "refund.issue.v1",
-      action_type: "ledger.refund.issue",
-      operation_kind: "TRANSFER",
-      environment: "production",
-      status: "approval_pending",
-      proof_status: "pending",
-      receipt_status: "pending",
-      idempotency_key: "preview_refund_1",
-      intent_digest: "sha256:preview-refund-digest",
-      canonical_intent: {
-        purpose: { summary: "Refund high-value invoice after policy check" },
-        principal: { id: "refund-agent" },
-        resource: { id: "refund_9182", type: "ledger_refund" },
-        trace_context: { agent_name: "refund-agent", trace_id: "trace_preview_refund" },
-      },
-      created_at: PREVIEW_TIME,
-      decided_at: PREVIEW_TIME,
-      authorized_at: null,
-      runtime_policy_decision_id: "decision_preview_refund",
-      deadline: null,
-      status_url: "/v1/action-intents/act_preview_refund",
-    },
-    {
-      action_id: "act_preview_customer",
-      project_id: "proj_preview",
-      agent_id: "agent_preview_success",
-      contract_version: "customer.update.v1",
-      action_type: "crm.customer.update",
-      operation_kind: "UPDATE",
-      environment: "production",
-      status: "authorized",
-      proof_status: "matched",
-      receipt_status: "generated",
-      idempotency_key: "preview_customer_1",
-      intent_digest: "sha256:preview-customer-digest",
-      canonical_intent: {
-        purpose: { summary: "Update verified customer status" },
-        principal: { id: "crm-agent" },
-        resource: { id: "customer_42", type: "crm_customer" },
-        trace_context: { agent_name: "crm-agent", trace_id: "trace_preview_customer" },
-      },
-      created_at: "2026-07-02T16:12:00.000Z",
-      decided_at: "2026-07-02T16:12:03.000Z",
-      authorized_at: "2026-07-02T16:12:03.000Z",
-      runtime_policy_decision_id: "decision_preview_customer",
-      deadline: null,
-      status_url: "/v1/action-intents/act_preview_customer",
-    },
-  ],
-  approvals: [
-    {
-      id: "decision_preview_refund",
-      project_id: "proj_preview",
-      trace_id: "trace_preview_refund",
-      call_id: null,
-      agent_name: "refund-agent",
-      role: "agent",
-      action_type: "ledger.refund.issue",
-      tool_name: "ledger.refunds.create",
-      decision: "requires_approval",
-      status: "pending_approval",
-      allowed: false,
-      requires_approval: true,
-      reasons: ["sequence risk: repeated money movement in one run"],
-      request: { amount_usd: 1280 },
-      policy_snapshot: {},
-      intended_action: { summary: "Issue refund for invoice INV-9182", amount_usd: 1280 },
-      trace_context: { trace_id: "trace_preview_refund" },
-      policy_hit: { sequence_risk: { pattern: "fund_drain" } },
-      business_impact: { amount_usd: 1280, risk: "high" },
-      audit_log: [],
-      created_at: PREVIEW_TIME,
-      expires_at: "2026-07-02T17:30:00.000Z",
-      resolved_at: null,
-      resolved_by: null,
-      resolution_reason: null,
-      consumed_at: null,
-      consumed_by_decision_id: null,
-      required_approval_count: 1,
-      approval_count: 0,
-      approver_subjects: [],
-    },
-  ],
-  outcomes: [
-    {
-      id: "outcome_preview_customer",
-      project_id: "proj_preview",
-      call_id: null,
-      trace_id: "trace_preview_customer",
-      runtime_policy_decision_id: "decision_preview_customer",
-      action_type: "crm.customer.update",
-      connector_type: "generic_rest",
-      system_ref: "customer_42",
-      verdict: "matched",
-      verification_status: "matched",
-      reason: "source record matched signed receipt",
-      amount_usd: null,
-      currency: null,
-      claimed: { status: "verified" },
-      actual: { status: "verified" },
-      comparison: {},
-      idempotency_key: "preview_customer_1",
-      metadata: {},
-      checked_at: "2026-07-02T16:12:12.000Z",
-      created_at: "2026-07-02T16:12:12.000Z",
-    },
-  ],
-  outcomeSummary: {
-    window_days: 30,
-    total: 12,
-    matched: 11,
-    mismatched: 1,
-    not_verified: 0,
-  },
-  sourceSummary: {
-    total: 18,
-    matched_receipt: 17,
-    authorized_external: 1,
-    legacy_path: 0,
-    unmanaged_agent_action: 0,
-    policy_bypass: 1,
-    unknown_actor: 0,
-    unreceipted: 1,
-  },
-  mutations: [
-    {
-      id: "mutation_preview_bypass",
-      project_id: "proj_preview",
-      source_system: "crm",
-      mutation_id: "crm_mutation_77",
-      action_type: "customer.export",
-      resource_type: "customer_segment",
-      resource_id: "segment_enterprise",
-      system_ref: "segment_enterprise",
-      actor_type: "agent",
-      actor_id: "legacy-export-agent",
-      zroky_action_id: null,
-      action_receipt_id: null,
-      idempotency_key: null,
-      classification: "policy_bypass",
-      metadata: {},
-      occurred_at: "2026-07-02T16:03:00.000Z",
-      created_at: "2026-07-02T16:03:00.000Z",
-    },
-  ],
-  staleAttempts: [],
-  agentProfiles: [
-    {
-      schema_version: "zroky.agent_tool_control.v1",
-      id: "agent_preview_refunds",
-      project_id: "proj_preview",
-      display_name: "Refund Agent",
-      slug: "refund-agent",
-      description: "Handles high-risk refund actions with approval gates.",
-      runtime_path: "sdk",
-      framework: "langgraph",
-      environment: "production",
-      model_provider: "openai",
-      model_name: "gpt-4.1",
-      tool_names: ["ledger.refunds.create", "crm.customer.update"],
-      allowed_action_types: ["refund", "customer_record_update"],
-      blocked_action_types: [],
-      default_policy_id: null,
-      risk_limits: {},
-      verification_connectors: ["ledger_refund", "generic_rest"],
-      metadata: { agent_name: "refund-agent" },
-      is_active: true,
-      created_at: "2026-07-02T15:40:00.000Z",
-      updated_at: PREVIEW_TIME,
-    },
-  ],
-  agentProfileMeta: {
-    active_count: 1,
-    max_active_agents: 3,
-    limit_reached: false,
-  },
-  actionRunners: [
-    {
-      runner_id: "runner_preview_primary",
-      project_id: "proj_preview",
-      name: "Production runner",
-      runner_type: "customer_hosted",
-      environment: "production",
-      status: "online",
-      supported_operation_kinds: ["UPDATE", "TRANSFER"],
-      credential_scope: {},
-      heartbeat_payload: {},
-      capability_version: "2026-07-02",
-      last_heartbeat_at: PREVIEW_TIME,
-      created_at: "2026-07-02T15:40:00.000Z",
-      updated_at: PREVIEW_TIME,
-    },
-  ],
-  apiKeys: [
-    {
-      key_id: "key_preview",
-      project_id: "proj_preview",
-      name: "Production verified-action key",
-      key_prefix: "zk_live_preview",
-      scopes: ["project:member"],
-      revoked: false,
-      expired: false,
-      expires_at: null,
-      rotated_from_key_id: null,
-      last_used_at: PREVIEW_TIME,
-      created_at: "2026-07-02T15:30:00.000Z",
-    },
-  ],
-  billingUsage: null,
+const NO_SOURCES_AVAILABLE: MissionAvailability = {
+  homeSummary: false,
+  intents: false,
+  approvals: false,
+  outcomes: false,
+  outcomeSummary: false,
+  sourceSummary: false,
+  mutations: false,
+  staleAttempts: false,
+  agentProfiles: false,
+  actionRunners: false,
+  apiKeys: false,
+  billingUsage: false,
 };
 
-const STALE_ATTEMPT_SECONDS = 600;
-
-function valueOr<T>(result: PromiseSettledResult<T>, fallback: T): T {
-  return result.status === "fulfilled" ? result.value : fallback;
-}
-
-function errorCount(results: PromiseSettledResult<unknown>[]): number {
-  return results.filter((result) => result.status === "rejected").length;
-}
+const ALL_SOURCES_AVAILABLE: MissionAvailability = {
+  homeSummary: true,
+  intents: true,
+  approvals: true,
+  outcomes: true,
+  outcomeSummary: true,
+  sourceSummary: true,
+  mutations: true,
+  staleAttempts: true,
+  agentProfiles: true,
+  actionRunners: true,
+  apiKeys: true,
+  billingUsage: true,
+};
 
 function firstRunSignals(data: MissionData): FirstRunSignals {
   const hasProjectKey = data.apiKeys.some((key) => !key.revoked && !key.expired);
@@ -356,34 +160,55 @@ function quotaWarning(usage: BillingUsageResponse | null): string | null {
   return null;
 }
 
-function proofMetrics(data: MissionData): ProofMetric[] {
-  const totalChecks = data.outcomeSummary?.total ?? 0;
-  const matchedChecks = data.outcomeSummary?.matched ?? 0;
+function unavailableProofMetric(id: string, label: string, detail: string, href: string): ProofMetric {
+  return {
+    id,
+    label,
+    value: "— unavailable",
+    detail,
+    href,
+    tone: "warning",
+  };
+}
+
+function proofMetrics(data: MissionData, availability: MissionAvailability): ProofMetric[] {
+  const summary = data.homeSummary;
+  if (!availability.homeSummary || !summary) {
+    return [
+      unavailableProofMetric("controlled-actions", "Controlled actions", "Home summary unavailable", "/actions"),
+      unavailableProofMetric("pending-approvals", "Pending approvals", "Home summary unavailable", "/approvals"),
+      unavailableProofMetric("verified-outcomes", "Verified outcomes", "Home summary unavailable", "/outcomes"),
+      unavailableProofMetric("bypass-risk", "Bypass risk", "Home summary unavailable", "/outcomes"),
+    ];
+  }
+  const totalChecks = summary?.metrics.outcome_checks ?? 0;
+  const matchedChecks = summary?.metrics.verified_outcomes ?? 0;
   const matchedRate = totalChecks > 0 ? (matchedChecks / totalChecks) * 100 : null;
-  const bypassRisk = data.sourceSummary?.unreceipted ?? data.mutations.length;
+  const bypassRisk = summary?.metrics.unreceipted_mutations ?? 0;
+  const windowLabel = summary ? `Last ${summary.window_days} days` : "Summary unavailable";
 
   return [
     {
       id: "controlled-actions",
       label: "Controlled actions",
-      value: formatCount(data.intents.length),
-      detail: "Action intents in the current window",
+      value: formatCount(summary.metrics.controlled_actions),
+      detail: windowLabel,
       href: "/actions",
       tone: "neutral",
     },
     {
       id: "pending-approvals",
       label: "Pending approvals",
-      value: formatCount(data.approvals.length),
-      detail: "Human decisions waiting",
+      value: formatCount(summary.metrics.pending_approvals),
+      detail: "Open approval queue",
       href: "/approvals",
-      tone: data.approvals.length > 0 ? "warning" : "success",
+      tone: summary.metrics.pending_approvals > 0 ? "warning" : "success",
     },
     {
       id: "verified-outcomes",
       label: "Verified outcomes",
       value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
-      detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks`,
+      detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks, ${windowLabel.toLowerCase()}`,
       href: "/outcomes",
       tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
     },
@@ -391,43 +216,84 @@ function proofMetrics(data: MissionData): ProofMetric[] {
       id: "bypass-risk",
       label: "Bypass risk",
       value: formatCount(bypassRisk),
-      detail: "Unreceipted source mutations",
+      detail: `Unreceipted mutations, ${windowLabel.toLowerCase()}`,
       href: "/outcomes",
       tone: bypassRisk > 0 ? "danger" : "success",
     },
   ];
 }
 
-function hasSequenceRiskSignal(decision: RuntimePolicyDecisionResponse): boolean {
-  const reasonHit = decision.reasons.some((reason) => reason.toLowerCase().includes("sequence risk"));
-  const policyHit = Object.prototype.hasOwnProperty.call(decision.policy_hit ?? {}, "sequence_risk");
-  return reasonHit || policyHit;
-}
-
-function controlLoopStats(data: MissionData): ControlLoopStats {
-  const matchedOutcomes = data.outcomes.filter(
-    (outcome) => outcome.verdict === "matched" || outcome.verification_status === "matched",
-  ).length;
-  const verifiedCount = data.outcomeSummary?.matched ?? matchedOutcomes;
-  const generatedReceipts = data.intents.filter((intent) => intent.receipt_status === "generated").length;
-  const sourceReceipts = data.sourceSummary?.matched_receipt ?? 0;
-  const bypassMutations = data.mutations.filter((mutation) => mutation.classification === "policy_bypass").length;
-  const sourceBypassCount = data.sourceSummary?.policy_bypass ?? 0;
+function controlLoopStats(data: MissionData, availability: MissionAvailability): ControlLoopStats {
+  const summary = data.homeSummary;
+  if (!availability.homeSummary || !summary) {
+    return {
+      actionCount: null,
+      approvalCount: null,
+      verifiedCount: null,
+      receiptCount: null,
+      bypassCount: null,
+      sequenceRiskCount: null,
+    };
+  }
 
   return {
-    actionCount: data.intents.length,
-    approvalCount: data.approvals.length,
-    verifiedCount,
-    receiptCount: Math.max(generatedReceipts, sourceReceipts),
-    bypassCount: Math.max(bypassMutations, sourceBypassCount),
-    sequenceRiskCount: data.approvals.filter(hasSequenceRiskSignal).length,
+    actionCount: summary.metrics.controlled_actions,
+    approvalCount: summary.metrics.pending_approvals,
+    verifiedCount: summary.metrics.verified_outcomes,
+    receiptCount: summary.metrics.receipts_generated,
+    bypassCount: summary.metrics.bypass_mutations,
+    sequenceRiskCount: summary.metrics.sequence_risks,
   };
 }
 
+function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
+  const details = summary.data;
+  return {
+    intents: details?.intents ?? [],
+    approvals: details?.approvals ?? [],
+    outcomes: details?.outcomes ?? [],
+    outcomeSummary: details?.outcome_summary ?? null,
+    sourceSummary: details?.source_summary ?? null,
+    mutations: details?.mutations ?? [],
+    staleAttempts: details?.stale_attempts ?? [],
+    agentProfiles: details?.agent_profiles ?? [],
+    agentProfileMeta: details?.agent_profile_meta ?? null,
+    actionRunners: details?.action_runners ?? [],
+    apiKeys: details?.api_keys ?? [],
+    billingUsage: details?.billing_usage ?? null,
+    homeSummary: summary,
+  };
+}
+
+function availabilityFromSummary(summary: HomeSummaryResponse): MissionAvailability {
+  const sources = summary.sources;
+  if (!sources) {
+    return ALL_SOURCES_AVAILABLE;
+  }
+  return {
+    homeSummary: sources.home_summary,
+    intents: sources.intents,
+    approvals: sources.approvals,
+    outcomes: sources.outcomes,
+    outcomeSummary: sources.outcome_summary,
+    sourceSummary: sources.source_summary,
+    mutations: sources.mutations,
+    staleAttempts: sources.stale_attempts,
+    agentProfiles: sources.agent_profiles,
+    actionRunners: sources.action_runners,
+    apiKeys: sources.api_keys,
+    billingUsage: sources.billing_usage,
+  };
+}
+
+function unavailableSourceCount(availability: MissionAvailability): number {
+  return Object.values(availability).filter((value) => !value).length;
+}
+
 export default function HomePage() {
-  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const [data, setData] = useState<MissionData>(EMPTY_DATA);
+  const [availability, setAvailability] = useState<MissionAvailability>(NO_SOURCES_AVAILABLE);
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
@@ -436,69 +302,30 @@ export default function HomePage() {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
-    const results = await Promise.allSettled([
-      listActionIntents({ limit: 75 }, signal),
-      listRuntimePolicyApprovals("pending_approval", signal),
-      listOutcomeReconciliations({ verdict: "all", limit: 75 }, signal),
-      getOutcomeReconciliationSummary(30, signal),
-      getSourceMutationSummary(signal),
-      listUnreceiptedSourceMutations(75, signal),
-      listProjectActionExecutionAttempts(
-        { status: ["planned", "running"], stale: true, stale_after_seconds: STALE_ATTEMPT_SECONDS, limit: 75 },
-        signal,
-      ),
-      listAgentProfiles({ limit: 200 }, signal),
-      listActionRunners(signal),
-      selectedProject ? listProjectApiKeys(selectedProject, signal) : Promise.resolve([]),
-      getBillingUsage(signal),
-    ]);
-
-    if (signal?.aborted) {
-      return;
+    try {
+      const summary = await getHomeSummary(30, signal);
+      if (signal?.aborted) {
+        return;
+      }
+      const nextAvailability = availabilityFromSummary(summary);
+      setData(missionDataFromSummary(summary));
+      setAvailability(nextAvailability);
+      setLoadErrors(unavailableSourceCount(nextAvailability));
+      setLastLoadedAt(new Date().toISOString());
+    } catch {
+      if (signal?.aborted) {
+        return;
+      }
+      setData(EMPTY_DATA);
+      setAvailability(NO_SOURCES_AVAILABLE);
+      setLoadErrors(1);
+      setLastLoadedAt(null);
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
-
-    const [
-      intents,
-      approvals,
-      outcomes,
-      outcomeSummary,
-      sourceSummary,
-      mutations,
-      staleAttempts,
-      agentProfiles,
-      actionRunners,
-      apiKeys,
-      billingUsage,
-    ] = results;
-
-    const agentProfileResult = valueOr(agentProfiles, {
-      items: [],
-      total: 0,
-      limit: 200,
-      offset: 0,
-      active_count: 0,
-      max_active_agents: -1,
-      limit_reached: false,
-    });
-
-    setData({
-      intents: valueOr(intents, { items: [], total_in_page: 0, limit: 75, offset: 0 }).items,
-      approvals: valueOr(approvals, { items: [], total_in_page: 0 }).items,
-      outcomes: valueOr(outcomes, { items: [], total_in_page: 0 }).items,
-      outcomeSummary: valueOr(outcomeSummary, null),
-      sourceSummary: valueOr(sourceSummary, null),
-      mutations: valueOr(mutations, { items: [], total_in_page: 0 }).items,
-      staleAttempts: valueOr(staleAttempts, { items: [] }).items,
-      agentProfiles: agentProfileResult.items,
-      agentProfileMeta: agentProfileResult,
-      actionRunners: valueOr(actionRunners, { items: [] }).items,
-      apiKeys: valueOr(apiKeys, []),
-      billingUsage: valueOr(billingUsage, null),
-    });
-    setLoadErrors(errorCount(results));
-    setLastLoadedAt(new Date().toISOString());
-    setIsLoading(false);
-  }, [selectedProject]);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -584,10 +411,10 @@ export default function HomePage() {
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
   const verdict = homeVerdictForQueue(rows, homeUnlocked);
-  const metrics = proofMetrics(data);
-  const previewMetrics = proofMetrics(FIRST_RUN_PREVIEW_DATA);
-  const loopStats = controlLoopStats(data);
-  const previewLoopStats = controlLoopStats(FIRST_RUN_PREVIEW_DATA);
+  const metrics = proofMetrics(data, availability);
+  const previewMetrics = proofMetrics(FIRST_RUN_PREVIEW_DATA, ALL_SOURCES_AVAILABLE);
+  const loopStats = controlLoopStats(data, availability);
+  const previewLoopStats = controlLoopStats(FIRST_RUN_PREVIEW_DATA, ALL_SOURCES_AVAILABLE);
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0] ?? null;
   const selectedIntent = selectedRow?.actionId
     ? data.intents.find((intent) => intent.action_id === selectedRow.actionId) ?? null

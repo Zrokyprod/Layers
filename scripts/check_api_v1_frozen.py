@@ -183,6 +183,11 @@ def _generate_current_spec(repo_root: Path) -> dict[str, Any]:
     # visible during the contract check so the checker verifies the full
     # compatibility surface, independent of production feature defaults.
     os.environ.setdefault("FEATURE_LEGACY_BILLING", "true")
+    os.environ.setdefault("FEATURE_LEGACY_OBSERVABILITY_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_REPLAY_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_DIAGNOSIS_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_ISSUES_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_DIAGNOSIS_ALIAS", "true")
 
     _patch_heavy_deps()
 

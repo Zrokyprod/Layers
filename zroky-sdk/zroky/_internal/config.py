@@ -4,8 +4,8 @@
 """SDK configuration — reads from env vars or explicit init() params."""
 from __future__ import annotations
 
-import os
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -121,13 +121,19 @@ def load_config(
     default_timeout: float | None = None,
 ) -> SDKConfig:
     resolved_key = api_key or os.environ.get("ZROKY_API_KEY")
-    resolved_project = project or os.environ.get("ZROKY_PROJECT")
+    resolved_project = (
+        project
+        or os.environ.get("ZROKY_PROJECT_ID")
+        or os.environ.get("ZROKY_PROJECT")
+    )
     resolved_mode = (mode or os.environ.get("ZROKY_MODE", "cloud")).lower()
     resolved_mask = mask_pii if mask_pii is not None else _truthy(
         os.environ.get("ZROKY_MASK_PII", "true")
     )
     resolved_url = _normalize_ingest_url(
-        ingest_url or os.environ.get("ZROKY_INGEST_URL", _DEFAULT_API_BASE_URL)
+        ingest_url
+        or os.environ.get("ZROKY_API_URL")
+        or os.environ.get("ZROKY_INGEST_URL", _DEFAULT_API_BASE_URL)
     )
     default_agent = os.environ.get("ZROKY_AGENT")
     default_agent_id = agent_id or os.environ.get("ZROKY_AGENT_ID")
@@ -144,7 +150,9 @@ def load_config(
     resolved_code_sha = code_sha or os.environ.get("ZROKY_CODE_SHA")
     resolved_deployment_id = deployment_id or os.environ.get("ZROKY_DEPLOYMENT_ID")
     resolved_model_version = model_version or os.environ.get("ZROKY_MODEL_VERSION")
-    resolved_tool_schema_version = tool_schema_version or os.environ.get("ZROKY_TOOL_SCHEMA_VERSION")
+    resolved_tool_schema_version = (
+        tool_schema_version or os.environ.get("ZROKY_TOOL_SCHEMA_VERSION")
+    )
     resolved_rag_version = rag_version or os.environ.get("ZROKY_RAG_VERSION")
     resolved_validate_preflight = (
         validate_preflight

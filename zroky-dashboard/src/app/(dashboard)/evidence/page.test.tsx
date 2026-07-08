@@ -14,6 +14,7 @@ import type {
 
 const api = vi.hoisted(() => ({
   getActionIntentReceipt: vi.fn(),
+  getEvidenceManifest: vi.fn(),
   getRuntimePolicyEvidencePack: vi.fn(),
   listActionIntents: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
@@ -138,7 +139,7 @@ function receipt(overrides: Partial<ActionReceiptResponse> = {}): ActionReceiptR
     action_id: "act_1",
     receipt_digest: "sha256:receipt_1",
     evidence_hash: "sha256:evidence_1",
-    signature_algorithm: "hmac-sha256",
+    signature_algorithm: "Ed25519",
     signature: "sig",
     signing_key_id: "receipt-key-1",
     signature_valid: true,
@@ -309,6 +310,43 @@ describe("EvidencePage", () => {
     api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 1, items: [runtimeDecision()] });
     api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 1, items: [outcome()] });
     api.getActionIntentReceipt.mockResolvedValue(receipt());
+    api.getEvidenceManifest.mockResolvedValue({
+      artifact: "zroky.evidence_manifest",
+      schema_version: "zroky.evidence_manifest.v1",
+      generated_at: "2026-06-20T09:05:00Z",
+      project_id: "proj_1",
+      scope: {
+        filter: "all",
+        search: "sha256:intent_1",
+        start_date: "2026-06-20",
+        end_date: "2026-06-20",
+        total_records: 1,
+        exportable_records: 1,
+        non_exportable_records: 0,
+      },
+      verification: {
+        public_key_url: "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
+        instructions: ["Verify receipts with the published Ed25519 public key."],
+      },
+      records: [
+        {
+          action_id: "act_1",
+          checked_at: "2026-06-20T09:03:00Z",
+          decision_id: "decision_1",
+          digest: "sha256:intent_1",
+          export_kind: "receipt",
+          exportable: true,
+          href: "http://localhost:3000/evidence?action_id=act_1",
+          id: "action:act_1",
+          kind: "action_receipt",
+          source_label: "Action Receipt",
+          status: "matched",
+          system_ref: "ticket:T-1001",
+          title: "Close ticket T-1001",
+          trace_id: "trace_1",
+        },
+      ],
+    });
     api.getRuntimePolicyEvidencePack.mockResolvedValue(evidencePack());
   });
 
@@ -335,11 +373,13 @@ describe("EvidencePage", () => {
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Audit export tools" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "External hash verification" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Verify externally" }).getAttribute("href")).toContain(
-      "https://verify.zroky.com/?digest=sha256%3Areceipt_1",
+    expect(screen.getByRole("region", { name: "Independent verification material" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open public key" }).getAttribute("href")).toBe(
+      "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
     );
-    expect(screen.getByText("Signature validity is verified by the backend; the browser never receives the signing secret.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Signature validity is server-attested here and independently checkable with the published Ed25519 public key."),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("sha256:receipt_1").length).toBeGreaterThan(0);
     expect(api.getActionIntentReceipt).toHaveBeenCalledTimes(1);
     expect(api.getActionIntentReceipt.mock.calls[0]?.[0]).toBe("act_1");
@@ -380,6 +420,15 @@ describe("EvidencePage", () => {
     fireEvent.change(screen.getByLabelText("End"), { target: { value: "2026-06-20" } });
     fireEvent.click(screen.getByRole("button", { name: "Export audit manifest" }));
 
+    await waitFor(() => expect(api.getEvidenceManifest).toHaveBeenCalledWith(
+      {
+        dashboard_origin: "http://localhost:3000",
+        end_date: "2026-06-20",
+        filter: "all",
+        search: "sha256:intent_1",
+        start_date: "2026-06-20",
+      },
+    ));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
     const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
     const exported = await blob.text();
@@ -387,7 +436,7 @@ describe("EvidencePage", () => {
     expect(exported).toContain('"search": "sha256:intent_1"');
     expect(exported).toContain('"start_date": "2026-06-20"');
     expect(exported).toContain('"digest": "sha256:intent_1"');
-    expect(exported).toContain('"external_verify_url": "https://verify.zroky.com"');
+    expect(exported).toContain('"public_key_url": "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key"');
     expect(await screen.findByText("Audit manifest exported for 1 proof record.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Search action, agent, system ref, digest..."), {
@@ -459,7 +508,8 @@ describe("EvidencePage", () => {
     expect(screen.getAllByText("Proof seal").length).toBeGreaterThan(0);
     expect(screen.getByText("Confidential evidence artifact")).toBeInTheDocument();
     expect(screen.getAllByText("Tamper-evident").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Signature valid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Server-attested signature valid/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SERVER-ATTESTED VALID").length).toBeGreaterThan(0);
     const panel = screen.getByLabelText("Focused proof panel");
     fireEvent.click(within(panel).getByRole("button", { name: "Print" }));
     expect(window.print).toHaveBeenCalled();

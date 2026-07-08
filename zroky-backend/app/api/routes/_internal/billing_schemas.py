@@ -7,11 +7,12 @@ from pydantic import BaseModel, Field, model_validator
 class CheckoutRequest(BaseModel):
     plan_code: str = Field(
         description=(
-            "Self-serve plan code: 'starter' | 'pro'. "
-            "Legacy 'pilot' maps to 'starter' and 'plus' maps to 'pro'. "
+            "Self-serve plan code: 'starter' | 'team' | 'scale'. "
+            "Legacy 'pilot' maps to 'starter', 'pro' maps to 'team', "
+            "and 'plus' maps to 'scale'. "
             "'enterprise' is sales-led; 'free' has no checkout."
         ),
-        examples=["starter"],
+        examples=["team"],
     )
     customer_email: str | None = Field(
         default=None,
@@ -40,7 +41,7 @@ class RazorpayOrderRequest(BaseModel):
             "Optional self-serve plan code. When present, the backend computes "
             "the INR paise amount from the pricing contract."
         ),
-        examples=["pro"],
+        examples=["team"],
     )
     amount: int | None = Field(
         default=None,
@@ -119,7 +120,7 @@ class BillingMeResponse(BaseModel):
     current_period_end: str | None = None
     trial_end: str | None = None
     # Module 12 — Reliability SLA tier (plan §11.4). 'none' for
-    # Free/Starter/Pro; 'team'/'enterprise' for tiers carrying the
+    # Free/Starter; 'team'/'enterprise' for tiers carrying the
     # refund-on-miss SLA contract. Read-only here; mutations happen
     # exclusively in the Founder Console (Module 13).
     sla_tier: str = Field(

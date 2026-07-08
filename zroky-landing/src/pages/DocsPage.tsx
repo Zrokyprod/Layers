@@ -23,26 +23,27 @@ const revealEase = [0.16, 1, 0.3, 1] as const;
 
 const pythonSnippet = `import zroky
 
-decision = zroky.verified_action(
+receipt = zroky.protect(
+    action="customer.access.grant",
+    params={"role": "admin", "target_user": "user_881"},
     agent_id="ops_agent",
-    action_type="access.grant",
-    parameters={"role": "admin", "target_user": "user_881"},
-    source_of_record="okta",
+    verification_profile="okta",
+    wait_for_receipt=True,
 )
 
-proof = zroky.await_action_proof(decision["action_id"])
-assert proof["proof_status"] == "matched"`;
+assert receipt["proof_status"] == "matched"`;
 
-const typescriptSnippet = `import { zroky } from "@zroky-ai/sdk";
+const typescriptSnippet = `import { protect } from "@zroky-ai/sdk";
 
-const decision = await zroky.verifiedAction({
+const receipt = await protect({
+  action: "production.deploy",
   agentId: "release-agent",
-  actionType: "production.deploy",
-  parameters: { service: "billing-api", version: "2026.07.04" },
-  sourceOfRecord: "deployments",
+  params: { service: "billing-api", version: "2026.07.04" },
+  verificationProfile: "deployments",
+  waitForReceipt: true,
 });
 
-const receipt = await zroky.receipts.get(decision.actionId);`;
+console.log(receipt.proofStatus);`;
 
 const gatewaySnippet = `docker run -d \\
   -p 8090:8090 \\

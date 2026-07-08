@@ -4,6 +4,7 @@ import {
   decideActionIntent,
   approveRuntimePolicyDecision,
   enforceAgentProfile,
+  getActionsLifecycleSummary,
   getBillingMe,
   getActionIntentReceipt,
   getActionIntentTimeline,
@@ -303,6 +304,71 @@ describe("verified action API client", () => {
     );
   });
 
+  it("loads the aggregate actions lifecycle summary", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          project_id: "proj_1",
+          window_days: 30,
+          window_start: "2026-06-01T00:00:00Z",
+          generated_at: "2026-06-20T09:15:00Z",
+          row_limit: 200,
+          source_totals: {
+            intents: 2,
+            approvals: 1,
+            outcomes: 2,
+            mutations: 1,
+            stale_attempts: 0,
+          },
+          truncated: false,
+          truncated_sources: [],
+          metrics: {
+            controlled_actions: 2,
+            held_actions: 1,
+            matched_outcomes: 1,
+            mismatched_outcomes: 0,
+            not_verified_outcomes: 1,
+            bypass_risk: 1,
+          },
+          sources: {
+            lifecycle_summary: true,
+            intents: true,
+            approvals: true,
+            outcomes: true,
+            outcome_summary: true,
+            source_summary: true,
+            mutations: true,
+            stale_attempts: true,
+            billing_usage: true,
+          },
+          data: {
+            intents: [],
+            approvals: [],
+            outcomes: [],
+            outcome_summary: null,
+            source_summary: null,
+            mutations: [],
+            stale_attempts: [],
+            billing_usage: null,
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getActionsLifecycleSummary({ days: 30, limit: 200 })).resolves.toMatchObject({
+      metrics: { controlled_actions: 2, bypass_risk: 1 },
+      source_totals: { intents: 2, approvals: 1 },
+      data: { intents: [] },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/actions/lifecycle-summary?days=30&limit=200",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("loads action timeline, receipt, attempts, project attempts, runners, and posts decide", async () => {
     const receipt = {
       receipt_id: "receipt_1",
@@ -310,7 +376,7 @@ describe("verified action API client", () => {
       action_id: "action_1",
       receipt_digest: "sha256:abc",
       evidence_hash: "sha256:def",
-      signature_algorithm: "HMAC-SHA256",
+      signature_algorithm: "Ed25519",
       signature: "sig",
       signing_key_id: "key",
       signature_valid: true,

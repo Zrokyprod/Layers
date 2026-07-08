@@ -1,6 +1,10 @@
 from app.api.routes._internal.owner_common import *
 from app.api.routes._internal.owner_pricing_audit import _owner_audit, _resolve_actor
 
+_TENANT_RATE_LIMIT_KEY = "zroky:tenant:{project_id}:rate_limit"
+_ALLOWED_QUEUES = frozenset({"diagnosis_fast", "diagnosis_pattern", "celery"})
+
+
 class TenantRateLimitRequest(BaseModel):
     ingest_soft_limit_rpm: int | None = None
     ingest_burst_limit_rpm: int | None = None
@@ -116,7 +120,12 @@ def owner_delete_user(
     return {"ok": True, "user_id": user_id, "action": "deleted"}
 
 
-class RevokeTaskRequest(BaseModel):
+class OwnerDestructiveChallengeRequest(BaseModel):
+    confirm: str
+    reason: str | None = None
+
+
+class RevokeTaskRequest(OwnerDestructiveChallengeRequest):
     terminate: bool = False
 
 
@@ -125,9 +134,15 @@ class RevokeTaskRequest(BaseModel):
 def owner_purge_queue(
     request: Request,
     queue_name: str,
+    body: OwnerDestructiveChallengeRequest,
     _: None = Depends(require_provisioning_access),
     db: Session = Depends(get_db_session),
 ) -> dict:
+    if body.confirm != f"PURGE {queue_name}":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Confirmation must be 'PURGE {queue_name}'.",
+        )
     if queue_name not in _ALLOWED_QUEUES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -137,7 +152,7 @@ def owner_purge_queue(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
     deleted = get_redis_client().delete(queue_name)
     _owner_audit(db, action="owner.queue.purge", actor=_resolve_actor(request),
-                 target_id=queue_name, metadata={"deleted_keys": deleted})
+                 target_id=queue_name, metadata={"deleted_keys": deleted, "reason": body.reason})
     db.commit()
     return {"ok": True, "queue": queue_name, "deleted_keys": int(deleted)}
 
@@ -151,6 +166,11 @@ def owner_revoke_task(
     _: None = Depends(require_provisioning_access),
     db: Session = Depends(get_db_session),
 ) -> dict:
+    if body.confirm != f"REVOKE {task_id}":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Confirmation must be 'REVOKE {task_id}'.",
+        )
     try:
         celery_app.control.revoke(
             task_id,
@@ -161,7 +181,7 @@ def owner_revoke_task(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
                             detail=f"Celery revoke failed: {exc}") from exc
     _owner_audit(db, action="owner.task.revoke", actor=_resolve_actor(request),
-                 target_id=task_id, metadata={"terminate": body.terminate})
+                 target_id=task_id, metadata={"terminate": body.terminate, "reason": body.reason})
     db.commit()
     return {"ok": True, "task_id": task_id, "terminate": body.terminate}
 

@@ -53,7 +53,14 @@ import {
 } from "@/lib/policy-rules-view";
 
 const DASH = "-";
-const ACTIVE_GUARDRAIL_COUNT = 5;
+const GUARDRAIL_FIELDS: Array<keyof PilotPolicyPayload> = [
+  "runtime_sensitive_actions_require_approval",
+  "runtime_block_pii_leak",
+  "runtime_block_prompt_injected_external_action",
+  "runtime_production_deploys_require_approval",
+  "runtime_changed_recipient_deny",
+  "runtime_sequence_risk_enabled",
+];
 const ENVIRONMENT_OPTIONS = ["production", "staging", "development"];
 
 type PolicyRuleForm = {
@@ -147,7 +154,14 @@ function ruleFormFromRule(rule: RuntimePolicyRuleResponse | null): PolicyRuleFor
   };
 }
 
-function patchFromRuleForm(form: PolicyRuleForm): Partial<PilotPolicyPayload> {
+function hasPolicyField(policy: Partial<PilotPolicyPayload> | null | undefined, key: keyof PilotPolicyPayload): boolean {
+  return Object.prototype.hasOwnProperty.call(policy ?? {}, key);
+}
+
+function patchFromRuleForm(
+  form: PolicyRuleForm,
+  existingPatch: Partial<PilotPolicyPayload> | null = null,
+): Partial<PilotPolicyPayload> {
   const patch: Partial<PilotPolicyPayload> = {};
   const runtimeEnabled = triStateBoolean(form.runtimeEnabled);
   const sensitiveApproval = triStateBoolean(form.sensitiveApproval);
@@ -164,13 +178,20 @@ function patchFromRuleForm(form: PolicyRuleForm): Partial<PilotPolicyPayload> {
   if (denyThreshold != null) patch.runtime_amount_deny_threshold_usd = denyThreshold;
   if (maxCost != null) patch.runtime_max_cost_usd = maxCost;
   if (approvalTtl != null) patch.runtime_approval_ttl_minutes = approvalTtl;
-  if (allowedTools.length > 0) patch.runtime_allowed_tools = allowedTools;
-  if (sensitiveTools.length > 0) patch.runtime_sensitive_tools = sensitiveTools;
+  if (allowedTools.length > 0 || hasPolicyField(existingPatch, "runtime_allowed_tools")) {
+    patch.runtime_allowed_tools = allowedTools;
+  }
+  if (sensitiveTools.length > 0 || hasPolicyField(existingPatch, "runtime_sensitive_tools")) {
+    patch.runtime_sensitive_tools = sensitiveTools;
+  }
 
   return patch;
 }
 
-function rulePayloadFromForm(form: PolicyRuleForm): RuntimePolicyRulePayload {
+function rulePayloadFromForm(
+  form: PolicyRuleForm,
+  existingPatch: Partial<PilotPolicyPayload> | null = null,
+): RuntimePolicyRulePayload {
   return {
     name: form.name.trim(),
     description: form.description.trim() || null,
@@ -179,7 +200,7 @@ function rulePayloadFromForm(form: PolicyRuleForm): RuntimePolicyRulePayload {
     environment: form.environment || null,
     priority: Number(form.priority || 0),
     is_enabled: form.isEnabled,
-    policy_patch: patchFromRuleForm(form),
+    policy_patch: patchFromRuleForm(form, existingPatch),
   };
 }
 
@@ -315,7 +336,7 @@ function policyVerdict({
       tone: "warning",
     };
   }
-  if (activeGuardrails < ACTIVE_GUARDRAIL_COUNT) {
+  if (activeGuardrails < GUARDRAIL_FIELDS.length) {
     return {
       badge: "Incomplete",
       copy: "The runtime gate is active, but one or more high-stakes blockers are not enforcing the boundary.",
@@ -436,6 +457,7 @@ export default function PoliciesPage() {
   const [previewEnvironment, setPreviewEnvironment] = useState("production");
   const [dryRunAmount, setDryRunAmount] = useState("600");
   const [dryRunResult, setDryRunResult] = useState<RuntimePolicyDryRunResponse | null>(null);
+  const [killSwitchTarget, setKillSwitchTarget] = useState<boolean | null>(null);
 
   const policyQuery = useQuery({
     queryKey: ["pilot-policy"],
@@ -498,8 +520,10 @@ export default function PoliciesPage() {
 
   const killSwitchMutation = useMutation({
     mutationFn: setRuntimePolicyKillSwitch,
-    onSuccess: () => {
-      setMessage("Kill switch enabled.");
+    onSuccess: (response, enabled) => {
+      setPolicy((current) => (current ? { ...current, kill_switch: response.enabled } : current));
+      setKillSwitchTarget(null);
+      setMessage(enabled ? "Kill switch enabled." : "Autonomy resumed.");
       void queryClient.invalidateQueries({ queryKey: ["pilot-policy"] });
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
     },
@@ -572,21 +596,12 @@ export default function PoliciesPage() {
 
   const readiness = useMemo(() => policyReadiness(policy), [policy]);
   const approvals = approvalsQuery.data?.items ?? [];
-  const agents = agentsQuery.data?.items ?? [];
-  const rules = rulesQuery.data?.items ?? [];
+  const agents = useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data?.items]);
+  const rules = useMemo(() => rulesQuery.data?.items ?? [], [rulesQuery.data?.items]);
   const pendingApprovals = approvals.filter((item) => item.status === "pending_approval").length;
   const blockedActions = approvals.filter((item) => item.status === "blocked" || item.status === "rejected").length;
-  const approvedOrAllowedActions = approvals.filter((item) => item.status === "approved" || item.status === "allowed").length;
-  const sensitiveToolCount = policy?.runtime_sensitive_tools.length ?? 0;
-  const allowedToolCount = policy?.runtime_allowed_tools.length ?? 0;
   const activeGuardrails = policy
-    ? [
-        policy.runtime_sensitive_actions_require_approval,
-        policy.runtime_block_pii_leak,
-        policy.runtime_block_prompt_injected_external_action,
-        policy.runtime_production_deploys_require_approval,
-        policy.runtime_changed_recipient_deny,
-      ].filter(Boolean).length
+    ? GUARDRAIL_FIELDS.filter((field) => Boolean(policy[field])).length
     : 0;
   const latestDecisions = approvals.slice(0, 5);
   const rulesView = useMemo(
@@ -595,7 +610,10 @@ export default function PoliciesPage() {
   );
   const selectedAgent = agents.find((agent) => agent.id === previewAgentId) ?? null;
   const selectedRule = rules.find((rule) => rule.id === selectedRuleId) ?? null;
-  const rulePatch = useMemo(() => patchFromRuleForm(ruleForm), [ruleForm]);
+  const rulePatch = useMemo(
+    () => patchFromRuleForm(ruleForm, selectedRule?.policy_patch ?? null),
+    [ruleForm, selectedRule?.policy_patch],
+  );
   const ruleConditions = useMemo(() => describePolicyPatch(rulePatch), [rulePatch]);
   const heroVerdict = policyVerdict({
     activeGuardrails,
@@ -656,11 +674,12 @@ export default function PoliciesPage() {
       ...policy,
       runtime_allowed_tools: textToList(allowedTools),
       runtime_sensitive_tools: textToList(sensitiveTools),
+      expected_updated_at: policyQuery.data?.updated_at ?? null,
     });
   }
 
   function saveRule() {
-    const payload = rulePayloadFromForm(ruleForm);
+    const payload = rulePayloadFromForm(ruleForm, selectedRule?.policy_patch ?? null);
     if (!payload.name) {
       setMessage("Rule name is required.");
       return;
@@ -691,6 +710,36 @@ export default function PoliciesPage() {
     });
   }
 
+  function requestKillSwitchChange(enabled: boolean) {
+    setMessage(null);
+    if (killSwitchTarget === enabled) {
+      killSwitchMutation.mutate(enabled);
+      return;
+    }
+    setKillSwitchTarget(enabled);
+  }
+
+  const killSwitchActive = policy?.kill_switch === true;
+  const killSwitchConfirmationActive = killSwitchTarget !== null;
+  const killSwitchActionLabel =
+    killSwitchTarget === true
+      ? "Confirm kill switch"
+      : killSwitchTarget === false
+        ? "Confirm resume"
+        : killSwitchActive
+          ? "Resume autonomy"
+          : "Arm kill switch";
+  const killSwitchActionIcon =
+    killSwitchTarget === false || (killSwitchTarget === null && killSwitchActive)
+      ? <PlayCircle size={16} />
+      : <ShieldAlert size={16} />;
+  const killSwitchActionVariant =
+    killSwitchTarget === false || (killSwitchTarget === null && killSwitchActive)
+      ? "primary"
+      : killSwitchTarget === true
+        ? "danger"
+        : "soft";
+
   const heroActions = (
     <>
       <DashboardButton
@@ -704,14 +753,23 @@ export default function PoliciesPage() {
       >
         Refresh
       </DashboardButton>
+      {killSwitchConfirmationActive && (
+        <DashboardButton
+          onClick={() => setKillSwitchTarget(null)}
+          disabled={killSwitchMutation.isPending}
+          variant="soft"
+        >
+          Cancel
+        </DashboardButton>
+      )}
       <DashboardButton
-        icon={<ShieldAlert size={16} />}
-        disabled={killSwitchMutation.isPending || policy?.kill_switch === true}
+        icon={killSwitchActionIcon}
+        disabled={killSwitchMutation.isPending || !policy}
         loading={killSwitchMutation.isPending}
-        onClick={() => killSwitchMutation.mutate(true)}
-        variant="danger"
+        onClick={() => requestKillSwitchChange(killSwitchActive ? false : true)}
+        variant={killSwitchActionVariant}
       >
-        Kill switch
+        {killSwitchActionLabel}
       </DashboardButton>
       <DashboardButton
         icon={<Save size={16} />}

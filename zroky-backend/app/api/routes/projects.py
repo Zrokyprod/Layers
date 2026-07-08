@@ -25,7 +25,11 @@ from app.schemas.project import (
     ProjectInviteResponse,
 )
 from app.services.email_sender import send_email
-from app.services.membership import normalize_project_role, upsert_project_membership as upsert_project_membership_record
+from app.services.membership import (
+    LastProjectOwnerError,
+    normalize_project_role,
+    upsert_project_membership as upsert_project_membership_record,
+)
 from app.services.security import generate_api_key_material, generate_project_id
 
 router = APIRouter(prefix="/v1/projects")
@@ -384,14 +388,17 @@ def upsert_project_membership(
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    membership = upsert_project_membership_record(
-        db,
-        project_id=project_id,
-        subject=body.subject,
-        email=body.email,
-        role=body.role,
-        is_active=body.is_active,
-    )
+    try:
+        membership = upsert_project_membership_record(
+            db,
+            project_id=project_id,
+            subject=body.subject,
+            email=body.email,
+            role=body.role,
+            is_active=body.is_active,
+        )
+    except LastProjectOwnerError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.commit()
     db.refresh(membership)
 

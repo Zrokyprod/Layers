@@ -4,6 +4,9 @@ import os
 
 os.environ["TESTING"] = "true"
 
+import redis
+
+from app.services import cache_service as cache_module
 from app.services.cache_service import CacheService, cached, clear_cache, get_cache
 
 
@@ -138,3 +141,29 @@ def test_cached_decorator_none_skipped_by_default():
 def test_factory_returns_same_instance_type():
     cache = get_cache("factory")
     assert isinstance(cache, CacheService)
+
+
+def test_redis_operation_failure_switches_to_memory(monkeypatch):
+    monkeypatch.delenv("TESTING", raising=False)
+
+    class BrokenRedis:
+        def __init__(self) -> None:
+            self.set_calls = 0
+
+        def set(self, *args, **kwargs):
+            self.set_calls += 1
+            raise redis.RedisError("redis unavailable")
+
+    broken = BrokenRedis()
+    monkeypatch.setattr(cache_module, "get_redis_client", lambda: broken)
+
+    cache = CacheService("failover")
+    cache.set("token", "value", ttl_seconds=60)
+
+    assert cache.get("token") == "value"
+    assert broken.set_calls == 1
+
+    cache.set("token2", "value2", ttl_seconds=60)
+
+    assert cache.get("token2") == "value2"
+    assert broken.set_calls == 1

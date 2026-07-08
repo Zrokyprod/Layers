@@ -14,8 +14,14 @@ from typing import Any, Mapping
 
 UNLIMITED = -1
 DEFAULT_PLAN_CODE = "free"
-CANONICAL_PLAN_CODES: tuple[str, ...] = ("free", "starter", "pro", "enterprise")
-PLAN_ALIASES: dict[str, str] = {"pilot": "starter", "plus": "pro"}
+CANONICAL_PLAN_CODES: tuple[str, ...] = (
+    "free",
+    "starter",
+    "team",
+    "scale",
+    "enterprise",
+)
+PLAN_ALIASES: dict[str, str] = {"pilot": "starter", "pro": "team", "plus": "scale"}
 VALID_PLAN_CODES: frozenset[str] = frozenset(
     {*CANONICAL_PLAN_CODES, *PLAN_ALIASES.keys()}
 )
@@ -164,15 +170,35 @@ def _validate_public_pricing(
     limits: Mapping[str, int],
     compatibility: Mapping[str, Any],
 ) -> None:
+    expected_overage_by_plan: dict[str, tuple[float | None, str]] = {
+        "free": (None, "hard_cap"),
+        "starter": (0.03, "overage"),
+        "team": (0.025, "overage"),
+        "scale": (0.015, "overage"),
+        "enterprise": (None, "custom"),
+    }
+    expected_overage, expected_policy = expected_overage_by_plan[plan_code]
+    expected_bypass = {
+        "free": "none",
+        "starter": "basic",
+        "team": "full",
+        "scale": "full",
+        "enterprise": "custom",
+    }[plan_code]
     checks = {
-        "calls_per_month": limits["max_calls_per_month"],
-        "retention_days": limits["retention_days"],
-        "replay_credits": compatibility["replay.monthly_runs"],
-        "golden_traces": limits["max_golden_traces"],
-        "golden_sets": compatibility["goldens.max_sets"],
-        "non_blocking_ci": entitlements["pro.ci_gate_nonblocking"],
-        "blocking_ci": entitlements["pro.ci_gate_blocking"],
-        "provider_key_vault": entitlements["enterprise.provider_key_vault"],
+        "protected_actions_per_month": compatibility[
+            "actions.protected.monthly_quota"
+        ],
+        "managed_agents": compatibility["agents.max"],
+        "connectors": compatibility["connectors.system_of_record.max"],
+        "approver_seats": compatibility["seats.included"],
+        "evidence_retention_days": compatibility["retention.days"],
+        "slack_approvals": True,
+        "scoped_policy_rules_dry_run": entitlements["pro.ci_gate_nonblocking"],
+        "bypass_detection": expected_bypass,
+        "audit_manifest_export": compatibility["compliance.export_enabled"],
+        "overage_per_action_usd": expected_overage,
+        "overage_policy": expected_policy,
     }
     for key, expected in checks.items():
         if pricing.get(key) != expected:

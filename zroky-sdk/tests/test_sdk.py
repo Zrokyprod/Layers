@@ -35,7 +35,8 @@ def _reset_sdk():
 def test_init_sets_config(tmp_path, monkeypatch):
     _reset_sdk()
     monkeypatch.setenv("ZROKY_API_KEY", "test-key-abc")
-    monkeypatch.setenv("ZROKY_PROJECT", "my-project")
+    monkeypatch.setenv("ZROKY_PROJECT_ID", "my-project")
+    monkeypatch.setenv("ZROKY_API_URL", "https://api.zroky.test")
 
     with patch("zroky._internal.queue.IngestClient"):
         zroky.init()
@@ -43,6 +44,7 @@ def test_init_sets_config(tmp_path, monkeypatch):
     assert zroky._config is not None
     assert zroky._config.api_key == "test-key-abc"
     assert zroky._config.project == "my-project"
+    assert zroky._config.ingest_url == "https://api.zroky.test"
     zroky.shutdown()
     _reset_sdk()
 
@@ -73,11 +75,24 @@ def test_init_reads_capture_context_fields(monkeypatch):
 
 
 def test_load_config_defaults_to_cloud_ingest_url(monkeypatch):
+    monkeypatch.delenv("ZROKY_API_URL", raising=False)
     monkeypatch.delenv("ZROKY_INGEST_URL", raising=False)
 
     cfg = load_config()
 
     assert cfg.ingest_url == "https://api.zroky.com"
+
+
+def test_load_config_keeps_legacy_env_aliases(monkeypatch):
+    monkeypatch.delenv("ZROKY_PROJECT_ID", raising=False)
+    monkeypatch.delenv("ZROKY_API_URL", raising=False)
+    monkeypatch.setenv("ZROKY_PROJECT", "legacy-project")
+    monkeypatch.setenv("ZROKY_INGEST_URL", "https://legacy.example/api/v1/ingest")
+
+    cfg = load_config()
+
+    assert cfg.project == "legacy-project"
+    assert cfg.ingest_url == "https://legacy.example"
 
 
 @pytest.mark.parametrize(

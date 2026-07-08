@@ -132,6 +132,11 @@ class CacheService:
             except redis.RedisError:
                 self._backend = _MemoryBackend()
 
+    def _fallback_to_memory(self) -> _MemoryBackend:
+        backend = _MemoryBackend()
+        self._backend = backend
+        return backend
+
     def _key(self, key: str) -> str:
         return f"zroky:{self._namespace}:{key}"
 
@@ -140,7 +145,7 @@ class CacheService:
         try:
             return self._backend.get(self._key(key))
         except redis.RedisError:
-            return None
+            return self._fallback_to_memory().get(self._key(key))
 
     def get_json(self, key: str) -> Any | None:
         """Fetch and deserialize JSON value."""
@@ -163,7 +168,7 @@ class CacheService:
         try:
             self._backend.set(self._key(key), value, ttl_seconds=ttl_seconds)
         except redis.RedisError:
-            pass
+            self._fallback_to_memory().set(self._key(key), value, ttl_seconds=ttl_seconds)
 
     def set_json(
         self,
@@ -179,20 +184,20 @@ class CacheService:
         try:
             self._backend.delete(self._key(key))
         except redis.RedisError:
-            pass
+            self._fallback_to_memory().delete(self._key(key))
 
     def exists(self, key: str) -> bool:
         try:
             return self._backend.exists(self._key(key))
         except redis.RedisError:
-            return False
+            return self._fallback_to_memory().exists(self._key(key))
 
     def ttl(self, key: str) -> int:
         """Return TTL in seconds (-1 = no TTL, -2 = key missing)."""
         try:
             return self._backend.ttl(self._key(key))
         except redis.RedisError:
-            return -2
+            return self._fallback_to_memory().ttl(self._key(key))
 
     def incr(
         self,
@@ -205,7 +210,7 @@ class CacheService:
         try:
             return self._backend.incr(self._key(key), amount, ttl_seconds=ttl_seconds)
         except redis.RedisError:
-            return amount
+            return self._fallback_to_memory().incr(self._key(key), amount, ttl_seconds=ttl_seconds)
 
     def mget(self, keys: list[str]) -> list[str | None]:
         """Batch fetch raw string values."""
@@ -216,7 +221,7 @@ class CacheService:
                 raw = self._backend._client.mget(namespaced)
                 return [v if isinstance(v, str) else None for v in raw]
         except redis.RedisError:
-            pass
+            self._fallback_to_memory()
         # Fallback to individual gets
         return [self.get(k) for k in keys]
 
@@ -239,7 +244,7 @@ class CacheService:
                 pipe.execute()
                 return
         except redis.RedisError:
-            pass
+            self._fallback_to_memory()
         for k, v in mapping.items():
             self.set(k, v, ttl_seconds=ttl_seconds)
 

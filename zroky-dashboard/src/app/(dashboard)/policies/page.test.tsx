@@ -80,7 +80,7 @@ function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload
     runtime_amount_deny_threshold_usd: 5000,
     runtime_production_deploys_require_approval: true,
     runtime_changed_recipient_deny: true,
-    runtime_sequence_risk_enabled: false,
+    runtime_sequence_risk_enabled: true,
     ...overrides,
   };
 }
@@ -211,9 +211,11 @@ function mockPolicies({
       requires_approval: false,
     }),
   ],
+  rules = [scopedRule()],
 }: {
   payload?: PilotPolicyPayload;
   decisions?: RuntimePolicyDecisionResponse[];
+  rules?: RuntimePolicyRuleResponse[];
 } = {}) {
   const response = policyResponse(payload);
   seededPolicyResponse = response;
@@ -227,7 +229,7 @@ function mockPolicies({
     max_active_agents: 3,
     limit_reached: false,
   };
-  seededRulesResponse = { items: [scopedRule()], total_in_page: 1 };
+  seededRulesResponse = { items: rules, total_in_page: rules.length };
   seededPreviewResponse = {
     project_id: "proj_1",
     policy: {
@@ -350,14 +352,16 @@ describe("PoliciesPage mandate control", () => {
       expect.objectContaining({
         runtime_allowed_tools: ["ledger.lookup", "crm.update"],
         runtime_sensitive_tools: ["ledger.refund", "email.send", "crm.delete"],
+        expected_updated_at: now,
       }),
     );
   });
 
   it("enables sequence-risk holds through the mandate toggle", async () => {
+    mockPolicies({ payload: policy({ runtime_sequence_risk_enabled: false }) });
     renderPoliciesPage();
 
-    await screen.findByRole("heading", { name: "Human review waiting" });
+    await screen.findByRole("heading", { name: "Guardrails incomplete" });
     fireEvent.click(screen.getByLabelText(/Sequence risk holds/i));
     fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
 
@@ -423,17 +427,64 @@ describe("PoliciesPage mandate control", () => {
     );
   });
 
-  it("shows kill switch as a frozen mandate boundary", async () => {
+  it("keeps explicit empty list overrides when editing a scoped rule", async () => {
+    mockPolicies({
+      rules: [
+        scopedRule({
+          policy_patch: {
+            runtime_allowed_tools: ["ledger.lookup"],
+          },
+        }),
+      ],
+    });
+    renderPoliciesPage();
+
+    await screen.findByRole("heading", { name: "Scoped policy rules" });
+    fireEvent.click(screen.getByRole("button", { name: /Refund Agent strict threshold/ }));
+    const editor = screen.getByLabelText("Scoped rule editor");
+    fireEvent.change(within(editor).getByLabelText("Allowed tools override"), {
+      target: { value: "" },
+    });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save rule" }));
+
+    await waitFor(() => expect(api.updateRuntimePolicyRule).toHaveBeenCalledTimes(1));
+    expect(api.updateRuntimePolicyRule.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        policy_patch: {
+          runtime_allowed_tools: [],
+        },
+      }),
+    );
+  });
+
+  it("requires confirmation before enabling the runtime kill switch", async () => {
+    renderPoliciesPage();
+
+    await screen.findByRole("heading", { name: "Human review waiting" });
+    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch" }));
+    expect(api.setRuntimePolicyKillSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+
+    await waitFor(() => expect(api.setRuntimePolicyKillSwitch.mock.calls[0]?.[0]).toBe(true));
+  });
+
+  it("shows kill switch as a frozen mandate boundary with a resume action", async () => {
     mockPolicies({
       payload: policy({ kill_switch: true }),
       decisions: [],
     });
+    api.setRuntimePolicyKillSwitch.mockResolvedValue({ project_id: "proj_1", enabled: false, policy: { kill_switch: false } });
 
     renderPoliciesPage();
 
     expect(await screen.findByRole("heading", { name: "Autonomy stopped" })).toBeInTheDocument();
     const mandate = screen.getByLabelText("Runtime action control mandate");
     expect(within(mandate).getByText("Kill switch on")).toBeInTheDocument();
-    expect((screen.getByRole("button", { name: "Kill switch" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Resume autonomy" }));
+    expect(api.setRuntimePolicyKillSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm resume" }));
+    await waitFor(() => expect(api.setRuntimePolicyKillSwitch.mock.calls[0]?.[0]).toBe(false));
   });
 });

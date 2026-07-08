@@ -1,15 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildFleetView,
-  matchAgentToScore,
-} from "./agent-fleet";
+import { buildFleetView } from "./agent-fleet";
 import type {
   ActionExecutionAttemptResponse,
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
 } from "./api";
@@ -37,27 +33,6 @@ function profile(overrides: Partial<AgentProfileResponse> = {}): AgentProfileRes
     is_active: true,
     created_at: "2026-06-28T09:00:00Z",
     updated_at: "2026-06-28T09:05:00Z",
-    ...overrides,
-  };
-}
-
-function score(overrides: Partial<AgentScoreView> = {}): AgentScoreView {
-  return {
-    agent_name: "inventory-agent",
-    score_date: "2026-06-28",
-    health_score: 91,
-    fail_rate: 0.02,
-    fail_rate_score: 98,
-    cost_efficiency_score: 90,
-    determinism_score: 88,
-    regression_trend_score: 86,
-    call_count: 12,
-    avg_cost_usd: 0.04,
-    p95_latency_ms: 640,
-    prev_week_fail_rate: 0.03,
-    determinism_breakdown: null,
-    top_failure_axis: null,
-    computed_at: "2026-06-28T10:20:00Z",
     ...overrides,
   };
 }
@@ -99,6 +74,14 @@ function intent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResp
   return {
     action_id: "act_inventory",
     project_id: "proj_123",
+    agent_id: "agent_profile_inventory",
+    agent_profile: {
+      id: "agent_profile_inventory",
+      display_name: "Inventory Agent",
+      slug: "inventory-agent",
+      runtime_path: "sdk",
+      environment: "production",
+    },
     contract_version: "inventory.item.delete/1.0",
     action_type: "inventory.item.delete",
     operation_kind: "DELETE",
@@ -230,27 +213,6 @@ describe("agent fleet foundation", () => {
     expect(fleet.meter).toEqual({ active: 2, cap: 3, reached: false });
   });
 
-  it("matches scores by normalized display name or slug and leaves unmatched profiles honest", () => {
-    const matchedProfile = profile({ display_name: "Inventory Agent", slug: "inventory-agent" });
-    const unmatchedProfile = profile({
-      id: "agent_profile_support",
-      display_name: "Support Agent",
-      slug: "support-agent",
-    });
-    const inventoryScore = score({ agent_name: "inventory-agent", health_score: 93 });
-
-    expect(matchAgentToScore(matchedProfile, [inventoryScore])?.health_score).toBe(93);
-    expect(matchAgentToScore(unmatchedProfile, [inventoryScore])).toBeNull();
-
-    const view = buildFleetView({
-      profiles: [matchedProfile, unmatchedProfile],
-      scores: [inventoryScore],
-    });
-
-    expect(view.rows.find((row) => row.profile?.id === matchedProfile.id)?.healthScore).toBe(93);
-    expect(view.rows.find((row) => row.profile?.id === unmatchedProfile.id)?.healthScore).toBeNull();
-  });
-
   it("rolls action intents into profile rows with honest status tones", () => {
     const mismatchIntent = intent({
       action_id: "act_mismatch",
@@ -295,6 +257,34 @@ describe("agent fleet foundation", () => {
     expect(view.totals).toMatchObject({ mismatched: 1, receiptReady: 2 });
   });
 
+  it("does not attach name-matched telemetry to managed profiles without an agent id", () => {
+    const view = buildFleetView({
+      profiles: [profile()],
+      intents: [
+        intent({
+          action_id: "act_unmanaged_name_match",
+          agent_id: null,
+          agent_profile: null,
+          canonical_intent: {
+            principal: { id: "inventory-agent" },
+            purpose: { summary: "Legacy inventory update" },
+            resource: { id: "item_legacy" },
+            trace_context: { agent_name: "inventory-agent" },
+          },
+        }),
+      ],
+    });
+
+    const managed = view.rows.find((row) => row.id === "profile:agent_profile_inventory");
+    const telemetry = view.rows.find((row) => row.kind === "telemetry");
+    expect(managed?.actionRollup.total).toBe(0);
+    expect(telemetry).toMatchObject({
+      kind: "telemetry",
+      agentName: "inventory-agent",
+      actionRollup: { total: 1 },
+    });
+  });
+
   it("sorts each agent's action rows by newest activity first", () => {
     const olderIntent = intent({
       action_id: "act_older",
@@ -333,6 +323,8 @@ describe("agent fleet foundation", () => {
       intents: [
         intent({
           action_id: "act_unprofiled",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_unprofiled",
           canonical_intent: {
             principal: { id: "shadow-agent" },

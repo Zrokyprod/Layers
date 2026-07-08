@@ -5,9 +5,9 @@ This runner executes approved protected actions without returning protected cred
 ## Run locally
 
 ```bash
-export ZROKY_INGEST_URL=https://api.zroky.com
+export ZROKY_API_URL=https://api.zroky.com
 export ZROKY_API_KEY=zk_live_replace_me
-export ZROKY_PROJECT=proj_replace_me
+export ZROKY_PROJECT_ID=proj_replace_me
 export ZROKY_RUNNER_ID=runner_replace_me
 export ZROKY_RUNNER_INSTANCE_ID=customer-prod-runner-1
 export ZROKY_RUNNER_SECRET_PAYMENTS_STRIPE='{"secret_key":"sk_live_replace_me"}'

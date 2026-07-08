@@ -5,6 +5,9 @@ import { Menu, X, ArrowUpRight, CalendarDays } from 'lucide-react';
 import { DEMO_URL, SIGN_IN_URL, SIGN_UP_URL } from '../lib/links';
 
 const LINKS = [
+  { label: 'Product', to: '/product' },
+  { label: 'Connectors', to: '/#connectors' },
+  { label: 'Actions', to: '/#protected-actions' },
   { label: 'Receipts', to: '/#receipts' },
   { label: 'Pricing', to: '/pricing' },
   { label: 'Docs', to: '/docs' },

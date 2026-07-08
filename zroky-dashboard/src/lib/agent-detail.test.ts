@@ -6,7 +6,6 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   ToolRegistryResponse,
@@ -37,27 +36,6 @@ function profile(overrides: Partial<AgentProfileResponse> = {}): AgentProfileRes
     is_active: true,
     created_at: "2026-06-28T09:00:00Z",
     updated_at: now,
-    ...overrides,
-  };
-}
-
-function score(overrides: Partial<AgentScoreView> = {}): AgentScoreView {
-  return {
-    agent_name: "inventory-agent",
-    score_date: "2026-06-28",
-    health_score: 91,
-    fail_rate: 0.02,
-    fail_rate_score: 98,
-    cost_efficiency_score: 90,
-    determinism_score: 88,
-    regression_trend_score: 86,
-    call_count: 12,
-    avg_cost_usd: 0.04,
-    p95_latency_ms: 640,
-    prev_week_fail_rate: 0.03,
-    determinism_breakdown: null,
-    top_failure_axis: null,
-    computed_at: now,
     ...overrides,
   };
 }
@@ -271,7 +249,6 @@ describe("agent detail foundation", () => {
   it("builds a focused profile detail view with linked proof, runners, and attempts", () => {
     const view = buildAgentDetail({
       profile: profile(),
-      scores: [score()],
       intents: [intent()],
       decisions: [decision()],
       outcomes: [outcome()],
@@ -281,7 +258,7 @@ describe("agent detail foundation", () => {
     });
 
     expect(view.row.kind).toBe("profile");
-    expect(view.score?.health_score).toBe(91);
+    expect(view.row.actionRollup.receiptsGenerated).toBe(1);
     expect(view.latestAction?.actionId).toBe("act_inventory");
     expect(view.proofChain.map((step) => step.step)).toEqual([
       "action",

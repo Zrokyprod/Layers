@@ -198,6 +198,10 @@ import type {
 } from "./types";
 import type { AdjacentCallsResponse } from "./types";
 import { PROVIDER_KEY_QUERY_KEY } from "./provider-key-gate";
+import {
+  legacyProductSurfaceDisabledError,
+  legacyProductSurfaceQueryEnabled,
+} from "./legacy-product-surfaces";
 
 // ─── Activity Feed ──────────────────────────────────────────────────────────
 
@@ -218,6 +222,7 @@ export function useCostDailyTrend(days = 14) {
   return useQuery<CostDailyTrendResponse>({
     queryKey: ["cost", "daily-trend", days],
     queryFn: () => getCostDailyTrend(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -225,6 +230,7 @@ export function useCostByModel(days = 14) {
   return useQuery<CostBreakdownResponse>({
     queryKey: ["cost", "by-model", days],
     queryFn: () => getCostByModel(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -232,6 +238,7 @@ export function useCostByUser(days = 14) {
   return useQuery<CostBreakdownResponse>({
     queryKey: ["cost", "by-user", days],
     queryFn: () => getCostByUser(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -239,6 +246,7 @@ export function useReasoningShare(days = 14) {
   return useQuery<ReasoningShareResponse>({
     queryKey: ["cost", "reasoning-share", days],
     queryFn: () => getReasoningShare(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -246,6 +254,7 @@ export function useCacheSavings(days = 14) {
   return useQuery<CacheSavingsResponse>({
     queryKey: ["cost", "cache-savings", days],
     queryFn: () => getCacheSavings(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -253,6 +262,7 @@ export function useBudget() {
   return useQuery<BudgetConfigResponse>({
     queryKey: ["budget"],
     queryFn: () => getBudget(),
+    enabled: legacyProductSurfaceQueryEnabled(),
     retry: false,
   });
 }
@@ -261,6 +271,7 @@ export function useBudgetStatus() {
   return useQuery<BudgetStatusResponse>({
     queryKey: ["budget", "status"],
     queryFn: () => getBudgetStatus(),
+    enabled: legacyProductSurfaceQueryEnabled(),
     staleTime: 60_000,
   });
 }
@@ -269,6 +280,7 @@ export function useCostTopCalls(limit = 10, hours = 168) {
   return useQuery<CostTopCallsResponse>({
     queryKey: ["cost", "top-calls", limit, hours],
     queryFn: () => getCostTopCalls(limit, hours),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -276,6 +288,7 @@ export function useCostByAgent(days = 14) {
   return useQuery<CostBreakdownResponse>({
     queryKey: ["cost", "by-agent", days],
     queryFn: () => getCostByAgent(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -283,6 +296,7 @@ export function useCostHourly(hours = 48) {
   return useQuery<CostHourlyResponse>({
     queryKey: ["cost", "hourly", hours],
     queryFn: () => getCostHourly(hours),
+    enabled: legacyProductSurfaceQueryEnabled(),
   });
 }
 
@@ -290,6 +304,7 @@ export function useLoopSummary(days = 7) {
   return useQuery<LoopSummaryResponse>({
     queryKey: ["loops", "summary", days],
     queryFn: () => getLoopSummary(days),
+    enabled: legacyProductSurfaceQueryEnabled(),
     staleTime: 60_000,
   });
 }
@@ -298,6 +313,7 @@ export function useLoopIncidents(opts: { days?: number; limit?: number; offset?:
   return useQuery<LoopIncidentsResponse>({
     queryKey: ["loops", "incidents", opts],
     queryFn: () => getLoopIncidents(opts),
+    enabled: legacyProductSurfaceQueryEnabled(),
     staleTime: 60_000,
   });
 }
@@ -522,7 +538,7 @@ export function useDiagnosisFixWatch(callId: string) {
   return useQuery<DiagnosisFixWatchResponse>({
     queryKey: ["diagnosis-fix-watch", callId],
     queryFn: () => getDiagnosisFixWatch(callId),
-    enabled: !!callId,
+    enabled: legacyProductSurfaceQueryEnabled(!!callId),
   });
 }
 
@@ -530,14 +546,17 @@ export function useDiagnosisState(diagnosisId: string) {
   return useQuery<import("./types").DiagnosisUiStateResponse>({
     queryKey: ["diagnosis-state", diagnosisId],
     queryFn: () => getDiagnosisState(diagnosisId),
-    enabled: !!diagnosisId,
+    enabled: legacyProductSurfaceQueryEnabled(!!diagnosisId),
   });
 }
 
 export function useSetDiagnosisAssignment() {
   const qc = useQueryClient();
   return useMutation<import("./types").DiagnosisUiStateResponse, Error, { diagnosisId: string; assigned_subject: string | null }>({
-    mutationFn: ({ diagnosisId, assigned_subject }) => setDiagnosisAssignment(diagnosisId, assigned_subject),
+    mutationFn: ({ diagnosisId, assigned_subject }) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return setDiagnosisAssignment(diagnosisId, assigned_subject);
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["diagnosis-state", vars.diagnosisId] });
       qc.invalidateQueries({ queryKey: ["fixes", "action-queue"] });
@@ -548,7 +567,10 @@ export function useSetDiagnosisAssignment() {
 export function useSetDiagnosisSnooze() {
   const qc = useQueryClient();
   return useMutation<import("./types").DiagnosisUiStateResponse, Error, { diagnosisId: string; snoozed_until: string | null }>({
-    mutationFn: ({ diagnosisId, snoozed_until }) => setDiagnosisSnooze(diagnosisId, snoozed_until),
+    mutationFn: ({ diagnosisId, snoozed_until }) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return setDiagnosisSnooze(diagnosisId, snoozed_until);
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["diagnosis-state", vars.diagnosisId] });
       qc.invalidateQueries({ queryKey: ["fixes", "action-queue"] });
@@ -559,7 +581,10 @@ export function useSetDiagnosisSnooze() {
 export function useSetDiagnosisDismissed() {
   const qc = useQueryClient();
   return useMutation<import("./types").DiagnosisUiStateResponse, Error, { diagnosisId: string; dismissed: boolean }>({
-    mutationFn: ({ diagnosisId, dismissed }) => setDiagnosisDismissed(diagnosisId, dismissed),
+    mutationFn: ({ diagnosisId, dismissed }) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return setDiagnosisDismissed(diagnosisId, dismissed);
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["diagnosis-state", vars.diagnosisId] });
       qc.invalidateQueries({ queryKey: ["fixes", "action-queue"] });
@@ -571,15 +596,17 @@ export function useDiagnosisPrLinks(callId: string) {
   return useQuery<DiagnosisPrLinkResponse[]>({
     queryKey: ["diagnosis-pr-links", callId],
     queryFn: () => listDiagnosisPrLinks(callId),
-    enabled: !!callId,
+    enabled: legacyProductSurfaceQueryEnabled(!!callId),
   });
 }
 
 export function useSubmitDiagnosisFeedback() {
   const qc = useQueryClient();
   return useMutation<unknown, Error, { callId: string; wasHelpful: boolean; note?: string }>({
-    mutationFn: ({ callId, wasHelpful, note }) =>
-      submitDiagnosisFeedback(callId, { was_helpful: wasHelpful, developer_note: note || undefined }),
+    mutationFn: ({ callId, wasHelpful, note }) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return submitDiagnosisFeedback(callId, { was_helpful: wasHelpful, developer_note: note || undefined });
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["call-detail", vars.callId] });
       qc.invalidateQueries({ queryKey: ["diagnosis-fix-watch", vars.callId] });
@@ -590,7 +617,10 @@ export function useSubmitDiagnosisFeedback() {
 export function useResolveDiagnosis() {
   const qc = useQueryClient();
   return useMutation<DiagnosisResolveResponse, Error, string>({
-    mutationFn: resolveDiagnosis,
+    mutationFn: (callId) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return resolveDiagnosis(callId);
+    },
     onSuccess: (_, callId) => {
       qc.invalidateQueries({ queryKey: ["call-detail", callId] });
       qc.invalidateQueries({ queryKey: ["diagnosis-fix-watch", callId] });
@@ -600,19 +630,24 @@ export function useResolveDiagnosis() {
 
 export function useCreateShareLink() {
   return useMutation<DiagnosisShareCreateResponse, Error, string>({
-    mutationFn: createShareLink,
+    mutationFn: (diagnosisId) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return createShareLink(diagnosisId);
+    },
   });
 }
 
 export function useGenerateDiagnosisPr() {
   const qc = useQueryClient();
   return useMutation<DiagnosisGeneratePrResponse, Error, { callId: string; repoOwner?: string; repoName?: string; baseBranch?: string }>({
-    mutationFn: ({ callId, repoOwner, repoName, baseBranch }) =>
-      generateDiagnosisPr(callId, {
+    mutationFn: ({ callId, repoOwner, repoName, baseBranch }) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Diagnosis");
+      return generateDiagnosisPr(callId, {
         repository_owner: repoOwner,
         repository_name: repoName,
         base_branch: baseBranch,
-      }),
+      });
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["diagnosis-pr-links", vars.callId] });
     },
@@ -704,6 +739,7 @@ export function useCalibrationLatest(judgeModel?: string) {
   return useQuery<CalibrationRunView[], Error>({
     queryKey: ["calibration", "latest", judgeModel ?? "all"],
     queryFn: () => getCalibrationLatest(judgeModel),
+    enabled: legacyProductSurfaceQueryEnabled(),
     staleTime: 60_000,
   });
 }
@@ -712,7 +748,7 @@ export function useCalibrationHistory(judgeModel: string, days = 30) {
   return useQuery<CalibrationRunView[], Error>({
     queryKey: ["calibration", "history", judgeModel, days],
     queryFn: () => getCalibrationHistory(judgeModel, days),
-    enabled: !!judgeModel,
+    enabled: legacyProductSurfaceQueryEnabled(!!judgeModel),
     staleTime: 60_000,
   });
 }
@@ -721,7 +757,7 @@ export function useCalibrationMode(judgeModel: string) {
   return useQuery<CalibrationModeView, Error>({
     queryKey: ["calibration", "mode", judgeModel],
     queryFn: () => getCalibrationMode(judgeModel),
-    enabled: !!judgeModel,
+    enabled: legacyProductSurfaceQueryEnabled(!!judgeModel),
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
@@ -730,7 +766,10 @@ export function useCalibrationMode(judgeModel: string) {
 export function useTriggerCalibrationRunNow() {
   const qc = useQueryClient();
   return useMutation<CalibrationRunNowResponse, Error, string | undefined>({
-    mutationFn: (judgeModel) => triggerCalibrationRunNow(judgeModel),
+    mutationFn: (judgeModel) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Judge calibration");
+      return triggerCalibrationRunNow(judgeModel);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["calibration"] });
     },
@@ -741,6 +780,7 @@ export function useCalibrationLabels(traceId?: string) {
   return useQuery<LabelView[], Error>({
     queryKey: ["calibration", "labels", traceId ?? "all"],
     queryFn: ({ signal }) => listCalibrationLabels(traceId, signal),
+    enabled: legacyProductSurfaceQueryEnabled(),
     staleTime: 30_000,
   });
 }
@@ -748,7 +788,10 @@ export function useCalibrationLabels(traceId?: string) {
 export function useCreateCalibrationLabel() {
   const qc = useQueryClient();
   return useMutation<LabelView, Error, LabelCreate>({
-    mutationFn: (body) => createOrUpdateCalibrationLabel(body),
+    mutationFn: (body) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Judge calibration");
+      return createOrUpdateCalibrationLabel(body);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["calibration", "labels"] });
     },
@@ -758,7 +801,10 @@ export function useCreateCalibrationLabel() {
 export function useDeleteCalibrationLabel() {
   const qc = useQueryClient();
   return useMutation<{ message: string; label_id: string }, Error, string>({
-    mutationFn: (labelId) => deleteCalibrationLabel(labelId),
+    mutationFn: (labelId) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Judge calibration");
+      return deleteCalibrationLabel(labelId);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["calibration", "labels"] });
     },
@@ -864,6 +910,7 @@ export function useAblationJobs(
     queryFn: ({ signal }) => listAblationJobs(statusFilter, limit, signal),
     staleTime: 30_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -874,18 +921,21 @@ export function useAblationJob(
   return useQuery<AblationJobView>({
     queryKey: ["ablation", "job", jobId],
     queryFn: ({ signal }) => getAblationJob(jobId!, signal),
-    enabled: !!jobId,
     staleTime: 15_000,
     refetchInterval: (q) =>
       q.state.data?.status === "pending" || q.state.data?.status === "running" ? 3_000 : false,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled((options?.enabled ?? true) && !!jobId),
   });
 }
 
 export function useTriggerAblation() {
   const qc = useQueryClient();
   return useMutation<TriggerAblationResponse, Error, TriggerAblationPayload>({
-    mutationFn: (payload) => triggerAblation(payload),
+    mutationFn: (payload) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Ablation");
+      return triggerAblation(payload);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ablation"] });
     },
@@ -901,6 +951,7 @@ export function useReliabilityLeaderboard(
     queryFn: ({ signal }) => getReliabilityLeaderboard(limit, signal),
     staleTime: 60_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -912,6 +963,7 @@ export function useReliabilitySummary(
     queryFn: ({ signal }) => getReliabilitySummary(signal),
     staleTime: 60_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -923,16 +975,19 @@ export function useAgentReliabilityHistory(
   return useQuery<AgentScoreView[]>({
     queryKey: ["reliability", "agent", agentName, days],
     queryFn: ({ signal }) => getAgentReliabilityHistory(agentName!, days, signal),
-    enabled: !!agentName,
     staleTime: 60_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled((options?.enabled ?? true) && !!agentName),
   });
 }
 
 export function useTriggerReliabilityCompute() {
   const qc = useQueryClient();
   return useMutation<ComputeReliabilityResponse, Error, void>({
-    mutationFn: () => triggerReliabilityCompute(),
+    mutationFn: () => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Reliability scorecard");
+      return triggerReliabilityCompute();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reliability"] });
     },
@@ -948,6 +1003,7 @@ export function useRecommendations(
     queryFn: ({ signal }) => listRecommendations(params, signal),
     staleTime: 30_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -959,6 +1015,7 @@ export function useRecSummary(
     queryFn: ({ signal }) => getRecSummary(signal),
     staleTime: 30_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -969,8 +1026,10 @@ export function useUpdateRecStatus() {
     Error,
     { recId: string; status: string; actioned_by?: string }
   >({
-    mutationFn: ({ recId, status, actioned_by }) =>
-      updateRecStatus(recId, { status, actioned_by }),
+    mutationFn: ({ recId, status, actioned_by }) => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Recommendations");
+      return updateRecStatus(recId, { status, actioned_by });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["recommendations"] });
     },
@@ -980,7 +1039,10 @@ export function useUpdateRecStatus() {
 export function useGenerateRecommendations() {
   const qc = useQueryClient();
   return useMutation<{ generated: number; message: string }, Error, void>({
-    mutationFn: () => generateRecommendations(),
+    mutationFn: () => {
+      if (!legacyProductSurfaceQueryEnabled()) throw legacyProductSurfaceDisabledError("Recommendations");
+      return generateRecommendations();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["recommendations"] });
     },
@@ -997,6 +1059,7 @@ export function useDriftStatus(
     queryFn: ({ signal }) => getDriftStatus(signal),
     staleTime: 60_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -1008,6 +1071,7 @@ export function useDriftModels(
     queryFn: ({ signal }) => listDriftModels(signal),
     staleTime: 60_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled(options?.enabled),
   });
 }
 
@@ -1018,9 +1082,9 @@ export function useDriftHistory(
   return useQuery<ModelHistoryResponse[]>({
     queryKey: ["drift", "history", modelId],
     queryFn: ({ signal }) => getDriftHistory(modelId!, signal),
-    enabled: !!modelId,
     staleTime: 60_000,
     ...options,
+    enabled: legacyProductSurfaceQueryEnabled((options?.enabled ?? true) && !!modelId),
   });
 }
 

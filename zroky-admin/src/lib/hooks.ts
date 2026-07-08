@@ -90,10 +90,13 @@ export function useOwnerProductionReadiness() {
   });
 }
 
-export function useOwnerUsers(limit = 200, offset = 0) {
+export function useOwnerUsers(opts: { limit?: number; offset?: number; search?: string } = {}) {
+  const limit = opts.limit ?? 100;
+  const offset = opts.offset ?? 0;
+  const search = opts.search?.trim() ?? "";
   return useQuery({
-    queryKey: ["owner", "users", limit, offset],
-    queryFn: () => fetchOwnerUsers(limit, offset),
+    queryKey: ["owner", "users", limit, offset, search],
+    queryFn: () => fetchOwnerUsers({ limit, offset, search }),
   });
 }
 

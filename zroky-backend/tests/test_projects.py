@@ -431,6 +431,82 @@ def test_upsert_project_membership(client: TestClient) -> None:
     assert memberships[0]["role"] == "admin"
 
 
+def test_upsert_project_membership_rejects_removing_last_owner(client: TestClient) -> None:
+    project_response = client.post(
+        "/v1/projects",
+        json={"name": "Last Owner Project", "owner_ref": "owner-sub-last"},
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["project_id"]
+    auth_headers = {"X-Zroky-Admin-Token": "top-secret"}
+
+    demote_response = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=auth_headers,
+        json={
+            "subject": "owner-sub-last",
+            "email": "owner@example.com",
+            "role": "admin",
+            "is_active": True,
+        },
+    )
+
+    assert demote_response.status_code == 409
+    assert demote_response.json()["detail"] == "Project must keep at least one active owner"
+
+    deactivate_response = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=auth_headers,
+        json={
+            "subject": "owner-sub-last",
+            "email": "owner@example.com",
+            "role": "owner",
+            "is_active": False,
+        },
+    )
+
+    assert deactivate_response.status_code == 409
+    assert deactivate_response.json()["detail"] == "Project must keep at least one active owner"
+
+
+def test_upsert_project_membership_allows_owner_demotion_when_another_owner_exists(
+    client: TestClient,
+) -> None:
+    project_response = client.post(
+        "/v1/projects",
+        json={"name": "Multiple Owner Project", "owner_ref": "owner-sub-primary"},
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["project_id"]
+    auth_headers = {"X-Zroky-Admin-Token": "top-secret"}
+
+    second_owner = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=auth_headers,
+        json={
+            "subject": "owner-sub-secondary",
+            "email": "secondary@example.com",
+            "role": "owner",
+            "is_active": True,
+        },
+    )
+    assert second_owner.status_code == 200
+
+    demote_response = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=auth_headers,
+        json={
+            "subject": "owner-sub-primary",
+            "email": "primary@example.com",
+            "role": "admin",
+            "is_active": True,
+        },
+    )
+
+    assert demote_response.status_code == 200
+    assert demote_response.json()["role"] == "admin"
+
+
 def test_project_scoped_route_allows_owner_membership_without_provisioning_token(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

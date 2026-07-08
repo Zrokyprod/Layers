@@ -525,6 +525,7 @@ def list_action_intents(
     receipt_status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    max_limit: int = 100,
 ) -> list[ActionIntent]:
     query = select(ActionIntent).where(ActionIntent.project_id == project_id)
     if agent_id:
@@ -539,7 +540,7 @@ def list_action_intents(
         db.execute(
             query.order_by(ActionIntent.created_at.desc(), ActionIntent.id.desc())
             .offset(max(0, int(offset)))
-            .limit(max(1, min(100, int(limit))))
+            .limit(max(1, min(max(1, int(max_limit)), int(limit))))
         ).scalars()
     )
 

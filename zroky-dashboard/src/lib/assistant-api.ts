@@ -3,6 +3,11 @@
  * Follows the same request pattern as api.ts (cookie-based auth, /api/zroky proxy).
  */
 
+import {
+  legacyProductSurfaceDisabledError,
+  legacyProductSurfaceEnabled,
+} from "./legacy-product-surfaces";
+
 export interface ToolSource {
   tool: string;
   summary: string;
@@ -20,6 +25,10 @@ export async function sendAssistantMessage(
   sessionId: string,
   signal?: AbortSignal,
 ): Promise<AssistantChatResponse> {
+  if (!legacyProductSurfaceEnabled) {
+    throw legacyProductSurfaceDisabledError("Assistant");
+  }
+
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
@@ -48,6 +57,10 @@ export async function sendAssistantMessage(
 }
 
 export async function clearAssistantSession(sessionId: string): Promise<void> {
+  if (!legacyProductSurfaceEnabled) {
+    throw legacyProductSurfaceDisabledError("Assistant");
+  }
+
   await fetch(`/api/zroky/v1/assistant/chat/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
     cache: "no-store",

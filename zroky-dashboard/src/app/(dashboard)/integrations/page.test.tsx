@@ -640,9 +640,15 @@ function genericCheck(overrides: Partial<OutcomeReconciliationView> = {}): Outco
   };
 }
 
+function renderWithConnector(connector: string) {
+  window.history.pushState({}, "", `/integrations?connector=${connector}`);
+  render(<IntegrationsPage />);
+}
+
 describe("IntegrationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, "", "/integrations");
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
@@ -1135,11 +1141,11 @@ describe("IntegrationsPage", () => {
     });
   });
 
-  it("frames connectors as category-first verifier inventory with coverage and search", async () => {
+  it("frames connectors as a simple verifier inventory with search", async () => {
     render(<IntegrationsPage />);
 
     expect(
-      await screen.findByRole("heading", { name: "Some agent actions are unverifiable" }),
+      await screen.findByRole("heading", { name: "Connectors" }),
     ).toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Verification coverage audit" })).toBeInTheDocument();
@@ -1148,47 +1154,47 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("custom")).toBeInTheDocument();
     expect(screen.getByText("No verifier")).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Browse by system category" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Available systems" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
-    expect(screen.getByText("Read-only by design")).toBeInTheDocument();
-    expect(screen.getByText("Zroky reads Stripe refund", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Read-only access not connected")).toBeInTheDocument();
+    expect(screen.getByText("Verify refunds and payments from Stripe.")).toBeInTheDocument();
+    expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Commerce" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Finance & ERP" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
-    expect(screen.getAllByText("REST / HTTP JSON verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("HubSpot CRM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Salesforce CRM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Zoho CRM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Zendesk ticket verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Jira / JSM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Stripe payment verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Razorpay refund verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Shopify Admin verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Refund ledger template").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Customer / CRM record template").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("SQL / Postgres read verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Custom REST API").length).toBeGreaterThan(0);
+    expect(screen.getByText("HubSpot CRM")).toBeInTheDocument();
+    expect(screen.getByText("Salesforce CRM")).toBeInTheDocument();
+    expect(screen.getByText("Zoho CRM")).toBeInTheDocument();
+    expect(screen.getByText("Zendesk ticket")).toBeInTheDocument();
+    expect(screen.getByText("Jira / JSM")).toBeInTheDocument();
+    expect(screen.getAllByText("Stripe").length).toBeGreaterThan(0);
+    expect(screen.getByText("Refunds + payments")).toBeInTheDocument();
+    expect(screen.getByText("Razorpay")).toBeInTheDocument();
+    expect(screen.getByText("Shopify Admin")).toBeInTheDocument();
+    expect(screen.getByText("Refund ledger")).toBeInTheDocument();
+    expect(screen.getByText("Customer / CRM record")).toBeInTheDocument();
+    expect(screen.getAllByText("SQL database").length).toBeGreaterThan(0);
     expect(screen.getByText("Slack")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "stripe" } });
-    expect(screen.getByRole("button", { name: /Stripe refund verifier/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Stripe payment verifier/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /HubSpot CRM verifier/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stripe.*Refunds \+ payments/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stripe payment/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /HubSpot CRM/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
     expect(screen.getByText("No connectors match this search")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "" } });
 
-    expect(screen.getByRole("heading", { name: "Native verifier coverage" })).toBeInTheDocument();
-    expect(screen.getByText("Native panels handle the saved source-of-record setup", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Native verifier coverage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Connector readiness diagnostics" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Integration status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Detailed connector controls" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Detailed controls" })).not.toBeInTheDocument();
@@ -1208,8 +1214,8 @@ describe("IntegrationsPage", () => {
   it("saves and tests the Generic REST verifier setup path", async () => {
     render(<IntegrationsPage />);
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /REST \/ HTTP JSON verifier/i }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: /Custom REST API/i }));
     fireEvent.click(screen.getByRole("button", { name: "Set up custom REST" }));
     fireEvent.change(screen.getByLabelText("Base URL"), {
       target: { value: "https://internal.example.com/api" },
@@ -1281,11 +1287,10 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Stripe payment verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("stripe_payment");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Stripe payment verifier/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe Payment" }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
     fireEvent.change(screen.getByLabelText("Stripe secret key"), {
       target: { value: "sk_live_payment" },
     });
@@ -1308,7 +1313,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save Stripe payment verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveStripePaymentConnectorConfig).toHaveBeenCalledWith({
@@ -1316,7 +1321,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run Stripe payment preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testStripePaymentConnector).toHaveBeenCalledWith({
@@ -1336,10 +1341,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Razorpay refund verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("razorpay_refund");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Razorpay refund verifier/i }));
+    await screen.findByRole("heading", { name: "Connectors" });
     fireEvent.click(screen.getByRole("button", { name: "Connect Razorpay" }));
     fireEvent.change(screen.getByLabelText("Razorpay key id"), {
       target: { value: "rzp_test_key" },
@@ -1366,7 +1370,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save Razorpay verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveRazorpayRefundConnectorConfig).toHaveBeenCalledWith({
@@ -1375,7 +1379,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run Razorpay preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testRazorpayRefundConnector).toHaveBeenCalledWith({
@@ -1395,11 +1399,10 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Shopify Admin verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("shopify_admin");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Shopify Admin verifier/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect Shopify" }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect Shopify Admin" }));
     fireEvent.change(screen.getByLabelText("Shop Admin base URL"), {
       target: { value: "https://example.myshopify.com" },
     });
@@ -1425,7 +1428,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save Shopify verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveShopifyConnectorConfig).toHaveBeenCalledWith({
@@ -1434,7 +1437,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run Shopify preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testShopifyConnector).toHaveBeenCalledWith({
@@ -1454,11 +1457,10 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native HubSpot verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("hubspot_crm");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /HubSpot CRM verifier/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect HubSpot" }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect HubSpot CRM" }));
     fireEvent.change(screen.getByLabelText("Private app token"), {
       target: { value: "hubspot-private-app-token" },
     });
@@ -1478,7 +1480,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save HubSpot verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveHubSpotCrmConnectorConfig).toHaveBeenCalledWith({
@@ -1490,7 +1492,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run HubSpot preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testHubSpotCrmConnector).toHaveBeenCalledWith({
@@ -1507,11 +1509,10 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Zoho CRM verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("zoho_crm");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect Zoho" }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect Zoho CRM" }));
     fireEvent.change(screen.getByLabelText("Manual bearer token"), {
       target: { value: "zoho-oauth-access-token" },
     });
@@ -1534,7 +1535,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save Zoho CRM verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveZohoCrmConnectorConfig).toHaveBeenCalledWith({
@@ -1546,7 +1547,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run Zoho preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testZohoCrmConnector).toHaveBeenCalledWith({
@@ -1564,11 +1565,10 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Jira issue verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("jira_issue");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Jira \/ JSM verifier/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect Jira" }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect Jira / JSM" }));
     fireEvent.change(screen.getByLabelText("Atlassian email"), {
       target: { value: "agent@example.com" },
     });
@@ -1591,7 +1591,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save Jira verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveJiraIssueConnectorConfig).toHaveBeenCalledWith({
@@ -1601,7 +1601,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run Jira preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testJiraIssueConnector).toHaveBeenCalledWith({
@@ -1618,11 +1618,10 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native NetSuite finance verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("netsuite_finance");
 
-    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /NetSuite finance verifier/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect NetSuite" }));
+    await screen.findByRole("heading", { name: "Connectors" });
+    fireEvent.click(screen.getByRole("button", { name: "Connect NetSuite finance" }));
     fireEvent.change(screen.getByLabelText("Bearer token"), {
       target: { value: "netsuite-token" },
     });
@@ -1650,7 +1649,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Save NetSuite verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
 
     await waitFor(() => {
       expect(api.saveNetSuiteFinanceConnectorConfig).toHaveBeenCalledWith({
@@ -1659,7 +1658,7 @@ describe("IntegrationsPage", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Run NetSuite preflight/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
 
     await waitFor(() => {
       expect(api.testNetSuiteFinanceConnector).toHaveBeenCalledWith({
@@ -1684,12 +1683,11 @@ describe("IntegrationsPage", () => {
   it("starts the Zoho CRM OAuth connection flow", async () => {
     const assignSpy = vi.spyOn(externalNavigator, "assign").mockImplementation(() => undefined);
     try {
-      render(<IntegrationsPage />);
+      renderWithConnector("zoho_crm");
 
-      await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-      fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
-      fireEvent.click(screen.getByRole("button", { name: "Connect Zoho" }));
-      fireEvent.click(await screen.findByRole("button", { name: /Connect Zoho CRM/i }));
+      await screen.findByRole("heading", { name: "Connectors" });
+      fireEvent.click(screen.getByRole("button", { name: "Connect Zoho CRM" }));
+      fireEvent.click(await screen.findByRole("button", { name: /Connect with OAuth/i }));
 
       await waitFor(() => expect(api.startZohoCrmOAuth).toHaveBeenCalledTimes(1));
       expect(assignSpy).toHaveBeenCalledWith(
