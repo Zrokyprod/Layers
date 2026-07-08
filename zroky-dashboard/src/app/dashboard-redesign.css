@@ -22299,7 +22299,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-panel,
 .app-shell[data-dashboard-system="control-v1"] .connectors-inventory-panel,
 .app-shell[data-dashboard-system="control-v1"] .connector-inspector-panel,
-.app-shell[data-dashboard-system="control-v1"] .connectors-support-panel,
 .app-shell[data-dashboard-system="control-v1"] .connectors-detail-section,
 .app-shell[data-dashboard-system="control-v1"] .connectors-generic-panel {
   display: grid !important;
@@ -22356,16 +22355,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   padding: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-panel {
-  padding: 0 !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details {
   min-width: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary {
   display: flex !important;
   align-items: center !important;
@@ -22376,32 +22369,27 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   list-style: none !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary::-webkit-details-marker,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary::-webkit-details-marker {
   display: none !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary > span,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary > span {
   display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary strong,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary strong {
   color: var(--mc-text) !important;
   font-size: 0.94rem !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary small,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary small {
   color: var(--mc-text-secondary) !important;
   font-size: 0.78rem !important;
   white-space: nowrap !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-body,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-body {
   display: grid !important;
   gap: 16px !important;
@@ -22468,19 +22456,22 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-list,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-list {
-  gap: 18px !important;
+  gap: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-group,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-group {
   display: grid !important;
-  gap: 10px !important;
+  gap: 8px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-head,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-head {
-  display: grid !important;
-  gap: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 0 2px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-head strong,
@@ -22497,22 +22488,21 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-list {
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
-  gap: 12px !important;
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
   display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) !important;
-  align-items: flex-start !important;
-  gap: 13px !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 11px !important;
   width: 100% !important;
-  min-height: 170px !important;
+  min-height: 64px !important;
   border: 1px solid var(--mc-border) !important;
-  border-left: 0 !important;
   border-radius: var(--mc-radius-control) !important;
   background: #fff !important;
-  padding: 16px !important;
+  padding: 10px 12px !important;
   color: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
@@ -22522,9 +22512,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 10px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
   flex-shrink: 0 !important;
   color: var(--connector-brand, #635BFF) !important;
   background: color-mix(in srgb, var(--connector-brand, #635BFF) 10%, #fff) !important;
@@ -22556,15 +22546,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="success"] {
-  border-top: 3px solid var(--mc-success) !important;
+  border-left: 3px solid var(--mc-success) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="warning"] {
-  border-top: 3px solid var(--mc-warning) !important;
+  border-left: 3px solid var(--mc-warning) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="danger"] {
-  border-top: 3px solid var(--mc-danger) !important;
+  border-left: 3px solid var(--mc-danger) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main {
@@ -22574,7 +22564,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main strong {
   color: var(--mc-text) !important;
-  font-size: 0.92rem !important;
+  font-size: 0.88rem !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main small,
@@ -22587,14 +22577,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
   display: flex !important;
-  grid-column: 1 / -1 !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  gap: 10px !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
   min-width: 0 !important;
-  margin-top: auto !important;
-  border-top: 1px solid var(--mc-border) !important;
-  padding-top: 12px !important;
+  text-align: right !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inspector-head {
@@ -22647,6 +22634,53 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text-secondary) !important;
   font-size: 0.82rem !important;
   line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-left: 3px solid var(--mc-border-strong) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-soft) !important;
+  padding: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status[data-tone="success"] {
+  border-left-color: var(--mc-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status[data-tone="warning"] {
+  border-left-color: var(--mc-warning) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status[data-tone="danger"] {
+  border-left-color: var(--mc-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status > div:first-child,
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-meta {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status strong {
+  color: var(--mc-text) !important;
+  font-size: 0.88rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status span {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.76rem !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-meta {
+  justify-items: end !important;
+  white-space: nowrap !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-readonly-banner {
@@ -23163,11 +23197,25 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
-    align-items: flex-start !important;
+    grid-column: 1 / -1 !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    border-top: 1px solid var(--mc-border) !important;
+    padding-top: 8px !important;
+    text-align: left !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connector-simple-status {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connector-simple-meta {
+    justify-items: start !important;
+    white-space: normal !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-preflight-main,

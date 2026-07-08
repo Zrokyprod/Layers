@@ -4,23 +4,16 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  CheckCircle2,
   ClipboardCheck,
   Copy,
   Database,
-  FileJson,
-  GitBranch,
-  Plug,
-  RadioTower,
   RefreshCw,
   Save,
   Search,
-  ShieldCheck,
 } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import {
-  DashboardMetricStrip,
   DashboardVerdictHero,
   DashboardWorkspace,
 } from "@/components/dashboard-scaffold";
@@ -96,7 +89,7 @@ import {
 } from "@/lib/connector-inventory";
 import { ConnectorLogo } from "@/lib/connector-logo";
 import { externalNavigator } from "@/lib/external-navigation";
-import { compactJson, formatCount, formatPercent, humanize } from "@/lib/format";
+import { compactJson, formatCount, humanize } from "@/lib/format";
 import type {
   GithubConnectionStatusResponse,
   SlackInstallStatusResponse,
@@ -751,9 +744,9 @@ function ConnectorInventoryList({
     <section className="panel connectors-inventory-panel" aria-label="Connector inventory">
       <div className="connectors-section-head">
         <div>
-          <span className="dashboard-eyebrow">Connector inventory</span>
-          <h2>Browse by system category</h2>
-          <p>Payments, CRM, support, finance, database, and workflow systems grouped around how teams verify actions.</p>
+          <span className="dashboard-eyebrow">Connectors</span>
+          <h2>Available systems</h2>
+          <p>Select a source system, connect read-only access, and use it for proof.</p>
         </div>
       </div>
 
@@ -774,7 +767,7 @@ function ConnectorInventoryList({
           <section className="connector-category-group" key={group.category} aria-label={group.label}>
             <div className="connector-category-head">
               <strong>{group.label}</strong>
-              <span>{group.description}</span>
+              <span>{group.rows.length} connector{group.rows.length === 1 ? "" : "s"}</span>
             </div>
             <div className="connector-row-list">
               {group.rows.map((row) => (
@@ -789,8 +782,7 @@ function ConnectorInventoryList({
                   <ConnectorLogo id={row.id} />
                   <span className="connector-row-main">
                     <strong>{row.title}</strong>
-                    <small>{row.category}</small>
-                    <span>{row.description}</span>
+                    <small>{row.kind === "support" ? "Workflow" : connectorSystemLabel(row)}</small>
                   </span>
                   <span className="connector-row-status">
                     <StatusPill value={statusValue(row)} label={row.statusLabel} tone={row.tone} />
@@ -2798,44 +2790,25 @@ function ConnectorInspector({
         <div className="connector-inspector-title">
           <ConnectorLogo id={row.id} size={26} />
           <div>
-            <span className="dashboard-eyebrow">{row.kind === "proof" ? "Selected verifier" : "Selected workflow"}</span>
+            <span className="dashboard-eyebrow">{row.kind === "proof" ? "Verifier" : "Workflow"}</span>
             <h2>{row.title}</h2>
-            <p>{row.description}</p>
+            <p>{connectorPurposeCopy(row)}</p>
           </div>
         </div>
         <StatusPill value={row.state} label={connectorStateLabel(row.state)} tone={row.tone} />
       </div>
 
-      {row.kind === "proof" ? (
-        <div className="connector-readonly-banner">
-          <ShieldCheck aria-hidden="true" />
-          <div>
-            <strong>Read-only by design</strong>
-            <span>Zroky only reads this system to verify agent actions. This connector cannot create, update, delete, refund, or close anything.</span>
-          </div>
+      <div className="connector-simple-status" data-tone={preflight.tone}>
+        <div>
+          <strong>{preflight.title}</strong>
+          <span>{preflight.detail}</span>
         </div>
-      ) : null}
-
-      <div className="connector-purpose-panel">
-        <span className="dashboard-eyebrow">What this connection proves</span>
-        <p>{connectorPurposeCopy(row)}</p>
-      </div>
-
-      <div className="connector-preflight-panel" data-tone={preflight.tone}>
-        <div className="connector-preflight-main">
-          <div>
-            <span className="dashboard-eyebrow">Connection status</span>
-            <h3>{preflight.title}</h3>
-            <p>{preflight.detail}</p>
-          </div>
-          <StatusPill value={row.lastVerdict ?? row.state} label={preflight.label} tone={preflight.tone} />
-        </div>
-        <div className="connector-preflight-meta">
+        <div className="connector-simple-meta">
           <span>
-            Last checked <strong>{connectorUpdatedLabel(row)}</strong>
+            Updated <strong>{connectorUpdatedLabel(row)}</strong>
           </span>
           <span>
-            Last verdict <strong>{row.lastVerdict ? humanize(row.lastVerdict) : "No result yet"}</strong>
+            Verdict <strong>{row.lastVerdict ? humanize(row.lastVerdict) : "None"}</strong>
           </span>
         </div>
       </div>
@@ -2854,8 +2827,8 @@ function ConnectorInspector({
 
       <details className="connector-advanced-details">
         <summary>
-          <span>Advanced details</span>
-          <small>Transport, coverage tags, endpoint, and latest check</small>
+          <span>Details</span>
+          <small>Transport, endpoint, and latest check</small>
         </summary>
 
         <div className="connector-fact-grid">
@@ -2895,8 +2868,8 @@ function ConnectorInspector({
           onToggle={(event) => setSetupOpen(event.currentTarget.open)}
         >
           <summary>
-            <span>{row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Advanced setup and proof test"}</span>
-            <small>Read-only key fallback, manual proof test, and low-level verifier settings</small>
+            <span>{row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Setup and proof test"}</span>
+            <small>Read-only access and preflight</small>
           </summary>
           {setupOpen ? (
             <div className="connector-setup-body">
@@ -3107,49 +3080,6 @@ export default function IntegrationsPage() {
     [connectorSearch, visibleInventory.categoryGroups],
   );
 
-  const metrics = [
-    {
-      id: "healthy",
-      label: "Healthy verifiers",
-      value: formatCount(visibleInventory.counts.healthyVerifiers),
-      helper: "Read-only systems with matched preflight.",
-      tone: visibleInventory.counts.healthyVerifiers > 0 ? "success" as const : "neutral" as const,
-      icon: <ShieldCheck />,
-    },
-    {
-      id: "failing",
-      label: "Failing",
-      value: formatCount(visibleInventory.counts.failingVerifiers),
-      helper: "Mismatched or blocked verification paths.",
-      tone: visibleInventory.counts.failingVerifiers > 0 ? "danger" as const : "neutral" as const,
-      icon: <AlertTriangle />,
-    },
-    {
-      id: "not-configured",
-      label: "Not configured",
-      value: formatCount(visibleInventory.counts.notConfigured),
-      helper: "Verifier transports without saved credentials.",
-      tone: visibleInventory.counts.notConfigured > 0 ? "warning" as const : "success" as const,
-      icon: <Plug />,
-    },
-    {
-      id: "coverage",
-      label: "Coverage",
-      value: formatPercent(visibleInventory.counts.coveragePercent),
-      helper: "Observed action types with a verifier path.",
-      tone: visibleInventory.counts.coveragePercent >= 100 ? "success" as const : "warning" as const,
-      icon: <ClipboardCheck />,
-    },
-    {
-      id: "unverifiable",
-      label: "Unverifiable actions",
-      value: formatCount(visibleInventory.counts.unverifiableActionTypes),
-      helper: "Would resolve not_verified until covered.",
-      tone: visibleInventory.counts.unverifiableActionTypes > 0 ? "danger" as const : "success" as const,
-      icon: <RadioTower />,
-    },
-  ];
-
   return (
     <div className="dashboard-page integrations-page connectors-page">
       <DashboardVerdictHero
@@ -3163,12 +3093,12 @@ export default function IntegrationsPage() {
             </DashboardButtonLink>
           </>
         }
-        copy={visibleInventory.verdict.copy}
+        copy="Connect the systems Zroky can read for proof. Keep setup focused: choose a connector, save read-only access, run preflight."
         eyebrow="Connectors"
         icon={<Database />}
-        pill={visibleInventory.verdict.pill}
-        tone={visibleInventory.verdict.tone}
-        title={visibleInventory.verdict.title}
+        pill="Read-only proof"
+        tone="neutral"
+        title="Connectors"
         updatedLabel={loading ? "Refreshing" : "Updated live"}
       />
 
@@ -3211,57 +3141,6 @@ export default function IntegrationsPage() {
           />
         }
       />
-
-      <section className="panel connectors-support-panel" aria-label="Connector implementation truth">
-        <div className="connectors-section-head">
-          <div>
-            <span className="dashboard-eyebrow">Launch truth</span>
-            <h2>Native verifier coverage</h2>
-            <p>
-              Native panels handle the saved source-of-record setup and preflight for each verifier type. Templates
-              remain quick-start presets for REST or SQL paths when a native app connector is not available yet.
-            </p>
-          </div>
-        </div>
-        <div className="connector-launch-grid">
-          <article>
-            <CheckCircle2 aria-hidden="true" />
-            <strong>{formatCount(inventory.registry.available)} available now</strong>
-            <span>Usable in the current product.</span>
-          </article>
-          <article>
-            <FileJson aria-hidden="true" />
-            <strong>{formatCount(inventory.registry.template)} templates</strong>
-            <span>Guided setup on generic transports.</span>
-          </article>
-          <article>
-            <GitBranch aria-hidden="true" />
-            <strong>{formatCount(inventory.registry.planned)} planned</strong>
-            <span>Visible roadmap, not sold as live coverage.</span>
-          </article>
-        </div>
-      </section>
-
-      <section className="panel connectors-readiness-panel" aria-label="Connector readiness diagnostics">
-        <details className="connectors-readiness-details">
-          <summary>
-            <span>
-              <span className="dashboard-eyebrow">Diagnostics</span>
-              <strong>Connector readiness metrics</strong>
-            </span>
-            <small>
-              {formatCount(visibleInventory.counts.notConfigured)} not configured · {formatCount(visibleInventory.counts.unverifiableActionTypes)} uncovered actions
-            </small>
-          </summary>
-          <div className="connectors-readiness-body">
-            <DashboardMetricStrip
-              ariaLabel="Connector readiness metrics"
-              columns={5}
-              metrics={metrics}
-            />
-          </div>
-        </details>
-      </section>
 
       <CoverageMap rows={inventory.coverageRows} />
 
