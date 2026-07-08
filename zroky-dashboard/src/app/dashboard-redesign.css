@@ -7251,10 +7251,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip {
   display: grid !important;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr) !important;
-  gap: 16px !important;
-  align-items: start !important;
-  padding: 18px !important;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.35fr) !important;
+  gap: 14px !important;
+  align-items: center !important;
+  padding: 14px !important;
   border-left: 3px solid var(--mc-success) !important;
 }
 
@@ -7264,7 +7264,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-copy {
   display: grid !important;
-  gap: 8px !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  gap: 10px !important;
+  align-items: start !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-copy h2 {
@@ -7282,8 +7284,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-list {
-  display: grid !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
   gap: 8px !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-detail {
@@ -7315,7 +7320,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 5px !important;
   min-width: 0 !important;
   width: 100% !important;
-  padding: 10px !important;
+  padding: 8px 10px !important;
   border: 1px solid var(--mc-border) !important;
   border-radius: var(--mc-radius-control) !important;
   background: var(--mc-soft) !important;
@@ -7324,7 +7329,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row {
-  cursor: pointer !important;
+  flex: 1 1 160px !important;
+  max-width: 220px !important;
+  width: auto !important;
+  cursor: default !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row:hover,
