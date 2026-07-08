@@ -41,6 +41,7 @@ from app.services.protected_action_billing import (
 
 SCHEMA_VERSION = "zroky.action_receipt.v1"
 SIGNATURE_ALGORITHM = "Ed25519"
+RECEIPT_STATUS_GENERATED = "generated"
 LEGACY_HMAC_SIGNATURE_ALGORITHM = "HMAC-SHA256"
 DEV_SIGNING_SECRET = "dev-action-receipt-signing-secret-minimum-32-bytes"
 DEV_ED25519_PRIVATE_KEY_BYTES = hashlib.sha256(b"zroky:dev-action-receipt-ed25519:v1").digest()
@@ -427,6 +428,7 @@ def generate_action_receipt(
     except ActionReceiptNotFound:
         existing = None
     if existing is not None:
+        _mark_intent_receipt_generated(db, project_id=project_id, action_id=action_id)
         return GeneratedActionReceipt(existing, created=False)
 
     generated_at = _now()
@@ -462,7 +464,21 @@ def generate_action_receipt(
         },
         actor=actor,
     )
+    _mark_intent_receipt_generated(db, project_id=project_id, action_id=action_id)
     return GeneratedActionReceipt(row, created=True)
+
+
+def _mark_intent_receipt_generated(db: Session, *, project_id: str, action_id: str) -> None:
+    intent = db.execute(
+        select(ActionIntent).where(
+            ActionIntent.project_id == project_id,
+            ActionIntent.id == action_id,
+        )
+    ).scalar_one_or_none()
+    if intent is None or intent.receipt_status == RECEIPT_STATUS_GENERATED:
+        return
+    intent.receipt_status = RECEIPT_STATUS_GENERATED
+    db.add(intent)
 
 
 def action_receipt_payload(row: ActionReceipt) -> dict[str, Any]:

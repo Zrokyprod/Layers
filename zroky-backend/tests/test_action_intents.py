@@ -2647,6 +2647,14 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     assert fetched.status_code == 200
     assert fetched.json()["receipt_digest"] == receipt["receipt_digest"]
     assert fetched.json()["signature_valid"] is True
+    intent_after_receipt = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"receipt_status": "generated"},
+    )
+    assert intent_after_receipt.status_code == 200
+    assert intent_after_receipt.json()["items"][0]["action_id"] == intent["action_id"]
+    assert intent_after_receipt.json()["items"][0]["receipt_status"] == "generated"
 
     timeline_after_receipt = client.get(
         f"/v1/action-intents/{intent['action_id']}/timeline",
@@ -2658,6 +2666,8 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     with client._session_factory() as session:  # type: ignore[attr-defined]
         receipt_row = session.get(ActionReceipt, receipt["receipt_id"])
         assert receipt_row.receipt_digest == receipt["receipt_digest"]
+        action_row = session.get(ActionIntent, intent["action_id"])
+        assert action_row.receipt_status == "generated"
         timeline_rows = (
             session.query(ActionTimelineEvent)
             .filter(ActionTimelineEvent.project_id == project_id)
