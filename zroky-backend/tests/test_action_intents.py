@@ -184,6 +184,28 @@ def test_planned_verifier_labels_alias_to_generic_rest_connector() -> None:
         assert action_post_execution_service._connector_alias(label) == "generic_rest_api"
 
 
+def test_action_contract_rejects_invalid_operation_kind_before_db(client: TestClient) -> None:
+    project_id = "proj_invalid_operation_kind"
+    _seed_project(client, project_id)
+
+    response = client.post(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+        json={
+            "contract_key": "bad.operation.kind",
+            "version": "1.0",
+            "action_type": "bad.operation.kind",
+            "operation_kind": "WIRE_MONEY",
+            "domain_family": "payments",
+            "risk_class": "R2",
+            "schema": {"type": "object"},
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "operation_kind" in response.text
+
+
 @pytest.fixture()
 def client(tmp_path: Path):
     get_settings.cache_clear()
