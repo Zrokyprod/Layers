@@ -88,7 +88,6 @@ import {
   buildConnectorInventory,
   connectorStateLabel,
   connectorUpdatedLabel,
-  LAUNCH_VISIBLE_CONNECTOR_IDS,
   type ConnectorCategoryGroup,
   type ConnectorCoverageRow,
   type ConnectorInventory,
@@ -3095,10 +3094,7 @@ export default function IntegrationsPage() {
     () => buildConnectorInventory({ ...overview, partialFailure }),
     [overview, partialFailure],
   );
-  const visibleInventory = useMemo(
-    () => buildConnectorInventory({ ...overview, partialFailure, visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS }),
-    [overview, partialFailure],
-  );
+  const visibleInventory = inventory;
 
   useEffect(() => {
     if (selectedId && inventory.rows.some((row) => row.id === selectedId)) return;
