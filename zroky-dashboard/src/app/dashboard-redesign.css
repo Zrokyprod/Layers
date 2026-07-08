@@ -22264,6 +22264,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-workspace {
+  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .dashboard-verdict-hero,
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .dashboard-metric-card,
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .panel {
@@ -22488,21 +22492,21 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-list {
-  grid-template-columns: 1fr !important;
-  gap: 8px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
   display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) auto !important;
-  align-items: center !important;
-  gap: 11px !important;
+  grid-template-columns: 30px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 8px 10px !important;
   width: 100% !important;
-  min-height: 64px !important;
+  min-height: 86px !important;
   border: 1px solid var(--mc-border) !important;
   border-radius: var(--mc-radius-control) !important;
   background: #fff !important;
-  padding: 10px 12px !important;
+  padding: 10px !important;
   color: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
@@ -22512,8 +22516,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 34px !important;
-  height: 34px !important;
+  width: 30px !important;
+  height: 30px !important;
   border-radius: 8px !important;
   flex-shrink: 0 !important;
   color: var(--connector-brand, #635BFF) !important;
@@ -22558,30 +22562,37 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main {
+  display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main strong {
   color: var(--mc-text) !important;
-  font-size: 0.88rem !important;
+  overflow: hidden !important;
+  font-size: 0.82rem !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main small,
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main span,
 .app-shell[data-dashboard-system="control-v1"] .connector-row-status small {
   color: var(--mc-text-secondary) !important;
-  font-size: 0.76rem !important;
+  font-size: 0.72rem !important;
   line-height: 1.4 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
   display: flex !important;
+  grid-column: 2 !important;
   align-items: center !important;
-  justify-content: flex-end !important;
+  justify-content: flex-start !important;
   gap: 8px !important;
   min-width: 0 !important;
-  text-align: right !important;
+  border-top: 0 !important;
+  padding-top: 0 !important;
+  text-align: left !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inspector-head {
@@ -22884,10 +22895,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details {
-  border: 1px dashed var(--mc-border-strong) !important;
+  overflow: hidden !important;
+  border: 1px solid var(--mc-border) !important;
   border-radius: var(--mc-radius-control) !important;
-  background: var(--mc-soft) !important;
+  background: #fff !important;
   padding: 0 !important;
+  box-shadow: var(--mc-shadow-rest) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary {
@@ -22895,9 +22908,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   align-items: center !important;
   justify-content: space-between !important;
   gap: 12px !important;
-  padding: 14px !important;
+  padding: 12px 14px !important;
+  background: #fff !important;
   cursor: pointer !important;
   list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details[open] > summary {
+  border-bottom: 1px solid var(--mc-border) !important;
+  background: var(--mc-soft) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary::-webkit-details-marker {
@@ -22912,21 +22931,106 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary small {
   max-width: 420px !important;
-  color: var(--mc-text-secondary) !important;
-  font-size: 0.76rem !important;
-  line-height: 1.4 !important;
+  border: 1px solid color-mix(in srgb, var(--mc-success) 26%, var(--mc-border)) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--mc-success) 8%, #fff) !important;
+  color: var(--mc-success) !important;
+  padding: 4px 8px !important;
+  font-size: 0.7rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
   text-align: right !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-body {
   display: grid !important;
-  gap: 14px !important;
-  border-top: 1px solid var(--mc-border) !important;
+  gap: 12px !important;
+  border-top: 0 !important;
+  background: #fff !important;
   padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-section-head,
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-section-head p,
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form-head span,
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connector-fact-grid {
+  display: none !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-body > .connectors-generic-panel {
   margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-layout {
+  align-items: start !important;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-grid {
+  grid-template-columns: 1fr !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-wide {
+  grid-column: auto !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form {
+  align-content: start !important;
+  gap: 10px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-left: 3px solid var(--mc-accent) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: #fff !important;
+  padding: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form:first-child {
+  border-left-color: var(--mc-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form:first-child label {
+  margin-top: 6px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form-head {
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid var(--mc-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form-head strong {
+  color: var(--mc-text) !important;
+  font-size: 0.86rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form label span {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form :where(input, textarea) {
+  border-color: var(--mc-border) !important;
+  border-radius: 8px !important;
+  font-size: 0.82rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form input {
+  min-height: 38px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form textarea {
+  max-height: 118px !important;
+  min-height: 88px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .dashboard-button {
+  width: 100% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-details-json {
@@ -23191,21 +23295,25 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1180px) {
+  .app-shell[data-dashboard-system="control-v1"] .connectors-workspace {
+    grid-template-columns: 1fr !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .connector-fact-grid,
   .app-shell[data-dashboard-system="control-v1"] .connector-launch-grid {
     grid-template-columns: 1fr !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
-    grid-template-columns: auto minmax(0, 1fr) !important;
+    grid-template-columns: 30px minmax(0, 1fr) !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
-    grid-column: 1 / -1 !important;
+    grid-column: 2 !important;
     align-items: center !important;
-    justify-content: space-between !important;
-    border-top: 1px solid var(--mc-border) !important;
-    padding-top: 8px !important;
+    justify-content: flex-start !important;
+    border-top: 0 !important;
+    padding-top: 0 !important;
     text-align: left !important;
   }
 
@@ -23241,5 +23349,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .connectors-rest-actions .dashboard-button {
     width: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"] .connector-row-list {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-layout {
+    grid-template-columns: 1fr !important;
   }
 }

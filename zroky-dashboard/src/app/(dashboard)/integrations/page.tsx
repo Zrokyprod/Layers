@@ -592,17 +592,113 @@ function filterCategoryGroups(
 function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
   if (row.kind === "support") return row.ctaLabel;
   if (row.id === "generic_rest") return "Set up custom REST";
-  if (row.id === "postgres_read") return "Set up SQL verifier";
+  if (row.id === "postgres_read") return "Set up database";
   if (row.id === "ledger_template" || row.id === "customer_template") return "Set up template";
-  return row.ctaLabel.replace(/^Configure /, "Connect ");
+  return `Connect ${connectorSystemLabel(row)}`;
 }
 
 function connectorSystemLabel(row: ConnectorInventoryRow): string {
   if (row.id === "generic_rest") return "Custom REST API";
   if (row.id === "postgres_read") return "SQL database";
+  if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Stripe";
+  if (row.id === "razorpay_refund") return "Razorpay";
   return row.title
     .replace(/\s+verifier$/i, "")
     .replace(/\s+template$/i, "");
+}
+
+function connectorCardMeta(row: ConnectorInventoryRow): string {
+  if (row.kind === "support") return "Workflow";
+  if (row.transport === "sql_read") return "SQL read";
+  if (row.id === "generic_rest") return "Custom REST";
+  if (row.id === "stripe_refund" || row.id === "razorpay_refund") return "Refunds";
+  if (row.id === "stripe_payment") return "Payments";
+  if (row.id === "ledger_template" || row.id === "customer_template") return "Template";
+  return "Read-only verifier";
+}
+
+function connectorInspectorEyebrow(row: ConnectorInventoryRow): string {
+  if (row.kind === "support") return "Workflow";
+  if (row.id === "generic_rest") return "Custom connector";
+  if (row.id === "postgres_read") return "Database connector";
+  return "Native connector";
+}
+
+function connectorInspectorCopy(row: ConnectorInventoryRow): string {
+  const system = connectorSystemLabel(row);
+  if (row.kind === "support") return "Approvals and alerts for protected actions.";
+  if (row.id === "generic_rest") return "Verify any read-only API.";
+  if (row.id === "postgres_read") return "Verify records from a read-only database.";
+  if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Verify refunds and payments from Stripe.";
+  if (row.id === "razorpay_refund") return "Verify refunds from Razorpay.";
+  if (["hubspot_crm", "salesforce_crm", "zoho_crm"].includes(row.id)) return `Verify CRM changes from ${system}.`;
+  if (["zendesk_ticket", "freshdesk_ticket", "intercom", "jira_issue"].includes(row.id)) {
+    return `Verify support actions from ${system}.`;
+  }
+  if (["netsuite_finance", "quickbooks_ledger", "generic_finance"].includes(row.id)) {
+    return `Verify finance records from ${system}.`;
+  }
+  if (row.id === "shopify_admin") return "Verify commerce actions from Shopify.";
+  return `Verify agent actions from ${system}.`;
+}
+
+type ConnectorDisplayCard = {
+  ids: ConnectorInventoryId[];
+  key: string;
+  logoId: ConnectorInventoryId;
+  meta: string;
+  row: ConnectorInventoryRow;
+  title: string;
+};
+
+function connectorDisplayCards(
+  rows: ConnectorInventoryRow[],
+  selectedId: ConnectorInventoryId | null,
+  searchQuery: string,
+): ConnectorDisplayCard[] {
+  const cards: ConnectorDisplayCard[] = [];
+  const handled = new Set<ConnectorInventoryId>();
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  for (const row of rows) {
+    if (handled.has(row.id)) continue;
+
+    if (row.id === "stripe_refund" || row.id === "stripe_payment") {
+      const stripeRows = rows.filter((candidate) => candidate.id === "stripe_refund" || candidate.id === "stripe_payment");
+      for (const stripeRow of stripeRows) handled.add(stripeRow.id);
+
+      const selectedStripeRow = stripeRows.find((stripeRow) => stripeRow.id === selectedId);
+      const preferredStripeRow =
+        selectedStripeRow
+        ?? (normalizedQuery.includes("payment") ? stripeRows.find((stripeRow) => stripeRow.id === "stripe_payment") : null)
+        ?? stripeRows.find((stripeRow) => stripeRow.id === "stripe_refund")
+        ?? stripeRows[0];
+      const hasRefunds = stripeRows.some((stripeRow) => stripeRow.id === "stripe_refund");
+      const hasPayments = stripeRows.some((stripeRow) => stripeRow.id === "stripe_payment");
+
+      cards.push({
+        ids: stripeRows.map((stripeRow) => stripeRow.id),
+        key: "stripe",
+        logoId: "stripe_refund",
+        meta: hasRefunds && hasPayments ? "Refunds + payments" : hasPayments ? "Payments" : "Refunds",
+        row: preferredStripeRow,
+        title: "Stripe",
+      });
+      continue;
+    }
+
+    handled.add(row.id);
+    cards.push({
+      ids: [row.id],
+      key: row.id,
+      logoId: row.id,
+      meta: connectorCardMeta(row),
+      row,
+      title: connectorSystemLabel(row),
+    });
+  }
+
+  return cards;
 }
 
 function connectorActionSummary(row: ConnectorInventoryRow): string {
@@ -612,51 +708,43 @@ function connectorActionSummary(row: ConnectorInventoryRow): string {
   return `${actions.join(", ")}${row.supportedActionTypes.length > actions.length ? ", and more" : ""}`;
 }
 
-function connectorPurposeCopy(row: ConnectorInventoryRow): string {
-  const system = connectorSystemLabel(row);
-  if (row.kind === "support") {
-    return `Zroky uses ${system} for approvals, alerts, and operating workflows around protected agent actions.`;
-  }
-  return `Zroky reads ${system} to confirm whether your agent's ${connectorActionSummary(row)} actually happened. It does not write records back to ${system}.`;
-}
-
 function connectorPreflightSummary(row: ConnectorInventoryRow) {
   if (row.state === "ready") {
     return {
       label: "Matched",
-      title: "Read-only access verified",
-      detail: "Zroky read the source system and matched the real record. Evidence from this connector is export-ready.",
+      title: "Ready",
+      detail: "Proof checks can use this connector.",
       tone: "success" as const,
     };
   }
   if (row.state === "mismatched") {
     return {
       label: "Mismatched",
-      title: "Last proof check mismatched",
-      detail: row.detail,
+      title: "Mismatch",
+      detail: "Last preflight did not match.",
       tone: "danger" as const,
     };
   }
   if (row.state === "failing") {
     return {
       label: "Blocked",
-      title: "Connection check blocked",
-      detail: row.detail,
+      title: "Needs fix",
+      detail: "Connection check failed.",
       tone: "danger" as const,
     };
   }
   if (row.state === "not_tested") {
     return {
       label: "Needs check",
-      title: "Read-only access connected",
-      detail: "Run an optional proof test in Advanced setup to confirm Zroky can read and compare a real record.",
+      title: "Connected",
+      detail: "Run preflight once.",
       tone: "warning" as const,
     };
   }
   return {
     label: "Not configured",
-    title: "Read-only access not connected",
-    detail: "Connect OAuth where available, or use a read-only key fallback. Zroky will verify real agent actions after connection.",
+    title: "Not connected",
+    detail: "Connect read-only access to start.",
     tone: "neutral" as const,
   };
 }
@@ -763,36 +851,38 @@ function ConnectorInventoryList({
       </label>
 
       <div className="connector-category-list">
-        {groups.map((group) => (
-          <section className="connector-category-group" key={group.category} aria-label={group.label}>
-            <div className="connector-category-head">
-              <strong>{group.label}</strong>
-              <span>{group.rows.length} connector{group.rows.length === 1 ? "" : "s"}</span>
-            </div>
-            <div className="connector-row-list">
-              {group.rows.map((row) => (
-                <button
-                  type="button"
-                  className="connector-inventory-row"
-                  data-selected={selectedId === row.id}
-                  data-tone={row.tone}
-                  key={row.id}
-                  onClick={() => onSelect(row.id)}
-                >
-                  <ConnectorLogo id={row.id} />
-                  <span className="connector-row-main">
-                    <strong>{row.title}</strong>
-                    <small>{row.kind === "support" ? "Workflow" : connectorSystemLabel(row)}</small>
-                  </span>
-                  <span className="connector-row-status">
-                    <StatusPill value={statusValue(row)} label={row.statusLabel} tone={row.tone} />
-                    <small>{connectorUpdatedLabel(row)}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
-        ))}
+        {groups.map((group) => {
+          const cards = connectorDisplayCards(group.rows, selectedId, searchQuery);
+          return (
+            <section className="connector-category-group" key={group.category} aria-label={group.label}>
+              <div className="connector-category-head">
+                <strong>{group.label}</strong>
+                <span>{cards.length} connector{cards.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="connector-row-list">
+                {cards.map((card) => (
+                  <button
+                    type="button"
+                    className="connector-inventory-row"
+                    data-selected={selectedId != null && card.ids.includes(selectedId)}
+                    data-tone={card.row.tone}
+                    key={card.key}
+                    onClick={() => onSelect(card.row.id)}
+                  >
+                    <ConnectorLogo id={card.logoId} />
+                    <span className="connector-row-main">
+                      <strong>{card.title}</strong>
+                      <small>{card.meta}</small>
+                    </span>
+                    <span className="connector-row-status">
+                      <StatusPill value={statusValue(card.row)} label={card.row.statusLabel} tone={card.row.tone} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
 
       {groups.length === 0 ? (
@@ -1062,13 +1152,10 @@ function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
   eyebrow,
   initialForm,
   latestCheck,
-  preflightTitle,
   recordLabel,
-  saveButtonLabel,
   onSaveConfig,
   saveError,
   saveMessage,
-  saveTitle,
   secretSavedPlaceholder,
   status,
   testConfig,
@@ -1084,13 +1171,10 @@ function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
   eyebrow: string;
   initialForm: BearerVerifierFormState;
   latestCheck: OutcomeReconciliationView | null;
-  preflightTitle: string;
   recordLabel: string;
-  saveButtonLabel: string;
   onSaveConfig: (bearerToken: string | null) => Promise<TStatus>;
   saveError: string;
   saveMessage: string;
-  saveTitle: string;
   secretSavedPlaceholder: string;
   status: TStatus | null;
   testConfig: (payload: {
@@ -1167,7 +1251,7 @@ function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>{saveTitle}</strong>
+            <strong>1. Access</strong>
             <span>Use a restricted secret key with read-only access. Saved keys never render in the browser.</span>
           </div>
           <label>
@@ -1181,13 +1265,13 @@ function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
             />
           </label>
           <DashboardButton disabled={saving || (!form.bearerToken && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
-            {saveButtonLabel}
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>{preflightTitle}</strong>
+            <strong>2. Preflight</strong>
             <span>{claimedFieldsCopy}</span>
           </div>
           <label>
@@ -1203,7 +1287,7 @@ function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
             <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
           </label>
           <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
-            {preflightTitle.replace(/^2\.\s*/, "")}
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -1243,13 +1327,10 @@ function StripeRefundSetupPanel({
         matchFieldsText: defaultStripeRefundForm.matchFieldsText,
       }}
       latestCheck={latestCheck}
-      preflightTitle="2. Run Stripe preflight"
       recordLabel="Refund ID"
-      saveButtonLabel="Save Stripe verifier"
       onSaveConfig={(bearerToken) => saveStripeRefundConnectorConfig({ bearer_token: bearerToken })}
       saveError="Failed to save Stripe verifier."
       saveMessage="Stripe verifier saved. Run preflight to make it evidence-ready."
-      saveTitle="1. Save Stripe read access"
       secretSavedPlaceholder="Secret key saved"
       status={status}
       testConfig={(payload) =>
@@ -1291,13 +1372,10 @@ function StripePaymentSetupPanel({
         matchFieldsText: defaultStripePaymentForm.matchFieldsText,
       }}
       latestCheck={latestCheck}
-      preflightTitle="2. Run Stripe payment preflight"
       recordLabel="PaymentIntent ID"
-      saveButtonLabel="Save Stripe payment verifier"
       onSaveConfig={(bearerToken) => saveStripePaymentConnectorConfig({ bearer_token: bearerToken })}
       saveError="Failed to save Stripe payment verifier."
       saveMessage="Stripe payment verifier saved. Run preflight to make it evidence-ready."
-      saveTitle="1. Save Stripe read access"
       secretSavedPlaceholder="Secret key saved"
       status={status}
       testConfig={(payload) =>
@@ -1399,7 +1477,7 @@ function RazorpayRefundSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save Razorpay read access</strong>
+            <strong>1. Access</strong>
             <span>Use Razorpay key id plus key secret. The key secret is encrypted and never renders in the browser.</span>
           </div>
           <label>
@@ -1423,13 +1501,13 @@ function RazorpayRefundSetupPanel({
             />
           </label>
           <DashboardButton disabled={saving || !form.keyId || (!form.keySecret && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
-            Save Razorpay verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run Razorpay preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing Razorpay refund and compare normalized amount, currency, payment id, and status.</span>
           </div>
           <label>
@@ -1445,7 +1523,7 @@ function RazorpayRefundSetupPanel({
             <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
           </label>
           <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
-            Run Razorpay preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -1555,7 +1633,7 @@ function HubSpotSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save HubSpot read access</strong>
+            <strong>1. Access</strong>
             <span>Use a read-scoped HubSpot private app token. The browser never renders saved tokens.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -1586,13 +1664,13 @@ function HubSpotSetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save HubSpot verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run HubSpot preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one existing contact and match claimed CRM fields.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -1623,7 +1701,7 @@ function HubSpotSetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run HubSpot preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -1729,7 +1807,7 @@ function SalesforceSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save Salesforce read access</strong>
+            <strong>1. Access</strong>
             <span>Use a read-scoped Salesforce bearer token. Saved tokens never render in the browser.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -1761,13 +1839,13 @@ function SalesforceSetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save Salesforce verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run sObject preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing Salesforce record and compare the fields your CRM agent will claim.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -1807,7 +1885,7 @@ function SalesforceSetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run Salesforce preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -1927,7 +2005,7 @@ function ZohoSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Connect Zoho CRM read access</strong>
+            <strong>1. Access</strong>
             <span>
               OAuth stores an encrypted refresh token. Manual access tokens remain supported for restricted tenants.
             </span>
@@ -1939,7 +2017,7 @@ function ZohoSetupPanel({
             type="button"
             variant="primary"
           >
-            Connect Zoho CRM
+            Connect with OAuth
           </DashboardButton>
           {status?.has_oauth_refresh_token ? (
             <div className="connectors-success-strip">
@@ -1976,13 +2054,13 @@ function ZohoSetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save Zoho CRM verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run Zoho preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing Zoho CRM record and compare the fields your CRM agent will claim.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2022,7 +2100,7 @@ function ZohoSetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run Zoho preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -2126,7 +2204,7 @@ function ZendeskSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save Zendesk read access</strong>
+            <strong>1. Access</strong>
             <span>Use an OAuth bearer token, or provide email for Zendesk API token basic auth. Saved tokens never render in the browser.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2158,13 +2236,13 @@ function ZendeskSetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save Zendesk verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run ticket preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing ticket and compare the fields your support agent will claim.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2195,7 +2273,7 @@ function ZendeskSetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run Zendesk preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -2302,7 +2380,7 @@ function JiraSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save Jira read access</strong>
+            <strong>1. Access</strong>
             <span>Use an Atlassian account email plus API token. Saved tokens never render in the browser.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2334,13 +2412,13 @@ function JiraSetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save Jira verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run issue preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing issue and compare the fields your agent will claim.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2371,7 +2449,7 @@ function JiraSetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run Jira preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -2474,7 +2552,7 @@ function NetSuiteSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save NetSuite read access</strong>
+            <strong>1. Access</strong>
             <span>Use a read-scoped NetSuite bearer token. Saved tokens never render in the browser.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2498,13 +2576,13 @@ function NetSuiteSetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save NetSuite verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run finance preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing NetSuite record and compare the fields your finance agent will claim.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2544,7 +2622,7 @@ function NetSuiteSetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run NetSuite preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -2644,7 +2722,7 @@ function ShopifySetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save Shopify read access</strong>
+            <strong>1. Access</strong>
             <span>Use a read-scoped Shopify Admin API access token. Saved tokens never render in the browser.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2668,13 +2746,13 @@ function ShopifySetupPanel({
             </label>
           </div>
           <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save Shopify verifier
+            Save access
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run Shopify preflight</strong>
+            <strong>2. Preflight</strong>
             <span>Fetch one safe existing order and compare the fields your commerce agent will claim.</span>
           </div>
           <div className="connectors-generic-grid">
@@ -2705,7 +2783,7 @@ function ShopifySetupPanel({
             </label>
           </div>
           <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run Shopify preflight
+            Run preflight
           </DashboardButton>
         </form>
       </div>
@@ -2790,9 +2868,9 @@ function ConnectorInspector({
         <div className="connector-inspector-title">
           <ConnectorLogo id={row.id} size={26} />
           <div>
-            <span className="dashboard-eyebrow">{row.kind === "proof" ? "Verifier" : "Workflow"}</span>
-            <h2>{row.title}</h2>
-            <p>{connectorPurposeCopy(row)}</p>
+            <span className="dashboard-eyebrow">{connectorInspectorEyebrow(row)}</span>
+            <h2>{connectorSystemLabel(row)}</h2>
+            <p>{connectorInspectorCopy(row)}</p>
           </div>
         </div>
         <StatusPill value={row.state} label={connectorStateLabel(row.state)} tone={row.tone} />
@@ -2828,7 +2906,7 @@ function ConnectorInspector({
       <details className="connector-advanced-details">
         <summary>
           <span>Details</span>
-          <small>Transport, endpoint, and latest check</small>
+          <small>Status and fields</small>
         </summary>
 
         <div className="connector-fact-grid">
@@ -2868,18 +2946,15 @@ function ConnectorInspector({
           onToggle={(event) => setSetupOpen(event.currentTarget.open)}
         >
           <summary>
-            <span>{row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Setup and proof test"}</span>
-            <small>Read-only access and preflight</small>
+            <span>{row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Connect access"}</span>
+            <small>{row.id === "generic_rest" || row.id === "postgres_read" ? "Manual config" : "Secure setup"}</small>
           </summary>
           {setupOpen ? (
             <div className="connector-setup-body">
               {!SETUP_PANEL_CONNECTOR_IDS.has(row.id) ? (
                 <div className="connectors-empty-state">
-                  <strong>{connectorSystemLabel(row)} uses an advanced setup path</strong>
-                  <span>
-                    Use the Custom REST API connector for template-based systems, or request a native connector for this
-                    source system.
-                  </span>
+                  <strong>Advanced setup required</strong>
+                  <span>Use Custom REST or request a native connector.</span>
                 </div>
               ) : null}
               {row.id === "generic_rest" ? (
