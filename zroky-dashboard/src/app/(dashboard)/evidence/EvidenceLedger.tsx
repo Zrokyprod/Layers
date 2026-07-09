@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
@@ -17,8 +17,10 @@ const filters: Array<{ label: string; value: EvidenceLedgerFilter }> = [
 type EvidenceLedgerProps = {
   filter: EvidenceLedgerFilter;
   isError: boolean;
+  isExporting: boolean;
   isLoading: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
+  onExportManifest: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
   rows: EvidenceLedgerRow[];
@@ -42,8 +44,10 @@ function actionLabel(row: EvidenceLedgerRow): string {
 export function EvidenceLedger({
   filter,
   isError,
+  isExporting,
   isLoading,
   onFilterChange,
+  onExportManifest,
   onSearchChange,
   onSelectRow,
   rows,
@@ -51,6 +55,7 @@ export function EvidenceLedger({
   selectedRowId,
 }: EvidenceLedgerProps) {
   const filteredRows = filterEvidenceLedger(rows, filter, search);
+  const exportableCount = filteredRows.filter((row) => row.exportable).length;
 
   return (
     <section className="ev-ledger-panel" aria-label="Evidence ledger">
@@ -58,33 +63,50 @@ export function EvidenceLedger({
         <div>
           <span className="ev-eyebrow">Evidence ledger</span>
           <h2>Proof records</h2>
-          <p>Receipt-first rows are primary. Guard-only decisions stay visible as secondary evidence.</p>
+          <p>Select a proof record to verify, export, or print.</p>
         </div>
         <strong>{filteredRows.length} shown</strong>
       </header>
 
-      <div className="ev-filter-group" aria-label="Evidence filters">
-        {filters.map((item) => (
-          <button
-            key={item.value}
-            className="ev-filter-chip"
-            data-active={filter === item.value ? "true" : undefined}
-            type="button"
-            onClick={() => onFilterChange(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="ev-ledger-toolbar">
+        <div className="ev-filter-group" aria-label="Evidence filters">
+          {filters.map((item) => (
+            <button
+              key={item.value}
+              className="ev-filter-chip"
+              data-active={filter === item.value ? "true" : undefined}
+              type="button"
+              onClick={() => onFilterChange(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <DashboardButton
+          icon={<Download size={15} />}
+          disabled={isExporting || filteredRows.length === 0}
+          onClick={onExportManifest}
+          variant="soft"
+        >
+          {isExporting ? "Exporting" : "Export manifest"}
+        </DashboardButton>
       </div>
 
-      <label className="ev-search-field">
-        <Search size={14} aria-hidden="true" />
-        <input
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search action, agent, system ref, digest..."
-        />
-      </label>
+      <div className="ev-ledger-search-row">
+        <label className="ev-search-field">
+          <Search size={14} aria-hidden="true" />
+          <input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search proof records..."
+          />
+        </label>
+        <div className="ev-manifest-scope" aria-label="Manifest scope">
+          <strong>{exportableCount}</strong>
+          <span>exportable in view</span>
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="ev-skeleton-list" aria-label="Loading evidence rows">
@@ -139,10 +161,6 @@ export function EvidenceLedger({
                       </div>
                     ) : null}
                     <div>
-                      <dt>System</dt>
-                      <dd>{row.systemRef ?? "not linked"}</dd>
-                    </div>
-                    <div>
                       <dt>Checked</dt>
                       <dd>{formatDateTime(row.checkedAt)}</dd>
                     </div>
@@ -151,26 +169,15 @@ export function EvidenceLedger({
                       <dd>{row.exportable ? row.sourceLabel : "not linked / not exportable"}</dd>
                     </div>
                   </dl>
-                  <small>{row.detail}</small>
+                  <small>{row.systemRef ?? row.detail}</small>
                 </div>
                 <div className="ev-ledger-actions">
                   <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
-                    {actionLabel(row)}
+                    {row.exportable ? "View proof" : actionLabel(row)}
                   </DashboardButton>
                   {row.kind === "unlinked_outcome" ? (
                     <Link className="ev-link" href="/outcomes">Open outcomes</Link>
-                  ) : (
-                    <Link
-                      className="ev-link"
-                      href={row.href}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        onSelectRow(row);
-                      }}
-                    >
-                      Deep link
-                    </Link>
-                  )}
+                  ) : null}
                 </div>
               </article>
             );

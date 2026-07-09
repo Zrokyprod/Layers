@@ -365,14 +365,14 @@ describe("EvidencePage", () => {
     expect(within(row).getByText("Action receipt")).toBeInTheDocument();
     expect(within(row).getByText("Digest")).toBeInTheDocument();
     expect(within(row).getByText("sha256:intent_1")).toBeInTheDocument();
-    expect(within(row).getByText("System")).toBeInTheDocument();
     expect(within(row).getByText("ticket:T-1001")).toBeInTheDocument();
     expect(within(row).getByText("Matched")).toBeInTheDocument();
 
     const panel = await screen.findByLabelText("Focused proof panel");
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Audit export tools" })).toBeInTheDocument();
+    expect(within(ledger).getByRole("button", { name: "Export manifest" })).toBeInTheDocument();
+    expect(within(ledger).getByLabelText("Manifest scope").textContent).toContain("1exportable in view");
     expect(screen.getByRole("region", { name: "Independent verification material" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open public key" }).getAttribute("href")).toBe(
       "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
@@ -411,22 +411,20 @@ describe("EvidencePage", () => {
     const ledger = await screen.findByLabelText("Evidence ledger");
     await within(ledger).findByText("Close ticket T-1001");
 
-    fireEvent.change(screen.getByPlaceholderText("Search action, agent, system ref, digest..."), {
+    fireEvent.change(screen.getByPlaceholderText("Search proof records..."), {
       target: { value: "sha256:intent_1" },
     });
     expect(within(ledger).getByText("Close ticket T-1001")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Start"), { target: { value: "2026-06-20" } });
-    fireEvent.change(screen.getByLabelText("End"), { target: { value: "2026-06-20" } });
-    fireEvent.click(screen.getByRole("button", { name: "Export audit manifest" }));
+    fireEvent.click(within(ledger).getByRole("button", { name: "Export manifest" }));
 
     await waitFor(() => expect(api.getEvidenceManifest).toHaveBeenCalledWith(
       {
         dashboard_origin: "http://localhost:3000",
-        end_date: "2026-06-20",
+        end_date: "",
         filter: "all",
         search: "sha256:intent_1",
-        start_date: "2026-06-20",
+        start_date: "",
       },
     ));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
@@ -434,12 +432,11 @@ describe("EvidencePage", () => {
     const exported = await blob.text();
     expect(exported).toContain('"artifact": "zroky.evidence_manifest"');
     expect(exported).toContain('"search": "sha256:intent_1"');
-    expect(exported).toContain('"start_date": "2026-06-20"');
     expect(exported).toContain('"digest": "sha256:intent_1"');
     expect(exported).toContain('"public_key_url": "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key"');
     expect(await screen.findByText("Audit manifest exported for 1 proof record.")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText("Search action, agent, system ref, digest..."), {
+    fireEvent.change(screen.getByPlaceholderText("Search proof records..."), {
       target: { value: "missing-digest" },
     });
     expect(await screen.findByText("No records match this filter or search.")).toBeInTheDocument();
