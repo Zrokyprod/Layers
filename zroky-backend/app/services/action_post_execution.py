@@ -66,6 +66,7 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                     amount_usd=_float(claimed.get("amount_usd")),
                     currency=_text(claimed.get("currency")),
                     match_fields=_as_list(context.get("match_fields")),
+                    proof_manifest=_as_dict(context.get("proof_manifest")) or None,
                     idempotency_key=f"action-post-exec:{intent.id}:{attempt.id}:verify",
                     metadata=metadata,
                 )
@@ -97,7 +98,7 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
     intent = db.execute(
         select(ActionIntent).where(ActionIntent.project_id == job.project_id, ActionIntent.id == job.action_intent_id)
     ).scalar_one()
-    intent.proof_status = outcome.verdict
+    intent.proof_status = intent_proof_status_for_check(outcome)
     intent.receipt_status = RECEIPT_PENDING
     db.add(intent)
     receipt_job = enqueue_action_post_execution_job(

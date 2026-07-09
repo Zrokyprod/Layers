@@ -9,7 +9,13 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, DiagnosisJob, Project, ProjectDashboardConfig
+from app.db.models import (
+    Call,
+    DiagnosisJob,
+    OutcomeReconciliationCheck,
+    Project,
+    ProjectDashboardConfig,
+)
 from app.worker import tasks as worker_tasks
 
 
@@ -144,6 +150,86 @@ def _insert_project_with_retention(
             )
         )
         session.commit()
+
+
+def test_pending_proof_sweep_registered_in_beat_schedule() -> None:
+    from app.worker.celery_app import beat_schedule
+
+    settings = get_settings()
+    if settings.PROOF_PENDING_SWEEP_ENABLED:
+        entry = beat_schedule["pending-proof-reconciliation-sweep"]
+        assert entry["task"] == "app.worker.tasks.sweep_pending_proof_reconciliations"
+        assert entry["options"] == {"queue": "diagnosis_fast"}
+        assert entry["schedule"] >= 30
+
+
+def test_pending_proof_sweep_short_circuits_when_disabled(
+    worker_task_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROOF_PENDING_SWEEP_ENABLED", "false")
+    get_settings.cache_clear()
+
+    result = worker_tasks.sweep_pending_proof_reconciliations.run()
+
+    assert result == {
+        "skipped": True,
+        "reason": "PROOF_PENDING_SWEEP_ENABLED=false",
+    }
+
+
+def test_pending_proof_sweep_expires_overdue_rows(
+    worker_task_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROOF_PENDING_SWEEP_ENABLED", "true")
+    get_settings.cache_clear()
+    now = datetime.now(timezone.utc)
+    with worker_task_ctx() as session:
+        session.add(
+            OutcomeReconciliationCheck(
+                id="proof-pending-expired",
+                project_id="proj-proof-worker",
+                connector_type="generic_rest_api",
+                verdict="not_verified",
+                reason="verification_window_open",
+                proof_status="pending",
+                proof_reason_code="verification_window_open",
+                proof_deadline_at=now - timedelta(seconds=1),
+                proof_next_check_at=now - timedelta(seconds=10),
+                claimed_json="{}",
+                comparison_json="{}",
+                metadata_json=json.dumps(
+                    {
+                        "proof": {
+                            "status": "pending",
+                            "reason": "verification_window_open",
+                            "point_in_time": True,
+                        }
+                    },
+                    separators=(",", ":"),
+                ),
+                checked_at=now - timedelta(seconds=30),
+            )
+        )
+        session.commit()
+
+    result = worker_tasks.sweep_pending_proof_reconciliations.run(limit=10)
+
+    assert result["expired"] == 1
+    assert result["due_for_reverify"] == 0
+    assert result["expired_check_ids"] == ["proof-pending-expired"]
+
+    with worker_task_ctx() as session:
+        row = session.get(OutcomeReconciliationCheck, "proof-pending-expired")
+        assert row is not None
+        assert row.verdict == "mismatched"
+        assert row.proof_status == "mismatched"
+        assert row.proof_reason_code == "verification_window_open"
+        assert row.proof_next_check_at is None
+        proof = json.loads(row.metadata_json or "{}")["proof"]
+        assert proof["status"] == "mismatched"
+        assert proof["resolved_at"]
 
 
 def test_calculate_retry_countdown_caps_to_max() -> None:

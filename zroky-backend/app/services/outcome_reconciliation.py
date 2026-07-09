@@ -15,10 +15,21 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 from uuid import uuid4
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import OutcomeReconciliationCheck
+from app.services.proof_connector_manifest import (
+    PROOF_MATCHED,
+    PROOF_MISMATCHED,
+    PROOF_PARTIAL,
+    PROOF_PENDING,
+    PROOF_UNVERIFIABLE,
+    evaluate_proof_manifest,
+    proof_status_from_metadata,
+    proof_status_to_outcome_verdict,
+    public_manifest_summary,
+)
 from app.services.protected_action_billing import (
     METER_VERIFICATION_CHECKS,
     reserve_usage_meter,
@@ -31,19 +42,36 @@ VERDICT_NOT_VERIFIED = "not_verified"
 VALID_VERDICTS = frozenset({VERDICT_MATCHED, VERDICT_MISMATCHED, VERDICT_NOT_VERIFIED})
 
 VERIFICATION_VERIFIED = "verified"
+VERIFICATION_MATCHED = "matched"
 VERIFICATION_MISMATCHED = "mismatched"
 VERIFICATION_PENDING = "pending"
 VERIFICATION_UNVERIFIABLE = "unverifiable"
+VERIFICATION_PARTIAL = PROOF_PARTIAL
 VERIFICATION_CANCELLED = "cancelled"
 VALID_VERIFICATION_STATUSES = frozenset(
     {
         VERIFICATION_VERIFIED,
+        VERIFICATION_MATCHED,
         VERIFICATION_MISMATCHED,
         VERIFICATION_PENDING,
         VERIFICATION_UNVERIFIABLE,
+        VERIFICATION_PARTIAL,
         VERIFICATION_CANCELLED,
     }
 )
+
+PROOF_REASON_NO_CONNECTOR = "no_connector"
+PROOF_REASON_RUNNER_OFFLINE = "runner_offline"
+PROOF_REASON_NO_SOR_TRACE = "no_sor_trace"
+PROOF_REASON_SOR_UNREACHABLE = "sor_unreachable"
+PROOF_REASON_FIELD_MISMATCH = "field_mismatch"
+PROOF_REASON_REQUIRED_EVIDENCE_MISSING = "required_evidence_missing"
+
+_PENDING_EXPIRE_AS_UNVERIFIABLE = {
+    PROOF_REASON_SOR_UNREACHABLE,
+    PROOF_REASON_NO_CONNECTOR,
+    PROOF_REASON_RUNNER_OFFLINE,
+}
 
 DEFAULT_MATCH_FIELDS = (
     "status",
@@ -124,7 +152,16 @@ class ReconciliationSummary:
     verified: int = 0
     pending: int = 0
     unverifiable: int = 0
+    partial: int = 0
     cancelled: int = 0
+
+
+@dataclass(frozen=True)
+class PendingProofSweepResult:
+    expired: int
+    due_for_reverify: int
+    expired_check_ids: list[str]
+    due_check_ids: list[str]
 
 
 def _now() -> datetime:
@@ -298,6 +335,122 @@ def compare_claim_to_actual(
     )
 
 
+def _connector_retryable(metadata: Mapping[str, Any] | None) -> bool:
+    connector = _as_dict(metadata)
+    retryable = connector.get("retryable")
+    if retryable is True:
+        return True
+    try:
+        status_code = int(connector.get("http_status"))
+    except (TypeError, ValueError):
+        return False
+    return status_code >= 500
+
+
+def _legacy_proof_status(
+    *,
+    comparison: ReconciliationComparison,
+    metadata_payload: Mapping[str, Any],
+) -> str:
+    if comparison.verdict == VERDICT_MATCHED:
+        return PROOF_MATCHED
+    if comparison.verdict == VERDICT_MISMATCHED:
+        return PROOF_MISMATCHED
+    connector_metadata = _as_dict(metadata_payload.get("connector"))
+    if _connector_retryable(connector_metadata):
+        return PROOF_PENDING
+    return PROOF_UNVERIFIABLE
+
+
+def _legacy_proof_reason_code(
+    *,
+    comparison: ReconciliationComparison,
+    source: SourceRecord,
+    metadata_payload: Mapping[str, Any],
+) -> str:
+    not_verified_reason = _bounded(
+        str(metadata_payload.get("not_verified_reason") or ""),
+        max_length=255,
+    )
+    if not_verified_reason == "connector_not_configured":
+        return PROOF_REASON_NO_CONNECTOR
+    if not_verified_reason and not_verified_reason.startswith("execution_"):
+        return PROOF_REASON_RUNNER_OFFLINE
+    connector_metadata = _as_dict(metadata_payload.get("connector"))
+    if _connector_retryable(connector_metadata):
+        return PROOF_REASON_SOR_UNREACHABLE
+    error_code = str(connector_metadata.get("error_code") or "").strip()
+    if error_code and error_code != "system_record_missing":
+        return PROOF_REASON_SOR_UNREACHABLE
+    if source.record_found is False or comparison.reason == "system_of_record_record_missing":
+        return PROOF_REASON_NO_SOR_TRACE
+    if comparison.reason == "field_mismatch":
+        return PROOF_REASON_FIELD_MISMATCH
+    if comparison.reason in {"actual_fields_missing", "no_comparable_fields"}:
+        return PROOF_REASON_REQUIRED_EVIDENCE_MISSING
+    return _bounded(comparison.reason or comparison.verdict, max_length=64) or "unknown"
+
+
+def _proof_status_for_display(
+    *,
+    row: OutcomeReconciliationCheck,
+    metadata: Mapping[str, Any],
+) -> str | None:
+    row_status = _bounded(row.proof_status, max_length=32)
+    if row_status:
+        proof = _as_dict(metadata.get("proof"))
+        if row_status == PROOF_MATCHED and not proof:
+            return VERIFICATION_VERIFIED
+        return row_status
+    return proof_status_from_metadata(metadata)
+
+
+def proof_status_for_check(row: OutcomeReconciliationCheck) -> str:
+    metadata = _json_loads(row.metadata_json, {}) or {}
+    if not isinstance(metadata, Mapping):
+        metadata = {}
+    row_status = _bounded(row.proof_status, max_length=32)
+    if row_status:
+        return row_status
+    metadata_status = proof_status_from_metadata(metadata)
+    if metadata_status:
+        return metadata_status
+    if row.verdict == VERDICT_MATCHED:
+        return PROOF_MATCHED
+    if row.verdict == VERDICT_MISMATCHED:
+        return PROOF_MISMATCHED
+    if row.verdict == VERDICT_NOT_VERIFIED:
+        connector = _as_dict(metadata.get("connector"))
+        if _connector_retryable(connector):
+            return PROOF_PENDING
+        return PROOF_UNVERIFIABLE
+    return PROOF_UNVERIFIABLE
+
+
+def intent_proof_status_for_check(row: OutcomeReconciliationCheck) -> str:
+    status = proof_status_for_check(row)
+    if status == PROOF_MATCHED:
+        return VERDICT_MATCHED
+    if status in {PROOF_MISMATCHED, PROOF_PARTIAL}:
+        return VERDICT_MISMATCHED
+    if status == PROOF_PENDING:
+        return PROOF_PENDING
+    return VERDICT_NOT_VERIFIED
+
+
+def proof_reason_code_for_check(row: OutcomeReconciliationCheck) -> str | None:
+    reason = _bounded(row.proof_reason_code, max_length=64)
+    if reason:
+        return reason
+    metadata = _json_loads(row.metadata_json, {}) or {}
+    if isinstance(metadata, Mapping):
+        proof = _as_dict(metadata.get("proof"))
+        reason = _bounded(str(proof.get("reason") or ""), max_length=64)
+        if reason:
+            return reason
+    return _bounded(row.reason, max_length=64)
+
+
 def reconcile_outcome(
     db: Session,
     *,
@@ -314,8 +467,10 @@ def reconcile_outcome(
     match_fields: list[str] | None = None,
     idempotency_key: str | None = None,
     metadata: Mapping[str, Any] | None = None,
+    proof_manifest: Mapping[str, Any] | None = None,
     checked_at: datetime | None = None,
 ) -> OutcomeReconciliationCheck:
+    checked_time = checked_at or _now()
     if idempotency_key:
         existing = db.execute(
             select(OutcomeReconciliationCheck).where(
@@ -328,17 +483,60 @@ def reconcile_outcome(
 
     reserve_usage_meter(db, project_id, METER_VERIFICATION_CHECKS)
     source = connector.fetch()
-    comparison = compare_claim_to_actual(
-        claimed=claimed,
-        actual=source.record,
-        actual_record_found=source.record_found,
-        match_fields=match_fields,
-    )
     metadata_payload = _as_dict(metadata)
     if source.metadata:
         metadata_payload.setdefault("connector", _as_dict(source.metadata))
     if match_fields:
         metadata_payload.setdefault("match_fields", match_fields)
+    proof_status: str
+    proof_reason_code: str
+    proof_observed_at: datetime | None = None
+    proof_deadline_at: datetime | None = None
+    proof_next_check_at: datetime | None = None
+    if proof_manifest:
+        proof = evaluate_proof_manifest(
+            claimed=claimed,
+            actual=source.record,
+            actual_record_found=source.record_found,
+            connector_metadata=source.metadata,
+            manifest=proof_manifest,
+            checked_at=checked_time,
+        )
+        comparison = ReconciliationComparison(
+            verdict=proof_status_to_outcome_verdict(proof.status),
+            reason=proof.reason,
+            compared_fields=[field.to_json() for field in proof.fields],
+            mismatches=proof.mismatches,
+            missing_fields=proof.missing_fields,
+        )
+        metadata_payload.setdefault("proof", proof.to_json())
+        manifest_summary = public_manifest_summary(proof_manifest)
+        if manifest_summary:
+            metadata_payload.setdefault("proof_manifest", manifest_summary)
+        proof_status = proof.status
+        proof_reason_code = proof.reason_code
+        proof_observed_at = proof.observed_at
+        proof_deadline_at = proof.deadline_at
+        proof_next_check_at = proof.next_check_at if proof.status == PROOF_PENDING else None
+    else:
+        comparison = compare_claim_to_actual(
+            claimed=claimed,
+            actual=source.record,
+            actual_record_found=source.record_found,
+            match_fields=match_fields,
+        )
+        proof_status = _legacy_proof_status(
+            comparison=comparison,
+            metadata_payload=metadata_payload,
+        )
+        proof_reason_code = _legacy_proof_reason_code(
+            comparison=comparison,
+            source=source,
+            metadata_payload=metadata_payload,
+        )
+        if metadata_payload.get("cancelled") is True or str(metadata_payload.get("status") or "").strip().lower() == "cancelled":
+            proof_status = VERIFICATION_CANCELLED
+            proof_reason_code = "cancelled"
 
     row = OutcomeReconciliationCheck(
         id=str(uuid4()),
@@ -359,7 +557,12 @@ def reconcile_outcome(
         comparison_json=_json_dumps(comparison.to_json()),
         idempotency_key=_bounded(idempotency_key, max_length=255),
         metadata_json=_json_dumps(metadata_payload) if metadata_payload else None,
-        checked_at=checked_at or _now(),
+        proof_status=_bounded(proof_status, max_length=32),
+        proof_reason_code=_bounded(proof_reason_code, max_length=64),
+        proof_observed_at=proof_observed_at,
+        proof_deadline_at=proof_deadline_at,
+        proof_next_check_at=proof_next_check_at,
+        checked_at=checked_time,
     )
     db.add(row)
     db.commit()
@@ -432,27 +635,45 @@ def get_reconciliation_summary(
     matched = counts.get(VERDICT_MATCHED, 0)
     mismatched = counts.get(VERDICT_MISMATCHED, 0)
     not_verified = counts.get(VERDICT_NOT_VERIFIED, 0)
-    all_rows = db.execute(
-        select(OutcomeReconciliationCheck).where(
+    proof_rows = db.execute(
+        select(
+            OutcomeReconciliationCheck.proof_status,
+            func.count(OutcomeReconciliationCheck.id),
+        )
+        .where(
             OutcomeReconciliationCheck.project_id == project_id,
             OutcomeReconciliationCheck.checked_at >= since,
         )
-    ).scalars().all()
+        .group_by(OutcomeReconciliationCheck.proof_status)
+    ).all()
     verification_counts = {
         status: 0
         for status in VALID_VERIFICATION_STATUSES
     }
-    for row in all_rows:
-        verification_counts[verification_status_for_check(row)] += 1
+    for raw_status, count in proof_rows:
+        status = _bounded(raw_status, max_length=32)
+        if status in verification_counts:
+            verification_counts[status] += int(count or 0)
+    legacy_matched_without_column = db.execute(
+        select(func.count(OutcomeReconciliationCheck.id)).where(
+            OutcomeReconciliationCheck.project_id == project_id,
+            OutcomeReconciliationCheck.checked_at >= since,
+            OutcomeReconciliationCheck.proof_status.is_(None),
+            OutcomeReconciliationCheck.verdict == VERDICT_MATCHED,
+        )
+    ).scalar_one()
+    verification_counts[VERIFICATION_VERIFIED] += int(legacy_matched_without_column or 0)
     return ReconciliationSummary(
         window_days=days,
         total=matched + mismatched + not_verified,
         matched=matched,
         mismatched=mismatched,
         not_verified=not_verified,
-        verified=verification_counts[VERIFICATION_VERIFIED],
+        verified=verification_counts[VERIFICATION_VERIFIED]
+        + verification_counts[VERIFICATION_MATCHED],
         pending=verification_counts[VERIFICATION_PENDING],
         unverifiable=verification_counts[VERIFICATION_UNVERIFIABLE],
+        partial=verification_counts[VERIFICATION_PARTIAL],
         cancelled=verification_counts[VERIFICATION_CANCELLED],
     )
 
@@ -460,6 +681,12 @@ def get_reconciliation_summary(
 def verification_status_for_check(row: OutcomeReconciliationCheck) -> str:
     metadata = _json_loads(row.metadata_json, {}) or {}
     if isinstance(metadata, Mapping):
+        proof_status = _proof_status_for_display(row=row, metadata=metadata)
+        if proof_status is not None:
+            return proof_status
+        proof_status = proof_status_from_metadata(metadata)
+        if proof_status is not None:
+            return proof_status
         if metadata.get("cancelled") is True or str(metadata.get("status") or "").strip().lower() == "cancelled":
             return VERIFICATION_CANCELLED
         connector = metadata.get("connector")
@@ -505,6 +732,109 @@ def reverify_connector_for_check(row: OutcomeReconciliationCheck) -> str | None:
     return connector_type if connector_type in REVERIFY_CONNECTORS else None
 
 
+def list_pending_reconciliations_due(
+    db: Session,
+    *,
+    project_id: str | None = None,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> list[OutcomeReconciliationCheck]:
+    current = now or _now()
+    query = select(OutcomeReconciliationCheck).where(
+        OutcomeReconciliationCheck.proof_status == PROOF_PENDING,
+        OutcomeReconciliationCheck.proof_next_check_at.is_not(None),
+        OutcomeReconciliationCheck.proof_next_check_at <= current,
+        OutcomeReconciliationCheck.connector_type.in_(REVERIFY_CONNECTORS),
+        or_(
+            OutcomeReconciliationCheck.proof_deadline_at.is_(None),
+            OutcomeReconciliationCheck.proof_deadline_at >= current,
+        ),
+    )
+    if project_id:
+        query = query.where(OutcomeReconciliationCheck.project_id == project_id)
+    return list(
+        db.execute(
+            query.order_by(
+                OutcomeReconciliationCheck.proof_next_check_at,
+                OutcomeReconciliationCheck.id,
+            ).limit(max(1, min(limit, 1000)))
+        ).scalars()
+    )
+
+
+def sweep_pending_reconciliation_checks(
+    db: Session,
+    *,
+    project_id: str | None = None,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> PendingProofSweepResult:
+    current = now or _now()
+    expired_query = select(OutcomeReconciliationCheck).where(
+        OutcomeReconciliationCheck.proof_status == PROOF_PENDING,
+        OutcomeReconciliationCheck.proof_deadline_at.is_not(None),
+        OutcomeReconciliationCheck.proof_deadline_at < current,
+    )
+    if project_id:
+        expired_query = expired_query.where(OutcomeReconciliationCheck.project_id == project_id)
+    expired_rows = list(
+        db.execute(
+            expired_query.order_by(
+                OutcomeReconciliationCheck.proof_deadline_at,
+                OutcomeReconciliationCheck.id,
+            ).limit(max(1, min(limit, 1000)))
+        ).scalars()
+    )
+
+    expired_ids: list[str] = []
+    for row in expired_rows:
+        reason = proof_reason_code_for_check(row) or PROOF_REASON_NO_SOR_TRACE
+        if reason in _PENDING_EXPIRE_AS_UNVERIFIABLE:
+            row.proof_status = PROOF_UNVERIFIABLE
+            row.verdict = VERDICT_NOT_VERIFIED
+            row.reason = _bounded(reason, max_length=255)
+        else:
+            row.proof_status = PROOF_MISMATCHED
+            row.verdict = VERDICT_MISMATCHED
+            row.reason = _bounded(reason, max_length=255)
+        row.proof_reason_code = _bounded(reason, max_length=64)
+        row.proof_next_check_at = None
+        row.checked_at = current
+        metadata = _json_loads(row.metadata_json, {}) or {}
+        if not isinstance(metadata, Mapping):
+            metadata = {}
+        metadata_payload = dict(metadata)
+        proof = _as_dict(metadata_payload.get("proof"))
+        proof.update(
+            {
+                "status": row.proof_status,
+                "reason": reason,
+                "next_check_at": None,
+                "resolved_at": current.isoformat(),
+                "point_in_time": True,
+            }
+        )
+        metadata_payload["proof"] = proof
+        row.metadata_json = _json_dumps(metadata_payload)
+        db.add(row)
+        expired_ids.append(row.id)
+    if expired_ids:
+        db.commit()
+
+    due_rows = list_pending_reconciliations_due(
+        db,
+        project_id=project_id,
+        now=current,
+        limit=limit,
+    )
+    return PendingProofSweepResult(
+        expired=len(expired_ids),
+        due_for_reverify=len(due_rows),
+        expired_check_ids=expired_ids,
+        due_check_ids=[row.id for row in due_rows],
+    )
+
+
 def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -518,6 +848,8 @@ def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
         "system_ref": row.system_ref,
         "verdict": row.verdict,
         "verification_status": verification_status_for_check(row),
+        "proof_status": proof_status_for_check(row),
+        "proof_reason_code": proof_reason_code_for_check(row),
         "reason": row.reason,
         "amount_usd": float(row.amount_usd) if row.amount_usd is not None else None,
         "currency": row.currency,
@@ -526,6 +858,9 @@ def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
         "comparison": _json_loads(row.comparison_json, {}),
         "idempotency_key": row.idempotency_key,
         "metadata": _json_loads(row.metadata_json, None),
+        "proof_observed_at": row.proof_observed_at,
+        "proof_deadline_at": row.proof_deadline_at,
+        "proof_next_check_at": row.proof_next_check_at,
         "checked_at": row.checked_at,
         "created_at": row.created_at,
     }

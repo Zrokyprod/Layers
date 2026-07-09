@@ -14,7 +14,11 @@ from app.core.config import get_settings
 from app.db.models import ActionExecutionAttempt, ActionIntent, ActionPostExecutionJob
 from app.services.action_receipts import generate_action_receipt
 from app.services.action_timeline import record_action_timeline_event
-from app.services.outcome_reconciliation import ApiRecordConnector, reconcile_outcome
+from app.services.outcome_reconciliation import (
+    ApiRecordConnector,
+    intent_proof_status_for_check,
+    reconcile_outcome,
+)
 from app.services.system_of_record_connector_config import (
     CUSTOMER_RECORD_CONNECTOR_TYPE,
     GENERIC_REST_CONNECTOR_TYPE,
@@ -370,6 +374,9 @@ def _verification_context(intent: ActionIntent, attempt: ActionExecutionAttempt)
         "target": target,
         "arguments": arguments,
         "verification": verification,
+        "proof_manifest": _as_dict(
+            verification.get("proof_manifest") or verification.get("proof")
+        ),
         "adapter_contract": adapter_contract,
         "claimed": claimed,
         "match_fields": match_fields,

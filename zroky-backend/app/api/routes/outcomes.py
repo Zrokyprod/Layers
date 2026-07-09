@@ -705,6 +705,7 @@ def get_reconciliation_kpis(
         verified=summary.verified,
         pending=summary.pending,
         unverifiable=summary.unverifiable,
+        partial=summary.partial,
         cancelled=summary.cancelled,
     )
 
