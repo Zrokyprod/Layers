@@ -21,7 +21,10 @@ from app.services.outcome_reconciliation import (
     SourceRecord,
     compare_claim_to_actual,
     get_reconciliation_summary,
+    proof_reason_code_for_check,
+    proof_status_for_check,
     reconcile_outcome,
+    reconciliation_to_dict,
     verification_status_for_check,
 )
 from app.services.system_of_record_connectors import (
@@ -559,9 +562,14 @@ def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> N
 
         assert first.id == second.id
         assert first.verdict == "matched"
+        assert first.proof_status == "matched"
+        assert first.proof_reason_code == "all_compared_fields_matched"
+        assert proof_status_for_check(first) == "matched"
+        assert verification_status_for_check(first) == "verified"
         assert first.connector_type == "ledger_api"
         assert summary.total == 1
         assert summary.matched == 1
+        assert summary.verified == 1
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
@@ -574,7 +582,13 @@ def test_reconciliation_launch_verification_statuses(tmp_path: Path) -> None:
         future=True,
     )
     Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    session_factory = sessionmaker(
+        bind=engine,
+        autoflush=False,
+        autocommit=False,
+        future=True,
+        expire_on_commit=False,
+    )
     try:
         with session_factory() as session:
             verified = reconcile_outcome(
@@ -617,10 +631,18 @@ def test_reconciliation_launch_verification_statuses(tmp_path: Path) -> None:
         assert verification_status_for_check(unverifiable) == "unverifiable"
         assert verification_status_for_check(pending) == "pending"
         assert verification_status_for_check(cancelled) == "cancelled"
+        assert proof_reason_code_for_check(unverifiable) == "system_of_record_missing"
+        assert proof_reason_code_for_check(pending) == "sor_unreachable"
+        assert proof_status_for_check(cancelled) == "cancelled"
         assert summary.verified == 1
         assert summary.pending == 1
         assert summary.unverifiable == 1
         assert summary.cancelled == 1
+
+        rendered = reconciliation_to_dict(pending)
+        assert rendered["proof_status"] == "pending"
+        assert rendered["proof_reason_code"] == "sor_unreachable"
+        assert rendered["proof_next_check_at"] is None
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()

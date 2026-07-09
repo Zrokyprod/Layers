@@ -63,7 +63,13 @@ class ProofEvaluation:
     observed_at: datetime | None = None
     action_time: datetime | None = None
     verification_window_seconds: int | None = None
+    deadline_at: datetime | None = None
+    next_check_at: datetime | None = None
     connector_retryable: bool | None = None
+
+    @property
+    def reason_code(self) -> str:
+        return self.reason
 
     @property
     def matched_fields(self) -> list[dict[str, Any]]:
@@ -96,6 +102,8 @@ class ProofEvaluation:
             "observed_at": _iso(self.observed_at),
             "action_time": _iso(self.action_time),
             "verification_window_seconds": self.verification_window_seconds,
+            "deadline_at": _iso(self.deadline_at),
+            "next_check_at": _iso(self.next_check_at),
             "connector_retryable": self.connector_retryable,
             "point_in_time": True,
         }
@@ -157,41 +165,59 @@ def evaluate_proof_manifest(
     manifest_dict = _as_dict(manifest)
     temporal = _as_dict(manifest_dict.get("temporal") or manifest_dict.get("observation"))
     causal = _as_dict(manifest_dict.get("causal") or manifest_dict.get("causal_evidence"))
+    poll = _as_dict(manifest_dict.get("poll"))
     connector = _as_dict(connector_metadata)
     now = _as_utc(checked_at) or _now()
     action_time = _resolve_time(temporal.get("action_time"), claimed)
     window_seconds = _positive_int(
         temporal.get("window_seconds")
         or temporal.get("observe_window_seconds")
-        or _as_dict(manifest_dict.get("poll")).get("window_seconds")
+        or poll.get("window_seconds")
     )
+    deadline_at = _proof_deadline(action_time, window_seconds)
+    poll_seconds = _poll_interval_seconds(poll, temporal)
     retryable = _metadata_retryable(connector)
 
     if actual_record_found is False or not actual:
-        if _within_open_window(action_time, window_seconds, now) or retryable:
+        if _within_open_window(action_time, window_seconds, now):
             return ProofEvaluation(
                 status=PROOF_PENDING,
-                reason="verification_window_open" if not retryable else "connector_retryable",
+                reason="verification_window_open",
                 fields=[],
                 action_time=action_time,
                 verification_window_seconds=window_seconds,
+                deadline_at=deadline_at,
+                next_check_at=_next_check_time(now, poll_seconds, deadline_at),
+                connector_retryable=retryable,
+            )
+        if retryable:
+            return ProofEvaluation(
+                status=PROOF_PENDING,
+                reason="sor_unreachable",
+                fields=[],
+                action_time=action_time,
+                verification_window_seconds=window_seconds,
+                deadline_at=deadline_at,
+                next_check_at=_next_check_time(now, poll_seconds, deadline_at),
                 connector_retryable=retryable,
             )
         if actual_record_found is False:
             return ProofEvaluation(
                 status=PROOF_MISMATCHED,
-                reason="system_of_record_record_missing_after_window",
+                reason="no_sor_trace",
                 fields=[],
                 action_time=action_time,
                 verification_window_seconds=window_seconds,
+                deadline_at=deadline_at,
                 connector_retryable=retryable,
             )
         return ProofEvaluation(
             status=PROOF_UNVERIFIABLE,
-            reason="system_of_record_unavailable",
+            reason="sor_unreachable",
             fields=[],
             action_time=action_time,
             verification_window_seconds=window_seconds,
+            deadline_at=deadline_at,
             connector_retryable=retryable,
         )
 
@@ -216,6 +242,7 @@ def evaluate_proof_manifest(
         observed_at=observed_at,
         action_time=action_time,
         window_seconds=window_seconds,
+        deadline_at=deadline_at,
         retryable=retryable,
     )
 
@@ -489,6 +516,7 @@ def _classify_evaluation(
     observed_at: datetime | None,
     action_time: datetime | None,
     window_seconds: int | None,
+    deadline_at: datetime | None,
     retryable: bool | None,
 ) -> ProofEvaluation:
     required = [field for field in fields if field.required]
@@ -524,6 +552,7 @@ def _classify_evaluation(
         observed_at=observed_at,
         action_time=action_time,
         verification_window_seconds=window_seconds,
+        deadline_at=deadline_at,
         connector_retryable=retryable,
     )
 
@@ -704,6 +733,37 @@ def _within_open_window(
     if action_time is None or window_seconds is None:
         return False
     return checked_at < action_time + timedelta(seconds=window_seconds)
+
+
+def _proof_deadline(
+    action_time: datetime | None,
+    window_seconds: int | None,
+) -> datetime | None:
+    if action_time is None or window_seconds is None:
+        return None
+    return action_time + timedelta(seconds=window_seconds)
+
+
+def _poll_interval_seconds(
+    poll: Mapping[str, Any],
+    temporal: Mapping[str, Any],
+) -> int:
+    raw = poll.get("interval_seconds") or temporal.get("poll_interval_seconds")
+    parsed = _positive_int(raw)
+    if parsed is None:
+        parsed = 10
+    return max(1, min(parsed, 3600))
+
+
+def _next_check_time(
+    checked_at: datetime,
+    poll_seconds: int,
+    deadline_at: datetime | None,
+) -> datetime:
+    candidate = checked_at + timedelta(seconds=poll_seconds)
+    if deadline_at is not None and candidate > deadline_at:
+        return deadline_at
+    return candidate
 
 
 def _positive_int(value: Any) -> int | None:
