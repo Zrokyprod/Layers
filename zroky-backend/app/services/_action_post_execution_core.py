@@ -370,6 +370,9 @@ def _verification_context(intent: ActionIntent, attempt: ActionExecutionAttempt)
         "target": target,
         "arguments": arguments,
         "verification": verification,
+        "proof_manifest": _as_dict(
+            verification.get("proof_manifest") or verification.get("proof")
+        ),
         "adapter_contract": adapter_contract,
         "claimed": claimed,
         "match_fields": match_fields,

@@ -155,6 +155,7 @@ def get_actions_lifecycle_summary(
                 verified=outcome_summary.verified,
                 pending=outcome_summary.pending,
                 unverifiable=outcome_summary.unverifiable,
+                partial=outcome_summary.partial,
                 cancelled=outcome_summary.cancelled,
             )
         ),

@@ -19,6 +19,13 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import OutcomeReconciliationCheck
+from app.services.proof_connector_manifest import (
+    PROOF_PARTIAL,
+    evaluate_proof_manifest,
+    proof_status_from_metadata,
+    proof_status_to_outcome_verdict,
+    public_manifest_summary,
+)
 from app.services.protected_action_billing import (
     METER_VERIFICATION_CHECKS,
     reserve_usage_meter,
@@ -31,16 +38,20 @@ VERDICT_NOT_VERIFIED = "not_verified"
 VALID_VERDICTS = frozenset({VERDICT_MATCHED, VERDICT_MISMATCHED, VERDICT_NOT_VERIFIED})
 
 VERIFICATION_VERIFIED = "verified"
+VERIFICATION_MATCHED = "matched"
 VERIFICATION_MISMATCHED = "mismatched"
 VERIFICATION_PENDING = "pending"
 VERIFICATION_UNVERIFIABLE = "unverifiable"
+VERIFICATION_PARTIAL = PROOF_PARTIAL
 VERIFICATION_CANCELLED = "cancelled"
 VALID_VERIFICATION_STATUSES = frozenset(
     {
         VERIFICATION_VERIFIED,
+        VERIFICATION_MATCHED,
         VERIFICATION_MISMATCHED,
         VERIFICATION_PENDING,
         VERIFICATION_UNVERIFIABLE,
+        VERIFICATION_PARTIAL,
         VERIFICATION_CANCELLED,
     }
 )
@@ -124,6 +135,7 @@ class ReconciliationSummary:
     verified: int = 0
     pending: int = 0
     unverifiable: int = 0
+    partial: int = 0
     cancelled: int = 0
 
 
@@ -314,6 +326,7 @@ def reconcile_outcome(
     match_fields: list[str] | None = None,
     idempotency_key: str | None = None,
     metadata: Mapping[str, Any] | None = None,
+    proof_manifest: Mapping[str, Any] | None = None,
     checked_at: datetime | None = None,
 ) -> OutcomeReconciliationCheck:
     if idempotency_key:
@@ -328,17 +341,38 @@ def reconcile_outcome(
 
     reserve_usage_meter(db, project_id, METER_VERIFICATION_CHECKS)
     source = connector.fetch()
-    comparison = compare_claim_to_actual(
-        claimed=claimed,
-        actual=source.record,
-        actual_record_found=source.record_found,
-        match_fields=match_fields,
-    )
     metadata_payload = _as_dict(metadata)
     if source.metadata:
         metadata_payload.setdefault("connector", _as_dict(source.metadata))
     if match_fields:
         metadata_payload.setdefault("match_fields", match_fields)
+    if proof_manifest:
+        proof = evaluate_proof_manifest(
+            claimed=claimed,
+            actual=source.record,
+            actual_record_found=source.record_found,
+            connector_metadata=source.metadata,
+            manifest=proof_manifest,
+            checked_at=checked_at,
+        )
+        comparison = ReconciliationComparison(
+            verdict=proof_status_to_outcome_verdict(proof.status),
+            reason=proof.reason,
+            compared_fields=[field.to_json() for field in proof.fields],
+            mismatches=proof.mismatches,
+            missing_fields=proof.missing_fields,
+        )
+        metadata_payload.setdefault("proof", proof.to_json())
+        manifest_summary = public_manifest_summary(proof_manifest)
+        if manifest_summary:
+            metadata_payload.setdefault("proof_manifest", manifest_summary)
+    else:
+        comparison = compare_claim_to_actual(
+            claimed=claimed,
+            actual=source.record,
+            actual_record_found=source.record_found,
+            match_fields=match_fields,
+        )
 
     row = OutcomeReconciliationCheck(
         id=str(uuid4()),
@@ -450,9 +484,11 @@ def get_reconciliation_summary(
         matched=matched,
         mismatched=mismatched,
         not_verified=not_verified,
-        verified=verification_counts[VERIFICATION_VERIFIED],
+        verified=verification_counts[VERIFICATION_VERIFIED]
+        + verification_counts[VERIFICATION_MATCHED],
         pending=verification_counts[VERIFICATION_PENDING],
         unverifiable=verification_counts[VERIFICATION_UNVERIFIABLE],
+        partial=verification_counts[VERIFICATION_PARTIAL],
         cancelled=verification_counts[VERIFICATION_CANCELLED],
     )
 
@@ -460,6 +496,9 @@ def get_reconciliation_summary(
 def verification_status_for_check(row: OutcomeReconciliationCheck) -> str:
     metadata = _json_loads(row.metadata_json, {}) or {}
     if isinstance(metadata, Mapping):
+        proof_status = proof_status_from_metadata(metadata)
+        if proof_status is not None:
+            return proof_status
         if metadata.get("cancelled") is True or str(metadata.get("status") or "").strip().lower() == "cancelled":
             return VERIFICATION_CANCELLED
         connector = metadata.get("connector")

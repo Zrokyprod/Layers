@@ -426,6 +426,7 @@ class OutcomeReconciliationSummaryResponse(BaseModel):
     verified: int
     pending: int
     unverifiable: int
+    partial: int = 0
     cancelled: int
 
 

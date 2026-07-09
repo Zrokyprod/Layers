@@ -305,7 +305,9 @@ def _receipt_status(intent: ActionIntent, attempt: ActionExecutionAttempt | None
     statuses = {verification_status_for_check(row) for row in outcomes}
     if "mismatched" in statuses:
         return "mismatched"
-    if "verified" in statuses:
+    if "partial" in statuses:
+        return "partial"
+    if "matched" in statuses or "verified" in statuses:
         return "verified"
     if "pending" in statuses:
         return "pending"

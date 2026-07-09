@@ -66,6 +66,7 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                     amount_usd=_float(claimed.get("amount_usd")),
                     currency=_text(claimed.get("currency")),
                     match_fields=_as_list(context.get("match_fields")),
+                    proof_manifest=_as_dict(context.get("proof_manifest")) or None,
                     idempotency_key=f"action-post-exec:{intent.id}:{attempt.id}:verify",
                     metadata=metadata,
                 )
