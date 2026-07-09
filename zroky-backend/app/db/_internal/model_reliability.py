@@ -82,6 +82,11 @@ class OutcomeReconciliationCheck(Base):
     system_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     verdict: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    proof_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    proof_reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    proof_observed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    proof_deadline_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    proof_next_check_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     amount_usd: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     claimed_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
@@ -99,6 +104,10 @@ class OutcomeReconciliationCheck(Base):
             "verdict IN ('matched','mismatched','not_verified')",
             name="ck_outcome_reconciliation_verdict",
         ),
+        CheckConstraint(
+            "proof_status IS NULL OR proof_status IN ('matched','mismatched','pending','unverifiable','partial','cancelled')",
+            name="ck_outcome_reconciliation_proof_status",
+        ),
         UniqueConstraint(
             "project_id",
             "idempotency_key",
@@ -106,6 +115,8 @@ class OutcomeReconciliationCheck(Base):
         ),
         Index("ix_outcome_reconciliation_project_checked", "project_id", "checked_at"),
         Index("ix_outcome_reconciliation_project_verdict_checked", "project_id", "verdict", "checked_at"),
+        Index("ix_outcome_reconciliation_project_proof_checked", "project_id", "proof_status", "checked_at"),
+        Index("ix_outcome_reconciliation_pending_reverify", "project_id", "proof_status", "proof_next_check_at"),
         Index("ix_outcome_reconciliation_call", "call_id"),
         Index("ix_outcome_reconciliation_trace", "project_id", "trace_id"),
     )

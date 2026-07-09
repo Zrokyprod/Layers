@@ -28,7 +28,11 @@ from app.services.action_receipts import (
 )
 from app.services.action_runner import register_action_runner
 from app.services.action_timeline import record_action_timeline_event
-from app.services.outcome_reconciliation import ApiRecordConnector, reconcile_outcome
+from app.services.outcome_reconciliation import (
+    ApiRecordConnector,
+    intent_proof_status_for_check,
+    reconcile_outcome,
+)
 from app.services.protected_action_billing import METER_RUNNER_EXECUTIONS, reserve_usage_meter
 
 
@@ -139,7 +143,8 @@ class McpPostExecutionProcessor:
         intent = self._db.execute(
             select(ActionIntent).where(ActionIntent.project_id == project_id, ActionIntent.id == intent_id)
         ).scalar_one()
-        intent.proof_status = outcome.verdict
+        intent_proof_status = intent_proof_status_for_check(outcome)
+        intent.proof_status = intent_proof_status
         intent.receipt_status = "pending"
         self._db.add(intent)
         record_action_timeline_event(
@@ -165,7 +170,7 @@ class McpPostExecutionProcessor:
         )
         self._db.commit()
         return McpPostExecutionResult(
-            proof_status=outcome.verdict,
+            proof_status=intent_proof_status,
             receipt_id=generated.row.id,
             receipt_digest=generated.row.receipt_digest,
             signature_algorithm=generated.row.signature_algorithm,

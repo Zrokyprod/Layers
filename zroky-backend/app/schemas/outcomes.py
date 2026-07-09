@@ -400,6 +400,8 @@ class OutcomeReconciliationView(BaseModel):
     system_ref: str | None
     verdict: str
     verification_status: str
+    proof_status: str | None = None
+    proof_reason_code: str | None = None
     reason: str | None
     amount_usd: float | None
     currency: str | None
@@ -408,6 +410,9 @@ class OutcomeReconciliationView(BaseModel):
     comparison: dict[str, Any]
     idempotency_key: str | None
     metadata: dict[str, Any] | None
+    proof_observed_at: datetime | None = None
+    proof_deadline_at: datetime | None = None
+    proof_next_check_at: datetime | None = None
     checked_at: datetime
     created_at: datetime
 

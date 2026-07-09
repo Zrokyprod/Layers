@@ -9,7 +9,9 @@ from sqlalchemy.orm import sessionmaker
 from app.db.base import Base
 from app.services.outcome_reconciliation import (
     ApiRecordConnector,
+    list_pending_reconciliations_due,
     reconcile_outcome,
+    sweep_pending_reconciliation_checks,
     verification_status_for_check,
 )
 from app.services.proof_connector_manifest import (
@@ -43,6 +45,7 @@ def _manifest(*, action_time: datetime) -> dict[str, object]:
             "correlation_field": "request_id",
             "expected_correlation_claim_field": "correlation_id",
         },
+        "poll": {"interval_seconds": 15},
     }
 
 
@@ -157,6 +160,8 @@ def test_proof_manifest_keeps_missing_record_pending_inside_window() -> None:
 
     assert evaluation.status == PROOF_PENDING
     assert evaluation.reason == "verification_window_open"
+    assert evaluation.deadline_at == action_time + timedelta(seconds=60)
+    assert evaluation.next_check_at == action_time + timedelta(seconds=35)
 
 
 def test_proof_manifest_marks_missing_record_after_window_as_mismatch() -> None:
@@ -170,7 +175,7 @@ def test_proof_manifest_marks_missing_record_after_window_as_mismatch() -> None:
     )
 
     assert evaluation.status == PROOF_MISMATCHED
-    assert evaluation.reason == "system_of_record_record_missing_after_window"
+    assert evaluation.reason == "no_sor_trace"
 
 
 def test_proof_manifest_marks_connector_outage_as_pending_or_unverifiable() -> None:
@@ -185,7 +190,9 @@ def test_proof_manifest_marks_connector_outage_as_pending_or_unverifiable() -> N
         checked_at=action_time + timedelta(seconds=90),
     )
     assert pending.status == PROOF_PENDING
-    assert pending.reason == "connector_retryable"
+    assert pending.reason == "sor_unreachable"
+    assert pending.deadline_at == action_time + timedelta(seconds=60)
+    assert pending.next_check_at == action_time + timedelta(seconds=60)
 
     unverifiable = evaluate_proof_manifest(
         claimed={"user_id": "usr_123", "status": "deactivated"},
@@ -271,11 +278,91 @@ def test_reconcile_outcome_stores_proof_status_in_existing_row(tmp_path) -> None
             )
 
             assert row.verdict == "matched"
+            assert row.proof_status == PROOF_MATCHED
+            assert row.proof_reason_code == "temporal_causal_match"
+            assert row.proof_observed_at == action_time + timedelta(seconds=5)
+            assert row.proof_deadline_at == action_time + timedelta(seconds=60)
+            assert row.proof_next_check_at is None
             assert verification_status_for_check(row) == PROOF_MATCHED
             metadata = json.loads(row.metadata_json)
             assert metadata["proof"]["status"] == PROOF_MATCHED
             assert metadata["proof"]["point_in_time"] is True
             assert metadata["proof_manifest"]["capability"] == "user.deactivation.proof"
+    finally:
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_pending_proof_rows_are_queryable_and_expire_bounded(tmp_path) -> None:
+    project_id = "proj_proof_pending_sweep"
+    action_time = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'proof_pending.db'}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    try:
+        with SessionLocal() as session:
+            due_row = reconcile_outcome(
+                session,
+                project_id=project_id,
+                claimed={"user_id": "usr_123", "status": "deactivated"},
+                connector=ApiRecordConnector(
+                    record=None,
+                    record_found=False,
+                    connector_type="generic_rest_api",
+                ),
+                proof_manifest=_manifest(action_time=action_time),
+                checked_at=action_time + timedelta(seconds=20),
+                idempotency_key="proof-pending-due",
+            )
+            not_due_row = reconcile_outcome(
+                session,
+                project_id=project_id,
+                claimed={"user_id": "usr_456", "status": "deactivated"},
+                connector=ApiRecordConnector(
+                    record=None,
+                    record_found=False,
+                    connector_type="generic_rest_api",
+                ),
+                proof_manifest=_manifest(action_time=action_time),
+                checked_at=action_time + timedelta(seconds=30),
+                idempotency_key="proof-pending-not-due",
+            )
+
+            assert due_row.proof_status == PROOF_PENDING
+            assert due_row.proof_reason_code == "verification_window_open"
+            assert due_row.proof_next_check_at == action_time + timedelta(seconds=35)
+            assert not_due_row.proof_next_check_at == action_time + timedelta(seconds=45)
+
+            due = list_pending_reconciliations_due(
+                session,
+                project_id=project_id,
+                now=action_time + timedelta(seconds=36),
+            )
+            assert [row.id for row in due] == [due_row.id]
+
+            result = sweep_pending_reconciliation_checks(
+                session,
+                project_id=project_id,
+                now=action_time + timedelta(seconds=70),
+            )
+            assert set(result.expired_check_ids) == {due_row.id, not_due_row.id}
+            assert result.expired == 2
+            assert result.due_for_reverify == 0
+
+            refreshed = {
+                row.id: row
+                for row in session.query(type(due_row))
+                .filter(type(due_row).project_id == project_id)
+                .all()
+            }
+            assert refreshed[due_row.id].proof_status == PROOF_MISMATCHED
+            assert refreshed[due_row.id].verdict == "mismatched"
+            assert refreshed[due_row.id].proof_next_check_at is None
+            assert json.loads(refreshed[due_row.id].metadata_json)["proof"]["resolved_at"]
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
