@@ -250,6 +250,16 @@ class Settings(BaseSettings):
     # re-wrap rotation can find rows still encrypted under the previous KEK.
     PROVIDER_KEY_VAULT_KEY_ID: str = "local-dev-kek-v1"
 
+    # MCP-native interception (Gap 1: distribution). When enabled, the
+    # /v1/mcp/{project_id} ingress proxies an agent's MCP traffic through the
+    # runtime-policy gate. Default OFF so the route is inert (404) until an
+    # operator opts a deployment in. MCP_UPSTREAM_URL is the real MCP server
+    # that allowed tool calls are forwarded to (per-project override lands in
+    # a later slice; this is the deployment-wide default).
+    MCP_INTERCEPTION_ENABLED: bool = False
+    MCP_UPSTREAM_URL: Optional[str] = None
+    MCP_UPSTREAM_TIMEOUT_SECONDS: float = 30.0
+
     # Hosted billing uses Razorpay. When disabled, paid checkout/verification
     # endpoints return 503; self-host profiles keep billing disabled by default.
     BILLING_ENABLED: bool = False
