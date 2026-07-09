@@ -56,6 +56,12 @@ beat_schedule["stale-action-execution-attempt-sweep"] = {
     "schedule": max(30, int(settings.ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS)),
     "options": {"queue": "diagnosis_fast"},
 }
+if settings.PROOF_PENDING_SWEEP_ENABLED:
+    beat_schedule["pending-proof-reconciliation-sweep"] = {
+        "task": "app.worker.tasks.sweep_pending_proof_reconciliations",
+        "schedule": max(30, int(settings.PROOF_PENDING_SWEEP_INTERVAL_SECONDS)),
+        "options": {"queue": "diagnosis_fast"},
+    }
 
 if settings.SOURCE_MUTATION_POLLER_ENABLED:
     beat_schedule["source-mutation-poller"] = {
