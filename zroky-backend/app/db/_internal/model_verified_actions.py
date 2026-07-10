@@ -225,6 +225,56 @@ class ActionExecutionAttempt(Base):
     )
 
 
+class PrivateRunnerVerificationJob(Base):
+    """Read-only SOR verification work claimed by one customer-hosted runner."""
+
+    __tablename__ = "private_runner_verification_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action_intent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_intents.id", ondelete="CASCADE"), nullable=False
+    )
+    execution_attempt_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_execution_attempts.id", ondelete="CASCADE"), nullable=False
+    )
+    runner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_runners.id", ondelete="RESTRICT"), nullable=False
+    )
+    connector_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    credential_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'queued'"))
+    plan_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    context_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "execution_attempt_id",
+            name="ux_private_runner_verify_project_attempt",
+        ),
+        CheckConstraint(
+            "status IN ('queued','claimed','succeeded','failed','cancelled')",
+            name="ck_private_runner_verify_status",
+        ),
+        Index(
+            "ix_private_runner_verify_project_runner_status",
+            "project_id",
+            "runner_id",
+            "status",
+            "created_at",
+        ),
+    )
+
+
 class ActionTimelineEvent(Base):
     """Append-only lifecycle event for a protected action intent."""
 

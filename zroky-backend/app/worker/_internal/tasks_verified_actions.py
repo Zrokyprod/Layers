@@ -131,4 +131,37 @@ def sweep_pending_proof_reconciliations(limit: int | None = None) -> dict:
         session.close()
 
 
+@celery_app.task(
+    name="app.worker.tasks.sweep_stale_private_runner_verifications",
+    queue="diagnosis_fast",
+)
+def sweep_stale_private_runner_verifications(limit: int | None = None) -> dict:
+    """Settle verification jobs when their assigned private runner disappears."""
+    from app.services.private_runner_verification import (
+        sweep_stale_private_runner_verifications as sweep_jobs,
+    )
+
+    settings = get_settings()
+    effective_limit = (
+        int(limit)
+        if limit is not None and limit > 0
+        else int(settings.PRIVATE_RUNNER_VERIFICATION_SWEEP_LIMIT)
+    )
+    session = SessionLocal()
+    try:
+        result = sweep_jobs(
+            session,
+            stale_after_seconds=int(settings.PRIVATE_RUNNER_VERIFICATION_STALE_SECONDS),
+            limit=effective_limit,
+        )
+        session.commit()
+        logger.info(
+            "stale_private_runner_verifications.completed",
+            extra={"event": "private_runner_verification", "expired": result["expired"]},
+        )
+        return result
+    finally:
+        session.close()
+
+
 __all__ = [name for name in globals() if not name.startswith("__")]

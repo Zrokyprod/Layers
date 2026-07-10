@@ -57,6 +57,13 @@ from app.services.action_runner import (
     start_execution_attempt,
 )
 from app.services.action_timeline import list_action_timeline
+from app.services.private_runner_verification import (
+    PrivateRunnerVerificationError,
+    PrivateRunnerVerificationNotFound,
+    PrivateRunnerVerificationStateError,
+    claim_private_runner_verification,
+    finish_private_runner_verification,
+)
 from app.services.protected_action_billing import (
     ProtectedActionMeteringUnavailable,
     ProtectedActionQuotaExceeded,
@@ -202,6 +209,62 @@ def claim_runner_execution_attempt(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.commit()
     return _execution_attempt_response(row)
+
+
+@router.post(
+    "/v1/action-runners/{runner_id}/verification-jobs/claim",
+    response_model=PrivateRunnerVerificationJobResponse,
+)
+@limiter.limit("120/minute")
+def claim_runner_verification_job(
+    request: Request,
+    runner_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> PrivateRunnerVerificationJobResponse:
+    _require_role(context, "member")
+    try:
+        row = claim_private_runner_verification(
+            db, project_id=context.tenant_id, runner_id=runner_id
+        )
+    except PrivateRunnerVerificationNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    db.commit()
+    return _private_runner_verification_job_response(row)
+
+
+@router.post(
+    "/v1/action-runners/{runner_id}/verification-jobs/{verification_job_id}/finish",
+    response_model=PrivateRunnerVerificationJobResponse,
+)
+@limiter.limit("120/minute")
+def finish_runner_verification_job(
+    request: Request,
+    runner_id: str,
+    verification_job_id: str,
+    body: PrivateRunnerVerificationFinishRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> PrivateRunnerVerificationJobResponse:
+    _require_role(context, "member")
+    try:
+        row = finish_private_runner_verification(
+            db,
+            project_id=context.tenant_id,
+            runner_id=runner_id,
+            job_id=verification_job_id,
+            actual_record=body.actual_record,
+            record_found=body.record_found,
+            error_message=body.error_message,
+        )
+    except PrivateRunnerVerificationNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PrivateRunnerVerificationStateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PrivateRunnerVerificationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    db.commit()
+    return _private_runner_verification_job_response(row)
 
 
 @router.get("/v1/action-packs", response_model=ActionPackListResponse)

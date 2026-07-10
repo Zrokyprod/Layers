@@ -174,6 +174,8 @@ def test_runner_daemon_heartbeats_backs_off_and_stops() -> None:
             )
         if request.url.path.endswith("/execution-attempts/claim"):
             return httpx.Response(404, json={"detail": "No claimable execution attempt found."})
+        if request.url.path.endswith("/verification-jobs/claim"):
+            return httpx.Response(404, json={"detail": "No claimable verification job found."})
         raise AssertionError(f"unexpected request {request.method} {request.url}")
 
     runner = ProtectedActionRunner(
@@ -291,3 +293,70 @@ def test_runner_executes_stripe_refund_create(monkeypatch: pytest.MonkeyPatch) -
     assert stripe_requests[0].method == "POST"
     assert finish_payloads[0]["result_summary"]["adapter"] == "stripe_refund"
     assert finish_payloads[0]["result_summary"]["provider_ref"] == "re_123"
+
+
+def test_runner_verifies_stripe_refund_without_returning_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credential_ref = "customer-runner-secret://payments/stripe"
+    monkeypatch.setenv(
+        credential_env_name(credential_ref),
+        json.dumps({"secret_key": "sk_test_secret"}),
+    )
+    finished_payloads: list[dict] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/verification-jobs/claim"):
+            return httpx.Response(
+                200,
+                json={
+                    "verification_job_id": "verify_123",
+                    "verification_plan": {
+                        "adapter": "stripe_refund",
+                        "operation": "refund.read",
+                        "credential_ref": credential_ref,
+                        "target": {"refund_id": "re_123"},
+                    },
+                },
+            )
+        if request.url.host == "api.stripe.com":
+            assert request.method == "GET"
+            assert request.headers["authorization"] == "Bearer sk_test_secret"
+            return httpx.Response(
+                200,
+                json={
+                    "id": "re_123",
+                    "status": "succeeded",
+                    "amount": 5000,
+                    "currency": "usd",
+                    "created": 1_700_000_000,
+                },
+            )
+        if request.url.path.endswith("/verification-jobs/verify_123/finish"):
+            payload = json.loads(request.content.decode("utf-8"))
+            finished_payloads.append(payload)
+            assert "sk_test_secret" not in json.dumps(payload)
+            return httpx.Response(
+                200,
+                json={"verification_job_id": "verify_123", "status": "succeeded"},
+            )
+        raise AssertionError(f"unexpected request {request.method} {request.url}")
+
+    runner = ProtectedActionRunner(
+        runner_id="runner_123",
+        api_key="zk_test",
+        project="proj_123",
+        api_base="https://api.zroky.test",
+        transport=httpx.MockTransport(_handler),
+    )
+
+    result = runner.run_verification_once()
+
+    assert result["status"] == "succeeded"
+    assert finished_payloads[0]["actual_record"] == {
+        "refund_id": "re_123",
+        "status": "succeeded",
+        "amount_minor": 5000,
+        "currency": "usd",
+        "created_at": 1_700_000_000,
+    }

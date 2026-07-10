@@ -63,6 +63,12 @@ if settings.PROOF_PENDING_SWEEP_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
+beat_schedule["stale-private-runner-verification-sweep"] = {
+    "task": "app.worker.tasks.sweep_stale_private_runner_verifications",
+    "schedule": max(30, int(settings.PRIVATE_RUNNER_VERIFICATION_SWEEP_INTERVAL_SECONDS)),
+    "options": {"queue": "diagnosis_fast"},
+}
+
 if settings.SOURCE_MUTATION_POLLER_ENABLED:
     beat_schedule["source-mutation-poller"] = {
         "task": "app.worker.tasks.poll_source_mutations",
