@@ -92,6 +92,28 @@ def test_canary_upstream_returns_matching_verification_hint(tmp_path: Path, monk
         _close(client)
 
 
+def test_canary_upstream_supports_initialize_and_notifications(tmp_path: Path, monkeypatch) -> None:
+    client = _client(tmp_path, monkeypatch)
+    try:
+        monkeypatch.setenv("MCP_CANARY_UPSTREAM_ENABLED", "true")
+        get_settings.cache_clear()
+        initialized = client.post(
+            "/internal/mcp-canary/upstream",
+            json={"jsonrpc": "2.0", "id": "init", "method": "initialize", "params": {}},
+        )
+        assert initialized.status_code == 200
+        assert initialized.json()["result"]["protocolVersion"] == "2025-06-18"
+
+        notification = client.post(
+            "/internal/mcp-canary/upstream",
+            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        )
+        assert notification.status_code == 202
+        assert notification.content == b""
+    finally:
+        _close(client)
+
+
 def test_canary_setup_creates_binding_and_short_lived_api_key(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     try:

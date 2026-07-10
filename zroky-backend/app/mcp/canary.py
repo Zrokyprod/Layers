@@ -16,7 +16,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from app.api.dependencies.provisioning import require_owner_provisioning_access
 from app.core.config import Settings, get_settings
 from app.db.models import ActionContractVersion, ApiKey, McpToolBinding, Project
 from app.db.session import get_db_session
+from app.mcp.gateway import HttpMcpBindingTester, activate_binding, test_binding, upsert_draft_binding
 from app.services.action_kernel import ActionContractConflict, register_action_contract
 from app.services.pilot import upsert_policy
 from app.services.security import generate_api_key_material
@@ -54,6 +55,7 @@ class McpCanarySetupResponse(BaseModel):
     api_key_expires_at: datetime
     mcp_upstream_path: str
     required_project_allowlist: str
+    upstream_binding_active: bool = False
 
 
 @router.post("/internal/mcp-canary/setup", response_model=McpCanarySetupResponse)
@@ -62,6 +64,7 @@ def setup_mcp_canary(
     body: McpCanarySetupRequest,
     _: None = Depends(require_owner_provisioning_access),
     db: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
 ) -> McpCanarySetupResponse:
     """Create or refresh the canary tenant config and mint a short-lived key."""
     project_id = body.project_id.strip()
@@ -69,6 +72,9 @@ def setup_mcp_canary(
     _ensure_project(db, project_id)
     contract = _ensure_contract(db, project_id)
     _ensure_binding(db, project_id, tool_name)
+    upstream_binding_active = _ensure_project_upstream_binding(
+        db, project_id=project_id, tool_name=tool_name, settings=settings
+    )
     upsert_policy(
         db,
         project_id=project_id,
@@ -102,14 +108,15 @@ def setup_mcp_canary(
         api_key_expires_at=expires_at,
         mcp_upstream_path="/internal/mcp-canary/upstream",
         required_project_allowlist=project_id,
+        upstream_binding_active=upstream_binding_active,
     )
 
 
-@router.post("/internal/mcp-canary/upstream")
+@router.post("/internal/mcp-canary/upstream", response_model=None)
 def mcp_canary_upstream(
     message: dict[str, Any],
     settings: Settings = Depends(get_settings),
-) -> dict[str, Any]:
+) -> dict[str, Any] | Response:
     """Tiny synthetic MCP server for production smoke tests."""
     if not settings.MCP_CANARY_UPSTREAM_ENABLED:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
@@ -117,6 +124,20 @@ def mcp_canary_upstream(
     request_id = message.get("id")
     method = message.get("method")
     params = message.get("params") or {}
+
+    if method == "initialize":
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "zroky-mcp-canary", "version": "1.0"},
+            },
+        }
+
+    if request_id is None and isinstance(method, str) and method.startswith("notifications/"):
+        return Response(status_code=status.HTTP_202_ACCEPTED)
 
     if method == "tools/list":
         return {
@@ -260,3 +281,43 @@ def _ensure_binding(db: Session, project_id: str, tool_name: str) -> None:
     binding.status = "active"
     db.add(binding)
     db.flush()
+
+
+def _ensure_project_upstream_binding(
+    db: Session,
+    *,
+    project_id: str,
+    tool_name: str,
+    settings: Settings,
+) -> bool:
+    """Activate only the synthetic canary URL through the managed path."""
+    if not settings.MCP_CANARY_UPSTREAM_ENABLED or not settings.MCP_UPSTREAM_URL:
+        return False
+    from urllib.parse import urlsplit
+
+    if urlsplit(settings.MCP_UPSTREAM_URL).path != "/internal/mcp-canary/upstream":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="MCP canary upstream URL is not the synthetic endpoint.",
+        )
+    upsert_draft_binding(
+        db,
+        project_id=project_id,
+        endpoint_url=settings.MCP_UPSTREAM_URL,
+        protocol_version="2025-06-18",
+        bearer_credential_id=None,
+        allowed_tools=[tool_name],
+        actor_subject="mcp-canary-setup",
+    )
+    binding, discovered_tools = test_binding(
+        db,
+        project_id=project_id,
+        tester=HttpMcpBindingTester(timeout_seconds=settings.MCP_UPSTREAM_TIMEOUT_SECONDS),
+    )
+    if binding.test_status != "succeeded" or tool_name not in discovered_tools:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Synthetic MCP canary upstream failed managed preflight.",
+        )
+    activate_binding(db, project_id=project_id, actor_subject="mcp-canary-setup")
+    return True
