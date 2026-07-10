@@ -139,6 +139,30 @@ class ActionRunnerClaimRequest(BaseModel):
     runner_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class PrivateRunnerVerificationFinishRequest(BaseModel):
+    actual_record: dict[str, Any] = Field(default_factory=dict)
+    record_found: bool = True
+    error_message: str | None = Field(default=None, max_length=1000)
+
+
+class PrivateRunnerVerificationJobResponse(BaseModel):
+    verification_job_id: str
+    project_id: str
+    action_id: str
+    execution_attempt_id: str
+    runner_id: str
+    connector_type: str
+    credential_ref: str
+    status: str
+    verification_plan: dict[str, Any]
+    result: dict[str, Any]
+    error_message: str | None
+    claimed_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class ActionRunnerResponse(BaseModel):
     runner_id: str
     project_id: str

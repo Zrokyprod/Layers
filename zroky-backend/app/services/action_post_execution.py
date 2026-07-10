@@ -3,6 +3,8 @@ from __future__ import annotations
 from app.db.models import McpInterceptionEvent
 from app.services._action_post_execution_connectors import *  # noqa: F403
 from app.services._action_post_execution_core import *  # noqa: F403
+from app.services.connector_credentials import RemoteCredentialResolutionRequired
+from app.services.private_runner_verification import enqueue_private_runner_verification
 
 
 def _direct_record_connector_for_context(context: Mapping[str, Any]) -> ApiRecordConnector | None:
@@ -96,6 +98,23 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                     intent=intent,
                     context=context,
                 )
+            except RemoteCredentialResolutionRequired:
+                runner_job = enqueue_private_runner_verification(
+                    db,
+                    intent=intent,
+                    attempt=attempt,
+                    context=context,
+                    connector_type=connector_type,
+                )
+                if runner_job is not None:
+                    return {
+                        "status": "pending_private_runner",
+                        "verification_job_id": runner_job.id,
+                        "runner_id": runner_job.runner_id,
+                        "connector_type": runner_job.connector_type,
+                    }
+                connector = None
+                missing_reason = "private_runner_unavailable"
             except Exception as exc:  # noqa: BLE001
                 connector = None
                 missing_reason = exc.__class__.__name__

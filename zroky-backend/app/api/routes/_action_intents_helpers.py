@@ -21,6 +21,7 @@ from app.services.action_runner import (
     execution_attempt_result_summary,
 )
 from app.services.action_timeline import action_timeline_event_payload
+from app.services.private_runner_verification import verification_job_plan, verification_job_result
 from app.services.protected_action_billing import (
     ProtectedActionMeteringUnavailable,
     ProtectedActionQuotaExceeded,
@@ -141,6 +142,26 @@ def _execution_attempt_response(row) -> ActionExecutionAttemptResponse:
         protected_credential_returned=row.protected_credential_returned,
         requested_by_subject=row.requested_by_subject,
         started_at=row.started_at,
+        finished_at=row.finished_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _private_runner_verification_job_response(row) -> PrivateRunnerVerificationJobResponse:
+    return PrivateRunnerVerificationJobResponse(
+        verification_job_id=row.id,
+        project_id=row.project_id,
+        action_id=row.action_intent_id,
+        execution_attempt_id=row.execution_attempt_id,
+        runner_id=row.runner_id,
+        connector_type=row.connector_type,
+        credential_ref=row.credential_ref,
+        status=row.status,
+        verification_plan=verification_job_plan(row),
+        result=verification_job_result(row),
+        error_message=row.error_message,
+        claimed_at=row.claimed_at,
         finished_at=row.finished_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
