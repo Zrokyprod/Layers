@@ -198,6 +198,30 @@ def test_path_project_must_match_authorized_tenant(client: TestClient, fake_upst
     assert fake_upstream.calls == []
 
 
+def test_project_allowlist_keeps_non_canary_projects_inert(
+    client: TestClient,
+    fake_upstream: FakeUpstream,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _seed_project(client, "proj_allowed")
+    _seed_project(client, "proj_blocked")
+    monkeypatch.setenv("MCP_INTERCEPTION_PROJECT_ALLOWLIST", "proj_allowed")
+    get_settings.cache_clear()
+    blocked = client.post(
+        "/v1/mcp/proj_blocked",
+        headers={"X-Project-Id": "proj_blocked"},
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+    )
+    assert blocked.status_code == 404
+    allowed = client.post(
+        "/v1/mcp/proj_allowed",
+        headers={"X-Project-Id": "proj_allowed"},
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+    )
+    assert allowed.status_code == 200
+    assert fake_upstream.calls == []
+
+
 def test_unprotected_tool_bypasses_kernel_and_forwards(client: TestClient, fake_upstream: FakeUpstream):
     _seed_project(client, "proj_read")
     # No contract registered at all — an unprotected read must not need one.
