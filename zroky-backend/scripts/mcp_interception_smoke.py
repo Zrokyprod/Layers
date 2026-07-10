@@ -243,10 +243,10 @@ def run_smoke(args: argparse.Namespace) -> int:
 
 
 def _validate_inline_receipt_meta(meta: dict[str, Any]) -> str | None:
-    receipt_keys = ("receipt_id", "receipt_digest", "signature_valid", "proof_status")
-    if not any(key in meta for key in receipt_keys):
+    receipt_identity_keys = ("receipt_id", "receipt_digest", "signature_valid")
+    if not any(key in meta for key in receipt_identity_keys):
         return None
-    missing = [key for key in receipt_keys if key not in meta]
+    missing = [key for key in (*receipt_identity_keys, "proof_status") if key not in meta]
     if missing:
         raise RuntimeError(f"Receipt metadata missing keys {missing}")
     if meta.get("signature_valid") is not True:
