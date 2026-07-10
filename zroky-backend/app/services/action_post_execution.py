@@ -5,6 +5,10 @@ from app.services._action_post_execution_connectors import *  # noqa: F403
 from app.services._action_post_execution_core import *  # noqa: F403
 from app.services.connector_credentials import RemoteCredentialResolutionRequired
 from app.services.private_runner_verification import enqueue_private_runner_verification
+from app.services.verification_execution_controls import (
+    ControlledConnector,
+    VerificationExecutionControls,
+)
 
 
 def _direct_record_connector_for_context(context: Mapping[str, Any]) -> ApiRecordConnector | None:
@@ -132,6 +136,14 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                 trace = _as_dict(context.get("trace"))
                 claimed = _as_dict(context.get("claimed"))
                 metadata = _base_metadata(intent=intent, attempt=attempt, job=job, connector_type=connector_type)
+                connector = ControlledConnector(
+                    connector=connector,
+                    controls=VerificationExecutionControls(
+                        project_id=intent.project_id,
+                        connector_type=connector_type,
+                        token=job.id,
+                    ),
+                )
                 try:
                     outcome = reconcile_outcome(
                         db,
@@ -417,6 +429,13 @@ def process_next_action_post_execution_job(
 ) -> ProcessedPostExecutionJob | None:
     job = _claim_next_job(db, worker_id=worker_id, lease_seconds=lease_seconds)
     if job is None:
+        return None
+    started = start_claimed_action_post_execution_job(
+        db,
+        job_id=job.id,
+        worker_id=worker_id,
+    )
+    if started is None:
         return None
     return process_action_post_execution_job(db, job_id=job.id)
 

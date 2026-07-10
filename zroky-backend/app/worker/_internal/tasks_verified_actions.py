@@ -3,12 +3,13 @@ from app.worker._internal.tasks_common import *
 
 @celery_app.task(
     name="app.worker.tasks.process_action_post_execution_jobs",
-    queue="diagnosis_fast",
+    queue="verification_control",
 )
 def process_action_post_execution_jobs(limit: int | None = None) -> dict:
-    """Poll the verified-action transactional outbox."""
+    """Fairly claim verified-action outbox rows and publish their work lanes."""
     from app.services.action_post_execution import (
-        process_action_post_execution_jobs as process_jobs,
+        claim_action_post_execution_jobs,
+        requeue_claimed_action_post_execution_job,
     )
 
     settings = get_settings()
@@ -19,16 +20,43 @@ def process_action_post_execution_jobs(limit: int | None = None) -> dict:
     )
     session = SessionLocal()
     try:
-        result = process_jobs(
+        jobs = claim_action_post_execution_jobs(
             session,
-            worker_id="celery-action-post-execution",
+            worker_id="celery-action-post-execution-dispatcher",
             limit=effective_limit,
         )
+        enqueued: list[dict[str, str]] = []
+        requeued: list[str] = []
+        for job in jobs:
+            queue = "verification_fetch" if job.job_type == "verify_outcome" else "verification_control"
+            try:
+                celery_app.send_task(
+                    "app.worker.tasks.execute_action_post_execution_job",
+                    args=[job.id],
+                    queue=queue,
+                )
+                enqueued.append({"job_id": job.id, "queue": queue})
+            except Exception as exc:  # noqa: BLE001
+                requeue_claimed_action_post_execution_job(
+                    session,
+                    job_id=job.id,
+                    reason=exc.__class__.__name__,
+                )
+                requeued.append(job.id)
+        result = {
+            "claimed": len(jobs),
+            "enqueued": len(enqueued),
+            "requeued": len(requeued),
+            "jobs": enqueued,
+            "requeued_job_ids": requeued,
+        }
         logger.info(
-            "action_post_execution_jobs.completed",
+            "action_post_execution_jobs.dispatched",
             extra={
                 "event": "verified_action_post_execution",
-                "processed": result["processed"],
+                "claimed": result["claimed"],
+                "enqueued": result["enqueued"],
+                "requeued": result["requeued"],
             },
         )
         return result
@@ -37,8 +65,39 @@ def process_action_post_execution_jobs(limit: int | None = None) -> dict:
 
 
 @celery_app.task(
+    name="app.worker.tasks.execute_action_post_execution_job",
+    queue="verification_fetch",
+)
+def execute_action_post_execution_job(job_id: str) -> dict:
+    """Run exactly one claimed outbox item in its already-selected lane."""
+    from app.services.action_post_execution import (
+        process_action_post_execution_job,
+        start_claimed_action_post_execution_job,
+    )
+
+    session = SessionLocal()
+    try:
+        started = start_claimed_action_post_execution_job(
+            session,
+            job_id=str(job_id),
+            worker_id="celery-action-post-execution-worker",
+        )
+        if started is None:
+            return {"status": "skipped", "job_id": str(job_id)}
+        processed = process_action_post_execution_job(session, job_id=started.id)
+        return {
+            "status": processed.job.status,
+            "job_id": processed.job.id,
+            "job_type": processed.job.job_type,
+            "result": processed.result,
+        }
+    finally:
+        session.close()
+
+
+@celery_app.task(
     name="app.worker.tasks.sweep_stale_action_execution_attempts",
-    queue="diagnosis_fast",
+    queue="verification_sweep",
 )
 def sweep_stale_action_execution_attempts(
     stale_after_seconds: int | None = None,
@@ -79,7 +138,7 @@ def sweep_stale_action_execution_attempts(
 
 @celery_app.task(
     name="app.worker.tasks.sweep_pending_proof_reconciliations",
-    queue="diagnosis_fast",
+    queue="verification_sweep",
 )
 def sweep_pending_proof_reconciliations(limit: int | None = None) -> dict:
     """Expire pending proof checks whose verification window has closed.
@@ -133,7 +192,7 @@ def sweep_pending_proof_reconciliations(limit: int | None = None) -> dict:
 
 @celery_app.task(
     name="app.worker.tasks.sweep_stale_private_runner_verifications",
-    queue="diagnosis_fast",
+    queue="verification_sweep",
 )
 def sweep_stale_private_runner_verifications(limit: int | None = None) -> dict:
     """Settle verification jobs when their assigned private runner disappears."""
