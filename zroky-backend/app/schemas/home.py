@@ -39,6 +39,19 @@ class HomeAgentProfileMeta(BaseModel):
     limit_reached: bool
 
 
+class HomeControlHealth(BaseModel):
+    active_agents: int = Field(ge=0)
+    policy_enforced_agents: int = Field(ge=0)
+    configured_action_packs: int = Field(ge=0)
+    online_runners: int = Field(ge=0)
+    active_sor_connectors: int = Field(ge=0)
+    tested_sor_connectors: int = Field(ge=0)
+    mcp_gateway_status: str
+    mcp_gateway_test_status: str
+    runtime_enabled: bool
+    kill_switch_enabled: bool
+
+
 class HomeSummaryData(BaseModel):
     intents: list[dict[str, Any]] = Field(default_factory=list)
     approvals: list[dict[str, Any]] = Field(default_factory=list)
@@ -52,6 +65,7 @@ class HomeSummaryData(BaseModel):
     action_runners: list[dict[str, Any]] = Field(default_factory=list)
     api_keys: list[dict[str, Any]] = Field(default_factory=list)
     billing_usage: dict[str, Any] | None = None
+    control_health: HomeControlHealth | None = None
 
 
 class HomeSummaryResponse(BaseModel):

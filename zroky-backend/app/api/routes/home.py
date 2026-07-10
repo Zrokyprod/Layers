@@ -26,14 +26,18 @@ from app.db.models import (
     ActionIntent,
     ActionReceipt,
     ApiKey,
+    McpUpstreamBinding,
     OutcomeReconciliationCheck,
+    PilotPolicy,
     RuntimePolicyDecision,
     SourceMutationRecord,
+    SystemOfRecordConnectorConfig,
 )
 from app.db.session import get_db_session
 from app.core.limiter import limiter
 from app.schemas.home import (
     HomeAgentProfileMeta,
+    HomeControlHealth,
     HomeSummaryData,
     HomeSummaryMetrics,
     HomeSummaryResponse,
@@ -159,6 +163,43 @@ def get_home_summary(
         offset=0,
     )
     active_agent_count = count_active_agent_profiles(db, project_id=tenant_id)
+    agent_payloads = [agent_profile_to_dict(row) for row in agent_rows]
+    policy_enforced_agents = sum(
+        1 for agent in agent_payloads
+        if bool((agent.get("metadata") or {}).get("runtime_policy_mandate_enforced"))
+    )
+    configured_action_packs = len({
+        str((agent.get("metadata") or {}).get("setup_action_pack_id")).strip()
+        for agent in agent_payloads
+        if str((agent.get("metadata") or {}).get("setup_action_pack_id") or "").strip()
+    })
+    runner_rows = list_action_runners(db, project_id=tenant_id)
+    online_runners = sum(1 for row in runner_rows if row.status == "online")
+    active_sor_connectors = _count(
+        db,
+        select(func.count(SystemOfRecordConnectorConfig.id)).where(
+            SystemOfRecordConnectorConfig.project_id == tenant_id,
+            SystemOfRecordConnectorConfig.is_active.is_(True),
+        ),
+    )
+    tested_sor_connectors = _count(
+        db,
+        select(func.count(SystemOfRecordConnectorConfig.id)).where(
+            SystemOfRecordConnectorConfig.project_id == tenant_id,
+            SystemOfRecordConnectorConfig.is_active.is_(True),
+            SystemOfRecordConnectorConfig.last_tested_at.is_not(None),
+        ),
+    )
+    mcp_binding = db.execute(
+        select(McpUpstreamBinding).where(McpUpstreamBinding.project_id == tenant_id)
+    ).scalar_one_or_none()
+    pilot_policy = db.execute(
+        select(PilotPolicy).where(PilotPolicy.project_id == tenant_id)
+    ).scalar_one_or_none()
+    try:
+        policy_payload = json.loads(pilot_policy.policy_json) if pilot_policy else {}
+    except (json.JSONDecodeError, TypeError):
+        policy_payload = {}
     max_active_agents = resolve_agent_profile_limit(db, project_id=tenant_id)
     key_rows: Sequence[ApiKey] = []
     if ROLE_RANK.get(context.role, 0) >= ROLE_RANK["admin"]:
@@ -231,15 +272,27 @@ def get_home_summary(
                 offset=0,
             )
         ],
-        agent_profiles=[agent_profile_to_dict(row) for row in agent_rows],
+        agent_profiles=agent_payloads,
         agent_profile_meta=HomeAgentProfileMeta(
             active_count=active_agent_count,
             max_active_agents=max_active_agents,
             limit_reached=max_active_agents >= 0 and active_agent_count >= max_active_agents,
         ),
-        action_runners=[_dump(_runner_response(row)) for row in list_action_runners(db, project_id=tenant_id)],
+        action_runners=[_dump(_runner_response(row)) for row in runner_rows],
         api_keys=[_dump(_api_key_to_response(row)) for row in key_rows],
         billing_usage=_dump(billing_usage) if billing_usage is not None else None,
+        control_health=HomeControlHealth(
+            active_agents=active_agent_count,
+            policy_enforced_agents=policy_enforced_agents,
+            configured_action_packs=configured_action_packs,
+            online_runners=online_runners,
+            active_sor_connectors=active_sor_connectors,
+            tested_sor_connectors=tested_sor_connectors,
+            mcp_gateway_status=mcp_binding.status if mcp_binding else "not_configured",
+            mcp_gateway_test_status=mcp_binding.test_status if mcp_binding else "not_tested",
+            runtime_enabled=bool(policy_payload.get("runtime_enabled", True)),
+            kill_switch_enabled=bool(policy_payload.get("kill_switch", False)),
+        ),
     )
 
     return HomeSummaryResponse(

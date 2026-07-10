@@ -342,7 +342,7 @@ function apiKey(overrides: Partial<ApiKeyResponse> = {}): ApiKeyResponse {
 
 function homeSummary(
   overrides: Partial<HomeSummaryResponse["metrics"]> = {},
-  data: HomeSummaryResponse["data"] = {},
+  data: HomeSummaryResponse["data"] = undefined,
 ): HomeSummaryResponse {
   return {
     project_id: "proj_1",
@@ -414,6 +414,18 @@ function mockHomeData(overrides: {
     action_runners: overrides.runners ?? [],
     api_keys: overrides.apiKeys ?? [apiKey()],
     billing_usage: overrides.billing ?? billingUsage(),
+    control_health: {
+      active_agents: agentProfileMeta.active_count,
+      policy_enforced_agents: profiles.filter((item) => item.metadata?.runtime_policy_mandate_enforced).length,
+      configured_action_packs: new Set(profiles.map((item) => item.metadata?.setup_action_pack_id).filter(Boolean)).size,
+      online_runners: (overrides.runners ?? []).filter((item) => item.status === "online").length,
+      active_sor_connectors: 0,
+      tested_sor_connectors: 0,
+      mcp_gateway_status: "not_configured",
+      mcp_gateway_test_status: "not_tested",
+      runtime_enabled: true,
+      kill_switch_enabled: false,
+    },
   };
   api.getHomeSummary.mockResolvedValue(
     overrides.homeSummary ??
@@ -618,9 +630,11 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Control coverage incomplete" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Protect your first agent action" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pilot control health")).toBeInTheDocument();
+    expect(screen.getByText("Proof source")).toBeInTheDocument();
     expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
   });
 
