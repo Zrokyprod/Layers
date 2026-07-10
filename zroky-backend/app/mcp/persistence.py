@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import McpInterceptionEvent, McpToolBinding
+from app.db.session import set_db_tenant_context
 from app.mcp.proxy import InterceptionEvent
 from app.mcp.tool_binding import ToolBinding
 
@@ -58,6 +59,7 @@ class DbEventSink:
     def record(self, event: InterceptionEvent) -> str:
         event_id = str(uuid.uuid4())
         with Session(bind=self._bind) as session:
+            set_db_tenant_context(session, self._project_id)
             session.add(
                 McpInterceptionEvent(
                     id=event_id,
@@ -95,6 +97,7 @@ class DbEventSink:
         if event_id is None:
             return
         with Session(bind=self._bind) as session:
+            set_db_tenant_context(session, self._project_id)
             row = session.get(McpInterceptionEvent, event_id)
             if row is None:
                 return

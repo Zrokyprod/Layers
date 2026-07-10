@@ -98,9 +98,19 @@ class EventSink(Protocol):
 class UpstreamTransport(Protocol):
     """The real MCP server(s) this proxy forwards allowed calls to."""
 
-    def list_tools(self) -> list[dict[str, Any]]: ...
+    allowed_tools: frozenset[str] | None
 
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]: ...
+    def list_tools(self, *, request_id: Any | None = None) -> list[dict[str, Any]]: ...
+
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        request_id: Any | None = None,
+    ) -> dict[str, Any]: ...
+
+    def notify(self, method: str, params: dict[str, Any] | None = None) -> None: ...
 
 
 class PostExecutionProcessor(Protocol):
@@ -163,7 +173,14 @@ def handle_message(
         return _ok(request_id, {})
 
     if method == "tools/list":
-        tools = upstream.list_tools()
+        tools = upstream.list_tools(request_id=request_id)
+        allowed_tools = getattr(upstream, "allowed_tools", None)
+        if allowed_tools is not None:
+            tools = [
+                tool
+                for tool in tools
+                if isinstance(tool, dict) and tool.get("name") in allowed_tools
+            ]
         for tool in tools:
             cls = classify_tool(tool.get("name", ""), None, bindings)
             tool.setdefault("_meta", {})["zroky"] = {
@@ -174,7 +191,7 @@ def handle_message(
 
     if method == "tools/call":
         result = _handle_tool_call(
-            params, session, kernel, upstream, bindings, event_sink, post_execution
+            params, request_id, session, kernel, upstream, bindings, event_sink, post_execution
         )
         return _ok(request_id, result)
 
@@ -193,6 +210,7 @@ def _effective_posture(classification: ActionClassification) -> str:
 
 def _handle_tool_call(
     params: dict[str, Any],
+    request_id: Any,
     session: McpSession,
     kernel: KernelPort,
     upstream: UpstreamTransport,
@@ -204,6 +222,21 @@ def _handle_tool_call(
     arguments = params.get("arguments") or {}
     classification = classify_tool(name, arguments, bindings)
     posture = _effective_posture(classification)
+    allowed_tools = getattr(upstream, "allowed_tools", None)
+    if allowed_tools is not None and name not in allowed_tools:
+        return _deny_with_audit(
+            event_sink,
+            classification,
+            name,
+            intent_id=None,
+            # An explicit upstream allowlist is a hard configuration boundary,
+            # so its deny is always recorded before returning to the agent.
+            required_audit=True,
+            text="This tool is not authorized for the configured MCP upstream.",
+            meta_reason="tool_not_allowed",
+            remediation=for_policy_deny(["tool_not_allowed"]),
+            fail="closed",
+        )
 
     try:
         outcome = evaluate(
@@ -243,6 +276,7 @@ def _handle_tool_call(
         return _forward(
             name,
             arguments,
+            request_id,
             upstream,
             event_sink,
             post_execution,
@@ -291,6 +325,7 @@ def _handle_tool_call(
     return _forward(
         name,
         arguments,
+        request_id,
         upstream,
         event_sink,
         post_execution,
@@ -339,6 +374,7 @@ def _deny_with_audit(
 def _forward(
     name: str,
     arguments: dict[str, Any],
+    request_id: Any,
     upstream: UpstreamTransport,
     event_sink: EventSink | None,
     post_execution: PostExecutionProcessor | None,
@@ -360,7 +396,7 @@ def _forward(
         return audit_error
 
     try:
-        result = upstream.call_tool(name, arguments)
+        result = upstream.call_tool(name, arguments, request_id=request_id)
     except Exception as exc:
         logger.exception("mcp.upstream_error tool=%s decision=%s", name, decision)
         receipt_meta = _post_execute_best_effort(

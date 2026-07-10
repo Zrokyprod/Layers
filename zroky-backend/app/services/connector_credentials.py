@@ -330,6 +330,47 @@ def get_connector_credential(
     ).scalar_one_or_none()
 
 
+def resolve_managed_bearer_credential(
+    db: Session,
+    *,
+    project_id: str,
+    credential_id: str,
+    allowed_connector_type: str,
+) -> str:
+    """Resolve a tenant-owned managed bearer token for a narrow runtime use.
+
+    The caller supplies the exact connector type it is implementing. This
+    prevents a credential scoped for one system from being repurposed by a
+    different transport, while keeping plaintext out of configuration rows,
+    route responses, and audit payloads.
+    """
+    credential = get_connector_credential(
+        db, project_id=project_id, credential_id=credential_id
+    )
+    if credential is None or not credential.is_active:
+        raise CredentialUnavailableError("connector credential is inactive or unavailable")
+    if credential.credential_kind != "bearer_token":
+        raise CredentialUnavailableError("connector credential kind is invalid")
+    try:
+        allowed_types = json.loads(credential.allowed_connector_types_json or "[]")
+    except (TypeError, ValueError):
+        raise CredentialUnavailableError("connector credential scope is invalid") from None
+    if allowed_connector_type not in allowed_types:
+        raise CredentialUnavailableError("connector credential is not scoped to this transport")
+    now = _utc_now()
+    if credential.expires_at is not None and credential.expires_at <= now:
+        raise CredentialUnavailableError("connector credential has expired")
+    if credential.custody_mode != "zroky_managed" or credential.ciphertext is None:
+        raise RemoteCredentialResolutionRequired(
+            "MCP upstream requires a managed bearer credential; remote resolution is not available"
+        )
+    plaintext = decrypt_provider_key(ciphertext=credential.ciphertext, project_id=project_id)
+    credential.last_used_at = now
+    db.add(credential)
+    db.flush()
+    return plaintext
+
+
 def list_connector_credentials(
     db: Session, *, project_id: str, include_inactive: bool = False
 ) -> list[ConnectorCredential]:
