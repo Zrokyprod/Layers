@@ -23,7 +23,7 @@ def _saved_connector_for_context(
         refund_id = _text(verification.get("refund_id"), target.get("refund_id"), claimed.get("refund_id"), result.get("refund_id"))
         if refund_id is None:
             return None, connector_type, "refund_id_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_ledger_refund_connector(
                 config,
@@ -41,7 +41,7 @@ def _saved_connector_for_context(
         refund_id = _text(verification.get("refund_id"), target.get("refund_id"), claimed.get("refund_id"), result.get("refund_id"))
         if refund_id is None:
             return None, connector_type, "stripe_refund_id_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_stripe_refund_connector(
                 config,
@@ -67,7 +67,7 @@ def _saved_connector_for_context(
         )
         if refund_id is None:
             return None, connector_type, "razorpay_refund_id_missing"
-        key_secret = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        key_secret = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_razorpay_refund_connector(
                 config,
@@ -84,7 +84,7 @@ def _saved_connector_for_context(
         customer_id = _text(verification.get("customer_id"), target.get("customer_id"), claimed.get("customer_id"), result.get("customer_id"))
         if customer_id is None:
             return None, connector_type, "customer_id_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_customer_record_connector(
                 config,
@@ -115,7 +115,7 @@ def _saved_connector_for_context(
         )
         if record_ref is None:
             return None, connector_type, "hubspot_record_ref_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_hubspot_crm_connector(
                 config,
@@ -143,7 +143,7 @@ def _saved_connector_for_context(
         )
         if record_ref is None:
             return None, connector_type, "zendesk_ticket_ref_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_zendesk_ticket_connector(
                 config,
@@ -179,7 +179,7 @@ def _saved_connector_for_context(
         )
         if record_ref is None:
             return None, connector_type, "jira_issue_ref_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_jira_issue_connector(
                 config,
@@ -219,7 +219,7 @@ def _saved_connector_for_context(
         )
         if record_ref is None:
             return None, connector_type, "salesforce_record_ref_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
         return (
             build_salesforce_crm_connector(
                 config,
@@ -264,6 +264,7 @@ def _saved_connector_for_context(
             config,
             project_id=intent.project_id,
             settings=settings,
+            db=db,
         )
         return (
             build_zoho_crm_connector(
@@ -306,7 +307,7 @@ def _saved_connector_for_context(
         if record_ref is None:
             return None, connector_type, "netsuite_record_ref_missing"
         bearer_token = decrypt_connector_bearer_token(
-            config, project_id=intent.project_id
+            config, project_id=intent.project_id, db=db
         )
         return (
             build_netsuite_finance_connector(
@@ -324,7 +325,7 @@ def _saved_connector_for_context(
     if connector_type == POSTGRES_READ_CONNECTOR_TYPE:
         if not config.read_query:
             return None, connector_type, "postgres_read_query_missing"
-        database_url = decrypt_connector_database_url(config, project_id=intent.project_id)
+        database_url = decrypt_connector_database_url(config, project_id=intent.project_id, db=db)
         if not database_url:
             return None, connector_type, "postgres_database_url_missing"
         params = verification.get("params") if isinstance(verification.get("params"), Mapping) else result.get("params")
@@ -350,7 +351,7 @@ def _saved_connector_for_context(
     )
     if record_ref is None:
         return None, GENERIC_REST_CONNECTOR_TYPE, "record_ref_missing"
-    bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id)
+    bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
     return (
         build_generic_rest_connector(
             config,
