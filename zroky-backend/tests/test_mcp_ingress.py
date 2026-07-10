@@ -29,6 +29,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import (
     ActionExecutionAttempt,
+    ActionPostExecutionJob,
     ActionReceipt,
     McpInterceptionEvent,
     McpToolBinding,
@@ -38,6 +39,7 @@ from app.db.models import (
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.mcp.routes import get_mcp_upstream
+from app.services.action_post_execution import process_action_post_execution_jobs
 from app.services.pilot import upsert_policy
 
 
@@ -332,7 +334,7 @@ def test_allow_writes_durable_event(client: TestClient):
     assert events[0].intent_id
 
 
-def test_protected_allow_generates_signed_receipt_and_links_event(
+def test_protected_allow_queues_async_receipt_and_worker_links_event(
     client: TestClient, fake_upstream: FakeUpstream
 ):
     project = "proj_mcp_receipt"
@@ -342,24 +344,38 @@ def test_protected_allow_generates_signed_receipt_and_links_event(
     resp = _call(client, project, "adjust_inventory", {"sku": "X", "delta": -1})
     meta = _zroky_meta(resp)
     assert meta["decision"] == "allow"
-    assert meta["receipt_id"]
-    assert meta["receipt_digest"].startswith("sha256:")
-    assert meta["signature_valid"] is True
-    assert meta["proof_status"] == "not_verified"  # no independent SOR evidence was supplied
+    assert meta["post_execution_status"] == "queued"
+    assert meta["receipt_status"] == "pending"
+    assert meta["proof_status"] == "pending"
+    assert "receipt_id" not in meta
 
     with client._session_factory() as session:  # type: ignore[attr-defined]
-        receipt = session.get(ActionReceipt, meta["receipt_id"])
-        assert receipt is not None
-        assert receipt.receipt_digest == meta["receipt_digest"]
-        assert json.loads(receipt.receipt_json)["verification"]["status"] == "unverifiable"
+        assert session.query(ActionReceipt).filter_by(project_id=project).count() == 0
         attempt = session.query(ActionExecutionAttempt).filter_by(project_id=project).one()
         assert attempt.status == "succeeded"
+        job = session.get(ActionPostExecutionJob, meta["post_execution_job_id"])
+        assert job is not None
+        assert job.job_type == "verify_outcome"
+        assert job.status == "pending"
+
+    event = _events(client, project)[0]
+    assert event.action_receipt_id is None
+    assert event.proof_status == "pending"
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        processed = process_action_post_execution_jobs(session, worker_id="test-mcp-worker", limit=5)
+        assert processed["processed"] == 2
+        receipt = session.query(ActionReceipt).filter_by(project_id=project).one()
+        receipt_id = receipt.id
+        receipt_digest = receipt.receipt_digest
+        assert receipt.receipt_digest.startswith("sha256:")
+        assert json.loads(receipt.receipt_json)["verification"]["status"] == "unverifiable"
         outcome = session.query(OutcomeReconciliationCheck).filter_by(project_id=project).one()
         assert outcome.verdict == "not_verified"
 
     event = _events(client, project)[0]
-    assert event.action_receipt_id == meta["receipt_id"]
-    assert event.receipt_digest == meta["receipt_digest"]
+    assert event.action_receipt_id == receipt_id
+    assert event.receipt_digest == receipt_digest
     assert event.proof_status == "not_verified"
 
 
@@ -379,17 +395,23 @@ def test_protected_allow_verifies_against_explicit_upstream_sor_hint(
     _set_sensitive_approval(client, project, required=False)
     resp = _call(client, project, "adjust_inventory", {"sku": "X", "delta": -1})
     meta = _zroky_meta(resp)
-    assert meta["proof_status"] == "matched"
-    assert meta["signature_valid"] is True
+    assert meta["post_execution_status"] == "queued"
+    assert meta["proof_status"] == "pending"
+    assert meta["receipt_status"] == "pending"
 
     with client._session_factory() as session:  # type: ignore[attr-defined]
+        assert session.query(ActionReceipt).filter_by(project_id=project).count() == 0
+        processed = process_action_post_execution_jobs(session, worker_id="test-mcp-worker", limit=5)
+        assert processed["processed"] == 2
         outcome = session.query(OutcomeReconciliationCheck).filter_by(project_id=project).one()
         assert outcome.verdict == "matched"
-        receipt = session.get(ActionReceipt, meta["receipt_id"])
-        assert receipt is not None
+        receipt = session.query(ActionReceipt).filter_by(project_id=project).one()
+        receipt_id = receipt.id
         assert json.loads(receipt.receipt_json)["verification"]["status"] == "verified"
 
-    assert _events(client, project)[0].proof_status == "matched"
+    event = _events(client, project)[0]
+    assert event.action_receipt_id == receipt_id
+    assert event.proof_status == "matched"
 
 
 def test_hold_writes_durable_event_even_though_blocked(client: TestClient):

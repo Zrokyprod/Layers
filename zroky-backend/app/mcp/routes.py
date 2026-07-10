@@ -9,10 +9,10 @@ the bearer token / tenant header. The ``{project_id}`` in the path is then
 checked against that authorized tenant — it is *validated, never trusted* —
 so a caller cannot proxy MCP traffic for a project they do not belong to.
 
-This ingress owns path + auth + kernel decision + upstream forwarding. When
-an allowed call reaches upstream, ``McpPostExecutionProcessor`` records the
-execution attempt, reconciles supplied SOR evidence, and generates a signed
-receipt without changing the production-dark rollout posture.
+This ingress owns path + auth + inline kernel decision + upstream forwarding.
+When an allowed call reaches upstream, ``McpPostExecutionProcessor`` records
+the execution attempt and queues verification/receipt work for the existing
+worker. The request path gates before damage; proof is async.
 """
 from __future__ import annotations
 
