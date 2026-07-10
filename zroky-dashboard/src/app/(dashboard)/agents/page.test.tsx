@@ -12,9 +12,11 @@ import type {
   RuntimePolicyDecisionResponse,
   SourceMutationView,
 } from "@/lib/api";
+import type { CaptureHealthResponse } from "@/lib/types";
 import AgentsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  getCaptureHealth: vi.fn(),
   listActionIntents: vi.fn(),
   listActionRunners: vi.fn(),
   listAgentProfiles: vi.fn(),
@@ -49,6 +51,46 @@ vi.mock("@/lib/api", async () => {
 });
 
 const now = "2026-06-28T10:00:00.000Z";
+
+function captureHealth(overrides: Partial<CaptureHealthResponse> = {}): CaptureHealthResponse {
+  return {
+    project_id: "proj_1",
+    status: "no_data",
+    stale_after_minutes: 10,
+    last_call_id: null,
+    last_seen_at: null,
+    seconds_since_last_call: null,
+    last_provider: null,
+    last_model: null,
+    last_call_type: null,
+    last_source: null,
+    calls_24h: 0,
+    sdk_events_24h: 0,
+    gateway_events_24h: 0,
+    retrieval_spans_24h: 0,
+    memory_spans_24h: 0,
+    trace_runs_24h: 0,
+    trace_spans_24h: 0,
+    policy_spans_24h: 0,
+    handoff_spans_24h: 0,
+    incomplete_trace_runs_24h: 0,
+    projection_failures_24h: 0,
+    gateway_count: 0,
+    gateway_unhealthy_count: 0,
+    gateway_worst_status: "unknown",
+    gateway_spool_backlog: 0,
+    gateway_spool_bytes: 0,
+    gateway_spool_oldest_age_seconds: 0,
+    gateway_loss_count: 0,
+    gateway_backpressure_rejections: 0,
+    gateway_last_heartbeat_at: null,
+    error_events_24h: 0,
+    outcome_events_24h: 0,
+    sampled_recent_calls: 0,
+    validation_warnings: [],
+    ...overrides,
+  };
+}
 
 function renderAgentsPage() {
   const client = new QueryClient({
@@ -320,6 +362,7 @@ function mockAgents({
   staleAttempts?: ActionExecutionAttemptResponse[];
   mutations?: SourceMutationView[];
 } = {}) {
+  api.getCaptureHealth.mockResolvedValue(captureHealth());
   api.listAgentProfiles.mockResolvedValue({
     items: profiles,
     total: profiles.length,
@@ -392,6 +435,15 @@ describe("AgentsPage", () => {
     const locked = screen.getByRole("button", { name: /Upgrade to add agents/i });
     expect((locked as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: /^Add agent$/i })).toBeNull();
+  });
+
+  it("explains legacy profiles above the current plan limit", async () => {
+    mockAgents({ profiles: [profile(), setupPolicyProfile({ id: "agent_2", slug: "agent-2" })], activeCount: 2, cap: 1, limitReached: true });
+
+    renderAgentsPage();
+
+    expect(await screen.findByText("2 managed \u00b7 limit 1")).toBeInTheDocument();
+    expect(screen.getByText("Existing profiles exceed the current plan limit; new agents are blocked.")).toBeInTheDocument();
   });
 
   it("keeps the hero live when secondary feeds degrade", async () => {
@@ -597,5 +649,20 @@ describe("AgentsPage", () => {
     expect(within(setupStatus).getByRole("link", { name: /^Start setup$/i }).getAttribute("href")).toBe("/agents/setup");
     expect(screen.queryByRole("link", { name: /^Add agent$/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Open setup$/i })).toBeNull();
+  });
+
+  it("marks a fully configured enforced agent live when capture is connected", async () => {
+    mockAgents({ profiles: [setupPolicyProfile()] });
+    api.getCaptureHealth.mockResolvedValue(captureHealth({
+      status: "connected",
+      calls_24h: 2,
+      outcome_events_24h: 1,
+    }));
+
+    renderAgentsPage();
+
+    expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent control setup status")).toBeNull();
+    expect(api.getCaptureHealth).toHaveBeenCalled();
   });
 });

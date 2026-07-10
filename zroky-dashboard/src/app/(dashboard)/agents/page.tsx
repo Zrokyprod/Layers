@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 
 import { DashboardButtonLink } from "@/components/dashboard-button";
-import { listAgentProfiles, listUnreceiptedSourceMutations } from "@/lib/api";
+import { getCaptureHealth, listAgentProfiles, listUnreceiptedSourceMutations } from "@/lib/api";
 import type { AgentProfileResponse } from "@/lib/api";
 import {
   useActionIntents,
@@ -151,6 +151,12 @@ export default function AgentsPage() {
     stale_after_seconds: 600,
     limit: 200,
   });
+  const captureHealthQuery = useQuery({
+    queryKey: ["agents", "capture-health"],
+    queryFn: ({ signal }) => getCaptureHealth(signal),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
 
   const profiles = useMemo(() => profilesQuery.data?.items ?? [], [profilesQuery.data?.items]);
   const attempts = useMemo(() => attemptsQuery.data?.items ?? [], [attemptsQuery.data?.items]);
@@ -192,8 +198,12 @@ export default function AgentsPage() {
     attemptsQuery.error && "Attempt feed",
     sourceMutationsQuery.error && "Bypass feed",
     (intentsQuery.error || approvalsQuery.error) && "Action feed",
+    captureHealthQuery.error && "Capture health",
   ].filter(Boolean) as string[];
-  const setupStatus = getAgentControlSetupStatus(profiles as AgentProfileResponse[], null);
+  const setupStatus = getAgentControlSetupStatus(
+    profiles as AgentProfileResponse[],
+    captureHealthQuery.data ?? null,
+  );
   const setupPrimaryActive = !setupStatus.complete && setupStatus.ctaHref === "/agents/setup";
   const firstTelemetryRow = fleet.rows.find((row) => row.kind === "telemetry") ?? null;
 
@@ -206,6 +216,7 @@ export default function AgentsPage() {
     attemptsQuery.refetch();
     sourceMutationsQuery.refetch();
     staleAttemptsQuery.refetch();
+    captureHealthQuery.refetch();
   }
 
   return (
