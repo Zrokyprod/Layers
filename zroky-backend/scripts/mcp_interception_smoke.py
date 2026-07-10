@@ -42,6 +42,7 @@ class HttpResponse:
     status: int
     body: Any
     text: str
+    headers: dict[str, str]
 
 
 def _parse_json(text: str) -> Any:
@@ -75,10 +76,20 @@ def _request_json(
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             text = response.read().decode("utf-8")
-            return HttpResponse(status=response.status, body=_parse_json(text), text=text)
+            return HttpResponse(
+                status=response.status,
+                body=_parse_json(text),
+                text=text,
+                headers={key.lower(): value for key, value in response.headers.items()},
+            )
     except urllib.error.HTTPError as exc:
         text = exc.read().decode("utf-8")
-        return HttpResponse(status=exc.code, body=_parse_json(text), text=text)
+        return HttpResponse(
+            status=exc.code,
+            body=_parse_json(text),
+            text=text,
+            headers={key.lower(): value for key, value in exc.headers.items()},
+        )
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Request failed for {method} {url}: {exc.reason}") from exc
 
@@ -158,6 +169,42 @@ def run_smoke(args: argparse.Namespace) -> int:
             _print_pass("MCP route is inert while feature flag is disabled")
             return 0
         return _fail(f"Expected disabled MCP route to return 404, got {response.status}: {response.text}")
+
+    initialize_response = _request_json(
+        method="POST",
+        url=url,
+        timeout_seconds=args.timeout_seconds,
+        headers=headers,
+        payload=_mcp_payload(
+            "initialize",
+            params={
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "zroky-mcp-smoke", "version": "1.0"},
+            },
+        ),
+    )
+    if initialize_response.status != 200:
+        return _fail(
+            f"initialize expected HTTP 200, got {initialize_response.status}: "
+            f"{initialize_response.text}"
+        )
+    session_id = initialize_response.headers.get("mcp-session-id")
+    if session_id:
+        headers["Mcp-Session-Id"] = session_id
+        initialized_response = _request_json(
+            method="POST",
+            url=url,
+            timeout_seconds=args.timeout_seconds,
+            headers=headers,
+            payload={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        )
+        if initialized_response.status != 202:
+            return _fail(
+                "notifications/initialized expected HTTP 202, got "
+                f"{initialized_response.status}: {initialized_response.text}"
+            )
+    _print_pass("MCP initialize/session handshake completed")
 
     list_response = _request_json(
         method="POST",
