@@ -18,7 +18,9 @@ COPY zroky-backend/app ./app
 COPY zroky-backend/alembic ./alembic
 COPY zroky-backend/alembic.ini ./alembic.ini
 COPY zroky-backend/scripts ./scripts
+COPY api-contracts /api-contracts
 COPY zroky-backend/pricing_config.json ./pricing_config.json
+COPY zroky-backend/source_truth_manifest.json ./source_truth_manifest.json
 
 RUN chmod +x scripts/start-worker.sh
 
