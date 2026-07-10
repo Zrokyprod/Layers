@@ -16,6 +16,7 @@ from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.connectors.sor.runtime import StripeRefundConnector
 from app.services.connector_credentials import (
+    ConnectorCredentialError,
     CredentialNotFoundError,
     RemoteCredentialResolutionRequired,
     bind_connector_credential,
@@ -161,7 +162,7 @@ def test_private_runner_binding_removes_legacy_secret_and_fails_closed(tmp_path:
                 credential_kind="bearer_token",
                 custody_mode="private_runner",
                 plaintext_secret=None,
-                secret_ref="runner://finance-vpc/stripe-readonly",
+                secret_ref="customer-runner-secret://finance-vpc/stripe-readonly",
                 scopes=["refunds:read"],
                 allowed_connector_types=["stripe_refund"],
                 expires_at=None,
@@ -181,6 +182,31 @@ def test_private_runner_binding_removes_legacy_secret_and_fails_closed(tmp_path:
             with pytest.raises(RemoteCredentialResolutionRequired):
                 resolve_connector_credential(
                     db, row=bound, project_id="project-a", purpose="bearer_token"
+                )
+    finally:
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_private_runner_rejects_unrecognized_runner_reference(tmp_path: Path) -> None:
+    engine, factory = _session_factory(tmp_path / "private_runner_reference.db")
+    try:
+        _seed_project(factory, "project-a")
+        with factory() as db:
+            with pytest.raises(ConnectorCredentialError, match="customer-runner-secret"):
+                create_connector_credential(
+                    db,
+                    project_id="project-a",
+                    name="invalid-private-runner-ref",
+                    credential_kind="bearer_token",
+                    custody_mode="private_runner",
+                    plaintext_secret=None,
+                    secret_ref="runner://finance-vpc/stripe-readonly",
+                    scopes=["refunds:read"],
+                    allowed_connector_types=["stripe_refund"],
+                    expires_at=None,
+                    rotation_due_at=None,
+                    actor_subject="owner-1",
                 )
     finally:
         Base.metadata.drop_all(bind=engine)

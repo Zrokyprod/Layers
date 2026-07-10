@@ -43,7 +43,7 @@ VALID_CREDENTIAL_KINDS = frozenset({"bearer_token", "oauth_refresh_token", "data
 VALID_CUSTODY_MODES = frozenset({"zroky_managed", "customer_managed", "private_runner"})
 VALID_SECRET_REF_SCHEMES = frozenset(
     {
-        "runner",
+        "customer-runner-secret",
         "vault",
         "aws-secretsmanager",
         "azure-keyvault",
@@ -136,12 +136,25 @@ def _normalize_allowed_connector_types(values: Iterable[str] | None) -> list[str
     return connector_types
 
 
-def _normalize_secret_ref(value: str | None) -> str:
+def _normalize_secret_ref(value: str | None, *, custody_mode: str) -> str:
     normalized = str(value or "").strip()
     match = _REF_RE.fullmatch(normalized)
-    if match is None or match.group(1) not in VALID_SECRET_REF_SCHEMES:
+    if match is None:
         raise ConnectorCredentialError(
             "secret_ref must use an approved reference scheme and must not contain secret material"
+        )
+    scheme = match.group(1)
+    if custody_mode == "private_runner" and scheme != "customer-runner-secret":
+        raise ConnectorCredentialError(
+            "private-runner credentials must use the customer-runner-secret reference scheme"
+        )
+    if scheme not in VALID_SECRET_REF_SCHEMES:
+        raise ConnectorCredentialError(
+            "secret_ref must use an approved reference scheme and must not contain secret material"
+        )
+    if custody_mode == "customer_managed" and scheme == "customer-runner-secret":
+        raise ConnectorCredentialError(
+            "customer-managed credentials must reference an external customer vault, not a runner secret"
         )
     return normalized
 
@@ -219,7 +232,7 @@ def _new_credential(
             raise ConnectorCredentialError(
                 "customer-managed and private-runner credentials must not send secret plaintext"
             )
-        normalized_ref = _normalize_secret_ref(secret_ref)
+        normalized_ref = _normalize_secret_ref(secret_ref, custody_mode=custody_mode)
 
     return ConnectorCredential(
         id=str(uuid4()),
