@@ -553,6 +553,7 @@ def _reconcile_not_verified(
         call_id=_text(trace.get("call_id")),
         trace_id=_text(trace.get("trace_id")),
         runtime_policy_decision_id=intent.runtime_policy_decision_id,
+        action_intent_id=intent.id,
         action_type=intent.action_type,
         system_ref=_text(context.get("system_ref")) or f"zroky:{intent.id}:{attempt.id}",
         amount_usd=_float(claimed.get("amount_usd")),

@@ -75,6 +75,11 @@ class OutcomeReconciliationCheck(Base):
         ForeignKey("runtime_policy_decisions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    action_intent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("action_intents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     action_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     connector_type: Mapped[str] = mapped_column(
         String(64), nullable=False, server_default=text("'api_record'")
@@ -119,9 +124,8 @@ class OutcomeReconciliationCheck(Base):
         Index("ix_outcome_reconciliation_pending_reverify", "project_id", "proof_status", "proof_next_check_at"),
         Index("ix_outcome_reconciliation_call", "call_id"),
         Index("ix_outcome_reconciliation_trace", "project_id", "trace_id"),
+        Index("ix_outcome_reconciliation_action", "project_id", "action_intent_id"),
     )
-
-
 class SourceMutationRecord(Base):
     """System-of-record mutation observed from webhooks/audit logs for bypass detection."""
 

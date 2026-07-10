@@ -460,6 +460,7 @@ def reconcile_outcome(
     call_id: str | None = None,
     trace_id: str | None = None,
     runtime_policy_decision_id: str | None = None,
+    action_intent_id: str | None = None,
     action_type: str | None = None,
     system_ref: str | None = None,
     amount_usd: float | None = None,
@@ -479,6 +480,18 @@ def reconcile_outcome(
             )
         ).scalar_one_or_none()
         if existing is not None:
+            if action_intent_id and existing.action_intent_id is None:
+                existing.action_intent_id = _bounded(action_intent_id, max_length=36)
+                db.add(existing)
+                db.commit()
+                db.refresh(existing)
+            from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+            create_or_get_mismatch_response(
+                db,
+                check=existing,
+                action_intent_id=action_intent_id,
+            )
             return existing
 
     reserve_usage_meter(db, project_id, METER_VERIFICATION_CHECKS)
@@ -544,6 +557,7 @@ def reconcile_outcome(
         call_id=_bounded(call_id, max_length=64),
         trace_id=_bounded(trace_id, max_length=128),
         runtime_policy_decision_id=_bounded(runtime_policy_decision_id, max_length=36),
+        action_intent_id=_bounded(action_intent_id, max_length=36),
         action_type=_bounded(action_type, max_length=64),
         connector_type=_bounded(connector.connector_type, max_length=64)
         or "api_record",
@@ -567,6 +581,13 @@ def reconcile_outcome(
     db.add(row)
     db.commit()
     db.refresh(row)
+    from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+    create_or_get_mismatch_response(
+        db,
+        check=row,
+        action_intent_id=action_intent_id,
+    )
     return row
 
 
@@ -820,6 +841,14 @@ def sweep_pending_reconciliation_checks(
         expired_ids.append(row.id)
     if expired_ids:
         db.commit()
+        from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+        for row in expired_rows:
+            create_or_get_mismatch_response(
+                db,
+                check=row,
+                action_intent_id=row.action_intent_id,
+            )
 
     due_rows = list_pending_reconciliations_due(
         db,
