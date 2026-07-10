@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   listActionPacks: vi.fn(),
   listAgentProfiles: vi.fn(),
   listProjectApiKeys: vi.fn(),
+  updateAgentProfile: vi.fn(),
 }));
 
 const navigation = vi.hoisted(() => ({ query: "" }));
@@ -54,6 +55,7 @@ vi.mock("@/lib/api", async () => {
     listActionPacks: api.listActionPacks,
     listAgentProfiles: api.listAgentProfiles,
     listProjectApiKeys: api.listProjectApiKeys,
+    updateAgentProfile: api.updateAgentProfile,
   };
 });
 
@@ -347,6 +349,9 @@ describe("Protected agent setup (minimal)", () => {
       pack: pack(),
       installed_contracts: [{ contract: { id: "contract_1", contract_version: "customer.record.update/1.0" }, created: true }],
     });
+    api.updateAgentProfile.mockReset().mockImplementation(async (_agentId, payload) => profile({
+      metadata: payload.metadata,
+    }));
     api.listAgentProfiles.mockReset().mockResolvedValue({ items: [], total: 0 });
   });
 
@@ -355,7 +360,7 @@ describe("Protected agent setup (minimal)", () => {
 
     expect(screen.getByText(/Create a key, define one agent, then send one protected action/i)).toBeInTheDocument();
     expect(await screen.findByText("Runtime key ready")).toBeInTheDocument();
-    expect(screen.getByLabelText("Live capture status").textContent).toContain("SDK ready");
+    expect(screen.getByLabelText("Live capture status").textContent).toContain("Agent profile");
     expect(screen.getByLabelText("Live capture status").textContent).toContain("waiting for SDK run");
     expect(screen.getByText("Protected actions")).toBeInTheDocument();
     expect(screen.getByText("Unlocks after your first receipt.")).toBeInTheDocument();
@@ -376,7 +381,12 @@ describe("Protected agent setup (minimal)", () => {
       expect.objectContaining({
         allowed_action_types: ["internal_api_mutation"],
         display_name: "Refund Agent",
+        environment: "staging",
+        framework: "OpenAI Agents SDK",
         metadata: {
+          setup_environment: "staging",
+          setup_framework: "OpenAI Agents SDK",
+          setup_source: "agent_control_setup_wizard",
           runner_verification: {
             credential_ref: "customer-runner-secret://zroky/project-key/zk_live_demo",
             runner_mode: "customer_hosted",
@@ -435,10 +445,41 @@ describe("Protected agent setup (minimal)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Install protected actions" }));
 
     await waitFor(() => expect(api.installActionPack).toHaveBeenCalledWith("support-ops-v1"));
+    await waitFor(() => expect(api.updateAgentProfile).toHaveBeenCalledWith("agent_1", expect.objectContaining({
+      metadata: expect.objectContaining({
+        setup_action_pack_id: "support-ops-v1",
+        setup_action_contract_versions: ["customer.record.update/1.0"],
+        setup_source: "agent_control_setup_wizard",
+      }),
+    })));
     expect(await screen.findByText(/Support operations installed/i)).toBeInTheDocument();
     expect(screen.getByText("Install")).toBeInTheDocument();
-    expect(screen.getByText("Run scenario")).toBeInTheDocument();
-    expect(screen.getByText(/python agent.py access-grant/i)).toBeInTheDocument();
+    expect(screen.getByText("agent.py")).toBeInTheDocument();
+    expect(screen.getByText("Run protected action")).toBeInTheDocument();
+    expect(screen.getByText("python agent.py")).toBeInTheDocument();
+    expect(screen.getByText(/agent_id="agent_1"/i)).toBeInTheDocument();
+    expect(screen.getByText(/environment="staging"/i)).toBeInTheDocument();
+  });
+
+  it("restores installed action-pack progress after a page reload", async () => {
+    api.listAgentProfiles.mockResolvedValue({
+      items: [profile({
+        display_name: "Persistent Agent",
+        metadata: {
+          setup_source: "agent_control_setup_wizard",
+          setup_action_pack_id: "support-ops-v1",
+        },
+      })],
+      total: 1,
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Persistent Agent")).toBeInTheDocument();
+    expect(await screen.findByText("Support operations installed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install protected actions" })).not.toBeInTheDocument();
+    expect(screen.getByText("python agent.py")).toBeInTheDocument();
+    expect(api.installActionPack).not.toHaveBeenCalled();
   });
 
   it("shows finance as a money-risk workflow instead of connector logos", async () => {
@@ -547,7 +588,7 @@ describe("Protected agent setup (minimal)", () => {
     expect(await screen.findByText("zk_live_demo...")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copy key/i })).toBeInTheDocument();
     expect(screen.getByText(".env")).toBeInTheDocument();
-    expect(screen.getByText(/ZROKY_API_KEY=zk_live_demo/i)).toBeInTheDocument();
+    expect(screen.getByText(/ZROKY_API_KEY=zk_live_created_secret/i)).toBeInTheDocument();
     expect(screen.getByText(/ZROKY_PROJECT_ID=proj_1/i)).toBeInTheDocument();
     expect(screen.queryByText(/pip install zroky/i)).not.toBeInTheDocument();
   });

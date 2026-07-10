@@ -20909,59 +20909,23 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-locked-home {
-  position: relative;
-  isolation: isolate;
   display: grid;
-  align-items: center;
-  min-height: 620px;
-  overflow: hidden;
+  justify-items: center;
+  padding: 24px;
+  border: 1px solid var(--mc-border);
   border-radius: 10px;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-locked-home::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border: 1px solid color-mix(in srgb, var(--mc-border-strong) 72%, transparent);
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg, rgba(247, 246, 242, 0.68), rgba(247, 246, 242, 0.86)),
-    color-mix(in srgb, var(--mc-canvas) 68%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-locked-preview {
-  grid-area: 1 / 1;
-  display: grid;
-  gap: 24px;
-  max-height: 660px;
-  overflow: hidden;
-  opacity: 0.58;
-  filter: blur(5px) saturate(0.8);
-  transform: scale(0.986);
-  transform-origin: center;
-  pointer-events: none;
-  user-select: none;
+  background: var(--mc-canvas);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-locked-home > .mc-first-run {
-  z-index: 2;
-  grid-area: 1 / 1;
-  justify-self: center;
-  width: min(920px, calc(100% - 32px));
-  background: color-mix(in srgb, var(--mc-card) 92%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 26px 80px rgba(23, 23, 19, 0.18);
+  width: min(1080px, 100%);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run {
   display: grid;
   gap: 17px;
-  width: min(920px, calc(100% - 32px));
-  max-width: 920px;
+  width: min(1080px, calc(100% - 32px));
+  max-width: 1080px;
   padding: 19px;
   border: 1px solid rgba(47, 95, 102, 0.16);
   border-radius: 12px;
@@ -21002,7 +20966,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
@@ -21548,7 +21512,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-locked-home {
-    min-height: 700px;
+    padding: 18px;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-locked-home > .mc-first-run {
@@ -21606,14 +21570,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-locked-home {
-    min-height: 780px;
+    padding: 10px;
     border-radius: 8px;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-locked-preview {
-    max-height: 780px;
-    filter: blur(4px) saturate(0.82);
-    transform: scale(0.99);
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-locked-home > .mc-first-run {
