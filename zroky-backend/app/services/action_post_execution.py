@@ -4,6 +4,7 @@ from app.db.models import McpInterceptionEvent
 from app.services._action_post_execution_connectors import *  # noqa: F403
 from app.services._action_post_execution_core import *  # noqa: F403
 from app.services.connector_credentials import RemoteCredentialResolutionRequired
+from app.services.approval_adaptations import revoke_active_rules_for_proof_failure
 from app.services.private_runner_verification import enqueue_private_runner_verification
 from app.services.verification_execution_controls import (
     ControlledConnector,
@@ -194,6 +195,12 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
     intent.proof_status = intent_proof_status_for_check(outcome)
     intent.receipt_status = RECEIPT_PENDING
     db.add(intent)
+    if intent.proof_status in {"mismatched", "not_verified"}:
+        revoke_active_rules_for_proof_failure(
+            db,
+            intent=intent,
+            proof_status=intent.proof_status,
+        )
     receipt_job = enqueue_action_post_execution_job(
         db,
         project_id=job.project_id,
