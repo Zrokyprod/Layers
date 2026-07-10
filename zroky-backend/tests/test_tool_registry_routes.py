@@ -100,6 +100,10 @@ def test_tool_registry_exposes_phase1_catalog_with_honest_status(client: TestCli
     assert runner["launch_tier"] == "p0"
     assert runner["backend_capability"] == "action_runner.customer_hosted"
     assert _by_id(body["runtime_paths"], "http_gateway")["implementation_status"] == "planned"
+    mcp_gateway = _by_id(body["runtime_paths"], "mcp_gateway")
+    assert mcp_gateway["implementation_status"] == "available"
+    assert mcp_gateway["backend_capability"] == "mcp.interception_gateway"
+    assert mcp_gateway["dashboard_href"] == "/integrations?connector=mcp_upstream"
     webhook = _by_id(body["runtime_paths"], "webhook")
     assert webhook["implementation_status"] == "available"
     assert webhook["backend_capability"] == "outcome_reconciliation.saved_connector_bridge"

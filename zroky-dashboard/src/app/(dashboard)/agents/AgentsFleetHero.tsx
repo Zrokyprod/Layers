@@ -110,7 +110,14 @@ export function AgentsFleetHero({
   const copy = heroCopy(fleet, error);
   const capLabel = fleet.meter.cap === -1
     ? `${formatCount(fleet.meter.active)} managed \u00b7 unlimited`
-    : `${formatCount(fleet.meter.active)} / ${formatCount(fleet.meter.cap)}`;
+    : fleet.meter.active > fleet.meter.cap
+      ? `${formatCount(fleet.meter.active)} managed \u00b7 limit ${formatCount(fleet.meter.cap)}`
+      : `${formatCount(fleet.meter.active)} / ${formatCount(fleet.meter.cap)}`;
+  const capHelper = fleet.meter.cap !== -1 && fleet.meter.active > fleet.meter.cap
+    ? "Existing profiles exceed the current plan limit; new agents are blocked."
+    : fleet.meter.reached
+      ? "Plan cap reached."
+      : "Managed AgentProfile capacity.";
   const addDisabled = fleet.meter.reached || loading;
   const showPrimaryAction = !setupIncomplete;
   const coverageLabel = fleet.totals.coveragePercent == null
@@ -161,7 +168,7 @@ export function AgentsFleetHero({
         columns={4}
         metrics={[
           {
-            helper: fleet.meter.reached ? "Plan cap reached." : "Managed AgentProfile capacity.",
+            helper: capHelper,
             label: "Managed agents",
             tone: fleet.meter.reached ? "warning" : fleet.meter.active > 0 ? "success" : "neutral",
             value: capLabel,
