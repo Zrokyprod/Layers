@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -406,8 +406,8 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Agent control incomplete", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("1 / 3")).toBeInTheDocument();
     expect(screen.getAllByText("Coverage").length).toBeGreaterThan(0);
     expect(screen.getByText("Runners online")).toBeInTheDocument();
 
@@ -424,6 +424,18 @@ describe("AgentsPage", () => {
     expect(within(inspector).getByLabelText("Proof chain")).toBeInTheDocument();
     expect(within(inspector).getByText("Archive inventory item")).toBeInTheDocument();
     expect(within(inspector).getByRole("link", { name: "Open evidence" }).getAttribute("href")).toBe("/evidence?action_id=act_inventory");
+    expect(api.listActionIntents).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100 }),
+      expect.anything(),
+    );
+    expect(api.listOutcomeReconciliations).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100 }),
+      expect.anything(),
+    );
+    expect(api.listProjectActionExecutionAttempts).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100 }),
+      expect.anything(),
+    );
   });
 
   it("locks add-agent when the backend plan meter is reached", async () => {
@@ -431,9 +443,11 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
-    const locked = screen.getByRole("button", { name: /Upgrade to add agents/i });
-    expect((locked as HTMLButtonElement).disabled).toBe(true);
+    expect(await screen.findByRole("heading", { name: "Agent control incomplete", level: 1 })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector('a[href="/agents/setup?agentId=agent_profile_inventory"]')).not.toBeNull();
+    });
+    expect(screen.getByText("Plan cap reached.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Add agent$/i })).toBeNull();
   });
 
@@ -452,7 +466,7 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Agent control incomplete", level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Agent visibility unavailable", level: 1 })).toBeNull();
     expect(await screen.findByText(/Proof feed degraded/i)).toBeInTheDocument();
   });
@@ -532,7 +546,7 @@ describe("AgentsPage", () => {
     expect(await screen.findByRole("heading", { name: "Agent control bypass detected", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Risk signals")).toBeInTheDocument();
 
-    const fleet = screen.getByLabelText("Agent fleet");
+    const fleet = await screen.findByLabelText("Agent fleet");
     expect(within(fleet).getByText("Control bypass")).toBeInTheDocument();
     expect(within(fleet).getByText("0% covered")).toBeInTheDocument();
     expect(within(fleet).getAllByText("1 signal").length).toBeGreaterThan(0);
@@ -622,11 +636,9 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Agent control incomplete", level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Runners/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /Attempts/i })).toBeNull();
-    const fleet = screen.getByLabelText("Agent fleet");
-    expect(within(fleet).getByText("observed compatible")).toBeInTheDocument();
     expect(screen.getByText("Runners online")).toBeInTheDocument();
   });
 
@@ -644,7 +656,7 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Setup required", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Agent control incomplete", level: 1 })).toBeInTheDocument();
     const setupStatus = screen.getByLabelText("Agent control setup status");
     expect(within(setupStatus).getByRole("link", { name: /^Start setup$/i }).getAttribute("href")).toBe("/agents/setup");
     expect(screen.queryByRole("link", { name: /^Add agent$/i })).toBeNull();
