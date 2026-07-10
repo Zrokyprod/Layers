@@ -96,7 +96,7 @@ class UpstreamTransport(Protocol):
 
 
 class PostExecutionProcessor(Protocol):
-    """Optional Slice-2 bridge for verification and signed receipts."""
+    """Optional Slice-2 bridge that queues async verification and receipts."""
 
     def process(
         self,
@@ -433,6 +433,7 @@ def _post_execute_best_effort(
     upstream_result: dict[str, Any] | None,
     upstream_error: str | None,
 ) -> dict[str, Any]:
+    """Queue post-execution proof work without keeping it on the inline path."""
     if post_execution is None or decision != "allow" or not intent_id:
         return {}
     try:

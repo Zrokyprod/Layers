@@ -267,6 +267,7 @@ def enqueue_post_execution_verification(
     action_id: str,
     attempt_id: str,
     actor: str | None = None,
+    payload: Mapping[str, Any] | None = None,
 ) -> ActionPostExecutionJob:
     intent = db.execute(
         select(ActionIntent).where(ActionIntent.project_id == project_id, ActionIntent.id == action_id)
@@ -280,7 +281,7 @@ def enqueue_post_execution_verification(
         action_id=action_id,
         attempt_id=attempt_id,
         job_type=JOB_VERIFY_OUTCOME,
-        payload={"trigger": "execution_finished"},
+        payload={"trigger": "execution_finished", **dict(payload or {})},
     )
     record_action_timeline_event(
         db,
