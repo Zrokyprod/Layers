@@ -252,6 +252,12 @@ def test_protected_withheld_does_not_forward(client: TestClient, fake_upstream: 
     meta = _zroky_meta(resp)
     assert meta["decision"] == "hold"
     assert meta["approval_ref"]
+    assert meta["remediation"] == {
+        "reason_code": "approval_required",
+        "retryable": False,
+        "next_actions": [{"type": "await_approval", "approval_ref": meta["approval_ref"]}],
+    }
+    assert "reasons" not in meta
 
 
 def test_protected_without_contract_fails_closed(client: TestClient, fake_upstream: FakeUpstream):
@@ -265,6 +271,12 @@ def test_protected_without_contract_fails_closed(client: TestClient, fake_upstre
     assert resp["result"]["isError"] is True
     assert meta["decision"] == "deny"
     assert meta["fail"] == "closed"
+    assert meta["remediation"] == {
+        "reason_code": "gate_unavailable",
+        "retryable": True,
+        "retry_after_seconds": 30,
+        "next_actions": [{"type": "retry_later"}],
+    }
 
 
 def test_unprotected_forwards_even_without_contract(client: TestClient, fake_upstream: FakeUpstream):
@@ -541,8 +553,13 @@ def test_upstream_error_is_mapped_and_recorded(tmp_path: Path, failing_upstream:
             resp = _call(client, "proj_up", "get_customer", {"id": "c1"})
             meta = _zroky_meta(resp)
             assert resp["result"]["isError"] is True
-            assert meta["upstream_error"] == "upstream boom"
             assert meta["execution_state"] == "unknown"
+            assert meta["remediation"] == {
+                "reason_code": "execution_unknown",
+                "retryable": False,
+                "next_actions": [{"type": "check_execution_status"}],
+            }
+            assert "upstream_error" not in meta
             events = _events(client, "proj_up")
             assert events[0].forward_attempted is True
             assert events[0].forward_succeeded is False

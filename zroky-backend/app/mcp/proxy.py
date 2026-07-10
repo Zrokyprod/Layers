@@ -34,6 +34,14 @@ from app.mcp.gate import (
     McpSession,
     evaluate,
 )
+from app.mcp.remediation import (
+    Remediation,
+    for_execution_unknown,
+    for_hold,
+    for_idempotency_conflict,
+    for_policy_deny,
+    for_service_unavailable,
+)
 from app.mcp.tool_binding import ActionClassification, ToolBinding, classify_tool
 
 logger = logging.getLogger(__name__)
@@ -215,6 +223,7 @@ def _handle_tool_call(
             required_audit=classification.protected,
             text="Idempotency key already belongs to a different action intent.",
             meta_reason="idempotency_conflict",
+            remediation=for_idempotency_conflict(),
             fail="closed",
         )
     except Exception:
@@ -228,6 +237,7 @@ def _handle_tool_call(
                 required_audit=classification.protected,
                 text="Zroky policy engine unavailable - protected action blocked.",
                 meta_reason="gate_unavailable",
+                remediation=for_service_unavailable("gate_unavailable"),
                 fail="closed",
             )
         return _forward(
@@ -251,9 +261,9 @@ def _handle_tool_call(
             name,
             intent_id=outcome.intent_id,
             required_audit=outcome.classification.protected,
-            text="Blocked by Zroky policy: " + "; ".join(outcome.reasons),
+            text="Zroky policy blocked this action. Review the remediation metadata before retrying.",
             meta_reason=None,
-            reasons=outcome.reasons,
+            remediation=for_policy_deny(outcome.reasons),
             fail=None,
         )
 
@@ -267,14 +277,14 @@ def _handle_tool_call(
         if audit_error is not None:
             return audit_error
         return _tool_result(
-            "Awaiting human approval before this action can run. Poll approval_ref for status.",
+            "Awaiting human approval before this action can run.",
             is_error=False,
             meta={
                 "decision": "hold",
                 "action_type": outcome.classification.action_type,
                 "approval_ref": outcome.approval_ref,
                 "intent_id": outcome.intent_id,
-                "reasons": outcome.reasons,
+                "remediation": for_hold(approval_ref=outcome.approval_ref).to_meta(),
             },
         )
 
@@ -301,7 +311,7 @@ def _deny_with_audit(
     required_audit: bool,
     text: str,
     meta_reason: str | None,
-    reasons: list[str] | None = None,
+    remediation: Remediation,
     fail: str | None = None,
 ) -> dict[str, Any]:
     audit_error = _record_decision(
@@ -322,8 +332,7 @@ def _deny_with_audit(
         meta["reason"] = meta_reason
     if fail:
         meta["fail"] = fail
-    if reasons is not None:
-        meta["reasons"] = reasons
+    meta["remediation"] = remediation.to_meta()
     return _tool_result(text, is_error=True, meta=meta)
 
 
@@ -378,12 +387,12 @@ def _forward(
         meta = {
             "decision": decision,
             "intent_id": intent_id,
-            "upstream_error": str(exc),
             "execution_state": "unknown",
+            "remediation": for_execution_unknown(intent_id=intent_id).to_meta(),
         }
         meta.update(receipt_meta)
         return _tool_result(
-            f"Upstream tool call failed: {exc}",
+            "Upstream execution outcome is unknown. Check execution status before retrying.",
             is_error=True,
             meta=meta,
         )
@@ -505,7 +514,12 @@ def _audit_unavailable_response() -> dict[str, Any]:
     return _tool_result(
         "Zroky audit log unavailable - protected action blocked.",
         is_error=True,
-        meta={"decision": "deny", "reason": "audit_unavailable", "fail": "closed"},
+        meta={
+            "decision": "deny",
+            "reason": "audit_unavailable",
+            "fail": "closed",
+            "remediation": for_service_unavailable("audit_unavailable").to_meta(),
+        },
     )
 
 

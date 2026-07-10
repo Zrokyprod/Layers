@@ -183,7 +183,15 @@ def test_deny_does_not_forward_and_is_error():
     resp = _call_sink("create_refund", {"amount": 999999}, kernel, up, RecordingSink())
     assert up.called == []  # blocked before reaching the SOR
     assert resp["result"]["isError"] is True
-    assert resp["result"]["_meta"]["zroky"]["decision"] == "deny"
+    meta = resp["result"]["_meta"]["zroky"]
+    assert meta["decision"] == "deny"
+    assert meta["remediation"] == {
+        "reason_code": "policy_denied",
+        "retryable": False,
+        "next_actions": [{"type": "escalate_to_human"}],
+    }
+    assert "reasons" not in meta
+    assert "over limit" not in resp["result"]["content"][0]["text"]
 
 
 def test_hold_does_not_forward():
@@ -191,7 +199,14 @@ def test_hold_does_not_forward():
     kernel = FakeKernel(KernelDecision(allowed=False, requires_approval=True, reasons=["approval"], intent_id="i3"))
     resp = _call_sink("access_grant_admin", {}, kernel, up, RecordingSink())
     assert up.called == []
-    assert resp["result"]["_meta"]["zroky"]["approval_ref"] == "i3"
+    meta = resp["result"]["_meta"]["zroky"]
+    assert meta["approval_ref"] == "i3"
+    assert meta["remediation"] == {
+        "reason_code": "approval_required",
+        "retryable": False,
+        "next_actions": [{"type": "await_approval", "approval_ref": "i3"}],
+    }
+    assert "reasons" not in meta
 
 
 def test_observe_forwards_unprotected():
@@ -235,7 +250,14 @@ def test_protected_forward_fails_closed_when_audit_write_fails():
     resp = _call_sink("create_refund", {"amount": 600}, kernel, up, FailingSink())
     assert up.called == []  # never forward a protected action we cannot audit
     assert resp["result"]["isError"] is True
-    assert resp["result"]["_meta"]["zroky"]["reason"] == "audit_unavailable"
+    meta = resp["result"]["_meta"]["zroky"]
+    assert meta["reason"] == "audit_unavailable"
+    assert meta["remediation"] == {
+        "reason_code": "audit_unavailable",
+        "retryable": True,
+        "retry_after_seconds": 30,
+        "next_actions": [{"type": "retry_later"}],
+    }
 
 
 def test_protected_deny_fails_closed_when_audit_write_fails():
@@ -261,7 +283,13 @@ def test_idempotency_conflict_has_specific_reason():
     resp = _call_sink("create_refund", {"amount": 600}, ConflictKernel(), up, RecordingSink())
     assert up.called == []
     assert resp["result"]["isError"] is True
-    assert resp["result"]["_meta"]["zroky"]["reason"] == "idempotency_conflict"
+    meta = resp["result"]["_meta"]["zroky"]
+    assert meta["reason"] == "idempotency_conflict"
+    assert meta["remediation"] == {
+        "reason_code": "idempotency_conflict",
+        "retryable": False,
+        "next_actions": [{"type": "review_idempotency_key"}],
+    }
 
 
 def test_protected_conflict_fails_closed_when_audit_write_fails():
@@ -289,8 +317,55 @@ def test_upstream_error_marks_execution_state_unknown():
     resp = _call_sink("create_refund", {"amount": 600}, kernel, up, sink)
     assert resp["result"]["isError"] is True
     assert resp["result"]["_meta"]["zroky"]["execution_state"] == "unknown"
+    assert resp["result"]["_meta"]["zroky"]["remediation"] == {
+        "reason_code": "execution_unknown",
+        "retryable": False,
+        "next_actions": [{"type": "check_execution_status", "intent_id": "i1"}],
+    }
+    assert "upstream_error" not in resp["result"]["_meta"]["zroky"]
+    assert "upstream boom" not in resp["result"]["content"][0]["text"]
     assert sink.outcomes[0][1]["execution_state"] == "unknown"
     assert sink.outcomes[0][1]["forward_attempted"] is True
+
+
+def test_approval_rejection_is_safe_and_actionable():
+    up = FakeUpstream()
+    kernel = FakeKernel(
+        KernelDecision(
+            allowed=False,
+            requires_approval=False,
+            reasons=["linked approval was rejected"],
+            intent_id="i4",
+        )
+    )
+    resp = _call_sink("create_refund", {"amount": 600}, kernel, up, RecordingSink())
+    assert up.called == []
+    assert resp["result"]["_meta"]["zroky"]["remediation"] == {
+        "reason_code": "approval_rejected",
+        "retryable": False,
+        "next_actions": [{"type": "escalate_to_human"}],
+    }
+
+
+def test_approval_expiry_requests_new_approval_without_leaking_reason():
+    up = FakeUpstream()
+    kernel = FakeKernel(
+        KernelDecision(
+            allowed=False,
+            requires_approval=False,
+            reasons=["linked approval expired"],
+            intent_id="i5",
+        )
+    )
+    resp = _call_sink("create_refund", {"amount": 600}, kernel, up, RecordingSink())
+    meta = resp["result"]["_meta"]["zroky"]
+    assert up.called == []
+    assert meta["remediation"] == {
+        "reason_code": "approval_expired",
+        "retryable": False,
+        "next_actions": [{"type": "request_new_approval"}],
+    }
+    assert "reasons" not in meta
 
 
 def test_unprotected_never_consults_kernel_even_when_down():
