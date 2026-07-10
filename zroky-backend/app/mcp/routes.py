@@ -65,6 +65,11 @@ def mcp_ingress(
             detail="Not authorized for the requested project.",
         )
 
+    allowed_projects = _mcp_project_allowlist(settings)
+    if allowed_projects is not None and project_id not in allowed_projects:
+        # Keep non-canary tenants indistinguishable from disabled MCP.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
     mcp_request_id = str(uuid.uuid4())
     method = message.get("method")
 
@@ -97,6 +102,13 @@ def mcp_ingress(
 
     _log_correlation(mcp_request_id, project_id, method, message, response)
     return response
+
+
+def _mcp_project_allowlist(settings: Settings) -> set[str] | None:
+    raw = settings.MCP_INTERCEPTION_PROJECT_ALLOWLIST.strip()
+    if not raw:
+        return None
+    return {item.strip() for item in raw.split(",") if item.strip()}
 
 
 def _resolve_idempotency_key(caller_token: str | None, message: dict[str, Any]) -> str | None:

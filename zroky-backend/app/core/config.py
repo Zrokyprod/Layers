@@ -262,6 +262,13 @@ class Settings(BaseSettings):
     MCP_INTERCEPTION_ENABLED: bool = False
     MCP_UPSTREAM_URL: Optional[str] = None
     MCP_UPSTREAM_TIMEOUT_SECONDS: float = 30.0
+    # Optional comma-separated project allowlist for production canaries.
+    # When non-empty, /v1/mcp/{project_id} stays inert (404) for every other
+    # project even if MCP_INTERCEPTION_ENABLED is true.
+    MCP_INTERCEPTION_PROJECT_ALLOWLIST: str = ""
+    # Synthetic no-side-effect MCP server used only for production smoke tests.
+    # Default OFF so the public route is inert unless an operator opts in.
+    MCP_CANARY_UPSTREAM_ENABLED: bool = False
 
     # Hosted billing uses Razorpay. When disabled, paid checkout/verification
     # endpoints return 503; self-host profiles keep billing disabled by default.

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -58,13 +59,18 @@ def _request_json(
     url: str,
     timeout_seconds: float,
     headers: dict[str, str],
-    payload: dict[str, Any],
+    payload: dict[str, Any] | None = None,
 ) -> HttpResponse:
+    request_headers = dict(headers)
+    data = None
+    if payload is not None:
+        request_headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url=url,
         method=method,
-        headers={**headers, "Content-Type": "application/json"},
-        data=json.dumps(payload).encode("utf-8"),
+        headers=request_headers,
+        data=data,
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
@@ -79,6 +85,9 @@ def _request_json(
 
 def _headers(args: argparse.Namespace) -> dict[str, str]:
     headers = {"X-Project-Id": args.auth_project_id or args.project_id}
+    api_key = args.api_key or os.getenv(args.api_key_env, "")
+    if api_key:
+        headers["X-API-Key"] = api_key.strip()
     if args.access_token:
         token = args.access_token.strip()
         headers["Authorization"] = token if token.lower().startswith("bearer ") else f"Bearer {token}"
@@ -103,6 +112,17 @@ def _zroky_meta(response: HttpResponse) -> dict[str, Any]:
     meta = result.get("_meta") if isinstance(result.get("_meta"), dict) else {}
     zroky = meta.get("zroky") if isinstance(meta.get("zroky"), dict) else {}
     return zroky
+
+
+def _receipt_proof_status(receipt: dict[str, Any]) -> str | None:
+    payload = receipt.get("receipt") if isinstance(receipt.get("receipt"), dict) else {}
+    verification = payload.get("verification") if isinstance(payload.get("verification"), dict) else {}
+    status = verification.get("proof_status") or verification.get("status")
+    if status == "verified":
+        return "matched"
+    if status == "unverifiable":
+        return "not_verified"
+    return str(status) if status else None
 
 
 def _print_pass(message: str) -> None:
@@ -185,22 +205,33 @@ def run_smoke(args: argparse.Namespace) -> int:
         return _fail(f"Expected allowed canary not to be an MCP error: {call_response.text}")
 
     if args.require_receipt:
-        missing = [
-            key
-            for key in ("receipt_id", "receipt_digest", "signature_valid", "proof_status")
-            if key not in meta
-        ]
-        if missing:
-            return _fail(f"Receipt metadata missing keys {missing}: {call_response.text}")
-        if meta.get("signature_valid") is not True:
-            return _fail(f"Expected signature_valid=true, got {meta.get('signature_valid')!r}")
-        if not str(meta.get("receipt_digest") or "").startswith("sha256:"):
-            return _fail(f"Expected sha256 receipt digest, got {meta.get('receipt_digest')!r}")
-        _print_pass(
-            f"signed receipt present id={meta.get('receipt_id')} proof_status={meta.get('proof_status')}"
-        )
+        try:
+            immediate = _validate_inline_receipt_meta(meta)
+        except RuntimeError as exc:
+            return _fail(str(exc))
+        if immediate is None:
+            intent_id = meta.get("intent_id")
+            if not intent_id:
+                return _fail(f"Cannot poll async receipt without intent_id: {call_response.text}")
+            polled = _poll_async_receipt(
+                base_url=base_url,
+                headers=headers,
+                timeout_seconds=args.timeout_seconds,
+                action_id=str(intent_id),
+                expect_proof_status=args.expect_proof_status,
+                poll_interval_seconds=args.receipt_poll_interval_seconds,
+                max_wait_seconds=args.receipt_timeout_seconds,
+            )
+            if polled != 0:
+                return polled
+        else:
+            proof_status = immediate
+            if args.expect_proof_status and proof_status != args.expect_proof_status:
+                return _fail(
+                    f"Expected proof_status={args.expect_proof_status!r}, got {proof_status!r}"
+                )
 
-    if args.expect_proof_status and meta.get("proof_status") != args.expect_proof_status:
+    if args.expect_proof_status and not args.require_receipt and meta.get("proof_status") != args.expect_proof_status:
         return _fail(
             f"Expected proof_status={args.expect_proof_status!r}, got {meta.get('proof_status')!r}"
         )
@@ -211,11 +242,84 @@ def run_smoke(args: argparse.Namespace) -> int:
     return 0
 
 
+def _validate_inline_receipt_meta(meta: dict[str, Any]) -> str | None:
+    receipt_keys = ("receipt_id", "receipt_digest", "signature_valid", "proof_status")
+    if not any(key in meta for key in receipt_keys):
+        return None
+    missing = [key for key in receipt_keys if key not in meta]
+    if missing:
+        raise RuntimeError(f"Receipt metadata missing keys {missing}")
+    if meta.get("signature_valid") is not True:
+        raise RuntimeError(f"Expected signature_valid=true, got {meta.get('signature_valid')!r}")
+    if not str(meta.get("receipt_digest") or "").startswith("sha256:"):
+        raise RuntimeError(f"Expected sha256 receipt digest, got {meta.get('receipt_digest')!r}")
+    _print_pass(f"signed receipt present id={meta.get('receipt_id')} proof_status={meta.get('proof_status')}")
+    return str(meta.get("proof_status"))
+
+
+def _poll_async_receipt(
+    *,
+    base_url: str,
+    headers: dict[str, str],
+    timeout_seconds: float,
+    action_id: str,
+    expect_proof_status: str,
+    poll_interval_seconds: float,
+    max_wait_seconds: float,
+) -> int:
+    deadline = time.time() + max_wait_seconds
+    last_status = ""
+    while time.time() < deadline:
+        intent_response = _request_json(
+            method="GET",
+            url=f"{base_url}/v1/action-intents/{action_id}",
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+        )
+        if intent_response.status != 200:
+            return _fail(
+                f"receipt poll expected action intent HTTP 200, got {intent_response.status}: "
+                f"{intent_response.text}"
+            )
+        intent = intent_response.body if isinstance(intent_response.body, dict) else {}
+        last_status = (
+            f"proof_status={intent.get('proof_status')} receipt_status={intent.get('receipt_status')}"
+        )
+        if intent.get("receipt_status") == "generated":
+            receipt_response = _request_json(
+                method="GET",
+                url=f"{base_url}/v1/action-intents/{action_id}/receipt",
+                timeout_seconds=timeout_seconds,
+                headers=headers,
+            )
+            if receipt_response.status != 200:
+                return _fail(
+                    f"receipt fetch expected HTTP 200, got {receipt_response.status}: "
+                    f"{receipt_response.text}"
+                )
+            receipt = receipt_response.body if isinstance(receipt_response.body, dict) else {}
+            if receipt.get("signature_valid") is not True:
+                return _fail(f"Expected receipt signature_valid=true, got {receipt.get('signature_valid')!r}")
+            if not str(receipt.get("receipt_digest") or "").startswith("sha256:"):
+                return _fail(f"Expected sha256 receipt digest, got {receipt.get('receipt_digest')!r}")
+            proof_status = str(intent.get("proof_status") or _receipt_proof_status(receipt) or "")
+            if expect_proof_status and proof_status != expect_proof_status:
+                return _fail(f"Expected proof_status={expect_proof_status!r}, got {proof_status!r}")
+            _print_pass(
+                f"async signed receipt generated id={receipt.get('receipt_id')} proof_status={proof_status}"
+            )
+            return 0
+        time.sleep(poll_interval_seconds)
+    return _fail(f"Timed out waiting for async receipt for {action_id}; last {last_status}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run MCP interception smoke checks against Zroky backend")
     parser.add_argument("--base-url", required=True, help="API base URL, for example https://api.example.com")
     parser.add_argument("--project-id", required=True, help="Target project id")
     parser.add_argument("--auth-project-id", default="", help="Override X-Project-Id header value")
+    parser.add_argument("--api-key", default="", help="Project API key; defaults to --api-key-env")
+    parser.add_argument("--api-key-env", default="MCP_CANARY_API_KEY", help="Environment variable containing API key")
     parser.add_argument("--access-token", default="", help="Bearer token for auth environments")
     parser.add_argument(
         "--idempotency-key",
@@ -233,6 +337,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--expect-error", action="store_true", help="Expect result.isError=true")
     parser.add_argument("--require-receipt", action="store_true", help="Require signed receipt metadata")
+    parser.add_argument("--receipt-timeout-seconds", type=float, default=90.0, help="Max wait for async receipt")
+    parser.add_argument("--receipt-poll-interval-seconds", type=float, default=3.0, help="Async receipt poll interval")
     parser.add_argument(
         "--expect-proof-status",
         default="",

@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.action_intents import router as action_intents_router
+from app.mcp.canary import router as mcp_canary_router
 from app.mcp.routes import router as mcp_ingress_router
 from app.api.routes.actions import router as actions_router
 from app.api.routes.agents import router as agents_router
@@ -66,6 +67,9 @@ api_router.include_router(action_intents_router, tags=["verified-actions"])
 # MCP-native interception ingress. Always registered but inert (404) unless
 # Settings.MCP_INTERCEPTION_ENABLED is true — see app.mcp.routes.
 api_router.include_router(mcp_ingress_router, tags=["mcp"])
+# Synthetic upstream + setup helper for production canaries. Its upstream
+# route is also inert unless Settings.MCP_CANARY_UPSTREAM_ENABLED is true.
+api_router.include_router(mcp_canary_router, tags=["mcp"])
 api_router.include_router(actions_router, tags=["actions"])
 api_router.include_router(evidence_router, tags=["evidence"])
 api_router.include_router(agents_router, tags=["agents"])  # Agent tool-control profiles
