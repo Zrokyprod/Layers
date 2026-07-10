@@ -23,6 +23,7 @@ import { useDashboardStore } from "@/lib/store";
 import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
 
 import { ControlLoopStrip, type ControlLoopStats } from "./ControlLoopStrip";
+import { buildControlReadiness, ControlHealthPanel, firstMissingControl } from "./ControlHealthPanel";
 import { DecisionQueue, type HomeQueueFilter } from "./DecisionQueue";
 import { FleetContextLine } from "./FleetContextLine";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
@@ -44,6 +45,7 @@ type MissionData = {
   apiKeys: ApiKeyResponse[];
   billingUsage: BillingUsageResponse | null;
   homeSummary: HomeSummaryResponse | null;
+  controlHealth: NonNullable<NonNullable<HomeSummaryResponse["data"]>["control_health"]> | null;
 };
 
 type MissionSource =
@@ -76,6 +78,7 @@ const EMPTY_DATA: MissionData = {
   apiKeys: [],
   billingUsage: null,
   homeSummary: null,
+  controlHealth: null,
 };
 
 const NO_SOURCES_AVAILABLE: MissionAvailability = {
@@ -269,6 +272,7 @@ function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
     actionRunners: details?.action_runners ?? [],
     apiKeys: details?.api_keys ?? [],
     billingUsage: details?.billing_usage ?? null,
+    controlHealth: details?.control_health ?? null,
     homeSummary: summary,
   };
 }
@@ -395,7 +399,9 @@ export default function HomePage() {
 
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
-  const verdict = homeVerdictForQueue(rows, homeUnlocked);
+  const readiness = buildControlReadiness(data.controlHealth, data.homeSummary?.metrics.receipts_generated ?? 0);
+  const missingControl = firstMissingControl(readiness);
+  const verdict = homeVerdictForQueue(rows, homeUnlocked, missingControl ?? undefined);
   const metrics = proofMetrics(data, availability);
   const loopStats = controlLoopStats(data, availability);
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0] ?? null;
@@ -409,6 +415,11 @@ export default function HomePage() {
   const liveDashboardBody = (
     <>
       <ProofStrip metrics={metrics} loading={initialLoading} />
+      <ControlHealthPanel
+        health={data.controlHealth}
+        receipts={data.homeSummary?.metrics.receipts_generated ?? 0}
+        proof={data.outcomeSummary}
+      />
       <FleetContextLine fleet={fleet} loading={initialLoading} />
       <ControlLoopStrip {...loopStats} />
       <div className="mc-main-grid">

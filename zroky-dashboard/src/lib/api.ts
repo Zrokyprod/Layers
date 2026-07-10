@@ -3669,6 +3669,7 @@ export interface OutcomeReconciliationSummaryResponse {
   verified?: number;
   pending?: number;
   unverifiable?: number;
+  partial?: number;
   cancelled?: number;
 }
 
@@ -3761,6 +3762,18 @@ export interface HomeSummaryResponse {
     action_runners: ActionRunnerResponse[];
     api_keys: ApiKeyResponse[];
     billing_usage: BillingUsageResponse | null;
+    control_health?: {
+      active_agents: number;
+      policy_enforced_agents: number;
+      configured_action_packs: number;
+      online_runners: number;
+      active_sor_connectors: number;
+      tested_sor_connectors: number;
+      mcp_gateway_status: string;
+      mcp_gateway_test_status: string;
+      runtime_enabled: boolean;
+      kill_switch_enabled: boolean;
+    } | null;
   };
 }
 
