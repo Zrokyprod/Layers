@@ -279,6 +279,16 @@ class Settings(BaseSettings):
     MCP_INTERCEPTION_ENABLED: bool = False
     MCP_UPSTREAM_URL: Optional[str] = None
     MCP_UPSTREAM_TIMEOUT_SECONDS: float = 30.0
+    # Compatibility-only bridge for the existing single upstream canary. New
+    # enterprise projects must use a tested mcp_upstream_bindings row; this
+    # remains True for one release so the deployed canary is not interrupted.
+    MCP_LEGACY_UPSTREAM_FALLBACK_ENABLED: bool = True
+    # Gateway sessions pin a project binding and its version. They are distinct
+    # from the upstream MCP session and invalidate when the binding changes.
+    MCP_GATEWAY_SESSION_TTL_SECONDS: int = 86400
+    # Browser-originated MCP calls are rejected unless their exact Origin is
+    # listed here. Non-browser agent requests normally omit Origin.
+    MCP_ALLOWED_ORIGINS: str = ""
     # Optional comma-separated project allowlist for production canaries.
     # When non-empty, /v1/mcp/{project_id} stays inert (404) for every other
     # project even if MCP_INTERCEPTION_ENABLED is true.

@@ -44,11 +44,12 @@ class FakeUpstream:
     def __init__(self, raise_on: str | None = None):
         self.called: list[tuple[str, dict]] = []
         self._raise_on = raise_on
+        self.allowed_tools = None
 
-    def list_tools(self):
+    def list_tools(self, *, request_id=None):
         return [{"name": "create_refund"}, {"name": "get_customer"}]
 
-    def call_tool(self, name, arguments):
+    def call_tool(self, name, arguments, *, request_id=None):
         if self._raise_on is not None and name == self._raise_on:
             raise RuntimeError("upstream boom")
         self.called.append((name, arguments))

@@ -38,7 +38,10 @@ from app.db.models import (
 )
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.mcp.gateway import McpUpstreamResolution
+from app.mcp.management import get_mcp_binding_tester
 from app.mcp.routes import get_mcp_upstream
+from app.mcp.upstream import McpInitializeResponse
 from app.services.action_post_execution import process_action_post_execution_jobs
 from app.services.pilot import upsert_policy
 
@@ -48,13 +51,49 @@ class FakeUpstream:
 
     def __init__(self, raise_on: str | None = None, verification: dict | None = None) -> None:
         self.calls: list[tuple[str, dict]] = []
+        self.initialize_calls: list[tuple[dict, object]] = []
+        self.notifications: list[tuple[str, dict]] = []
         self._raise_on = raise_on
         self.verification = verification
+        self.allowed_tools = None
 
-    def list_tools(self) -> list[dict]:
+    def resolve_for_initialize(self, db, *, project_id: str) -> McpUpstreamResolution:
+        return McpUpstreamResolution(
+            upstream=self,
+            source="test",
+            binding_id=None,
+            binding_version=None,
+            requires_gateway_session=False,
+        )
+
+    def resolve_for_session(
+        self,
+        db,
+        *,
+        project_id: str,
+        gateway_session_id: str,
+        principal_subject: str | None,
+    ) -> McpUpstreamResolution:
+        return self.resolve_for_initialize(db, project_id=project_id)
+
+    def list_tools(self, *, request_id=None) -> list[dict]:
         return [{"name": "create_refund"}, {"name": "get_customer"}]
 
-    def call_tool(self, name: str, arguments: dict) -> dict:
+    def initialize(self, params: dict, *, request_id=None) -> McpInitializeResponse:
+        self.initialize_calls.append((params, request_id))
+        return McpInitializeResponse(
+            result={
+                "protocolVersion": "2025-06-18",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "fake-upstream", "version": "1"},
+            },
+            upstream_session_id=None,
+        )
+
+    def notify(self, method: str, params: dict | None = None) -> None:
+        self.notifications.append((method, params or {}))
+
+    def call_tool(self, name: str, arguments: dict, *, request_id=None) -> dict:
         if self._raise_on is not None and name == self._raise_on:
             raise RuntimeError("upstream boom")
         self.calls.append((name, arguments))
@@ -62,6 +101,11 @@ class FakeUpstream:
         if self.verification is not None:
             result["_meta"] = {"zroky": {"verification": dict(self.verification)}}
         return result
+
+
+class FakeBindingTester:
+    def test(self, target) -> list[str]:
+        return ["create_refund", "get_customer"]
 
 
 @pytest.fixture()
@@ -298,6 +342,77 @@ def test_tools_list_passthrough_and_annotation(client: TestClient):
     ).json()
     tools = {t["name"]: t["_meta"]["zroky"]["protected"] for t in resp["result"]["tools"]}
     assert tools == {"create_refund": True, "get_customer": False}
+
+
+def test_initialize_preserves_id_and_forwards_handshake(client: TestClient, fake_upstream: FakeUpstream):
+    _seed_project(client, "proj_initialize")
+    response = client.post(
+        "/v1/mcp/proj_initialize",
+        headers={"X-Project-Id": "proj_initialize"},
+        json={
+            "jsonrpc": "2.0",
+            "id": "init-7",
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == "init-7"
+    assert response.json()["result"]["serverInfo"]["name"] == "zroky-mcp-proxy"
+    assert fake_upstream.initialize_calls[0][1] == "init-7"
+
+
+def test_initialized_notification_reaches_upstream_and_returns_202(
+    client: TestClient, fake_upstream: FakeUpstream
+):
+    _seed_project(client, "proj_notification")
+    response = client.post(
+        "/v1/mcp/proj_notification",
+        headers={"X-Project-Id": "proj_notification"},
+        json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+    )
+    assert response.status_code == 202
+    assert fake_upstream.notifications == [("notifications/initialized", {})]
+
+
+def test_project_upstream_binding_requires_preflight_before_activation(
+    client: TestClient,
+):
+    project = "proj_upstream_config"
+    _seed_project(client, project)
+    app.dependency_overrides[get_mcp_binding_tester] = lambda: FakeBindingTester()
+    try:
+        draft = client.put(
+            "/v1/mcp-config/upstream",
+            headers={"X-Project-Id": project},
+            json={
+                "endpoint_url": "https://example.com/mcp",
+                "protocol_version": "2025-06-18",
+                "allowed_tools": ["get_customer", "create_refund"],
+            },
+        )
+        assert draft.status_code == 200, draft.text
+        assert draft.json()["status"] == "draft"
+        blocked = client.post(
+            "/v1/mcp-config/upstream/activate",
+            headers={"X-Project-Id": project},
+        )
+        assert blocked.status_code == 409
+
+        preflight = client.post(
+            "/v1/mcp-config/upstream/preflight",
+            headers={"X-Project-Id": project},
+        )
+        assert preflight.status_code == 200, preflight.text
+        assert preflight.json()["discovered_tools"] == ["create_refund", "get_customer"]
+        active = client.post(
+            "/v1/mcp-config/upstream/activate",
+            headers={"X-Project-Id": project},
+        )
+        assert active.status_code == 200, active.text
+        assert active.json()["status"] == "active"
+    finally:
+        app.dependency_overrides.pop(get_mcp_binding_tester, None)
 
 
 # ── Slice 1.5: idempotency semantics ────────────────────────────────────────
