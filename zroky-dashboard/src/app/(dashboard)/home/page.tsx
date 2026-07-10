@@ -25,7 +25,6 @@ import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/
 import { ControlLoopStrip, type ControlLoopStats } from "./ControlLoopStrip";
 import { DecisionQueue, type HomeQueueFilter } from "./DecisionQueue";
 import { FleetContextLine } from "./FleetContextLine";
-import { FIRST_RUN_PREVIEW_DATA, PREVIEW_TIME } from "./first-run-preview";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
 import { ProofStrip, type ProofMetric } from "./ProofStrip";
 import { SelectedProofRail } from "./SelectedProofRail";
@@ -110,8 +109,15 @@ const ALL_SOURCES_AVAILABLE: MissionAvailability = {
 };
 
 function firstRunSignals(data: MissionData): FirstRunSignals {
+  const setupAgent = data.agentProfiles.find((profile) => profile.metadata?.setup_source === "agent_control_setup_wizard")
+    ?? data.agentProfiles.find((profile) => profile.is_active)
+    ?? data.agentProfiles[0]
+    ?? null;
   const hasProjectKey = data.apiKeys.some((key) => !key.revoked && !key.expired);
   const hasActiveAgent = data.agentProfiles.some((profile) => profile.is_active) || (data.agentProfileMeta?.active_count ?? 0) > 0;
+  const hasInstalledActions = data.agentProfiles.some((profile) => (
+    typeof profile.metadata?.setup_action_pack_id === "string" && profile.metadata.setup_action_pack_id.trim().length > 0
+  ));
   const hasActionIntent = data.intents.length > 0;
   const hasProofSignal =
     data.approvals.length > 0 ||
@@ -120,8 +126,10 @@ function firstRunSignals(data: MissionData): FirstRunSignals {
     data.intents.some((intent) => intent.receipt_status === "generated" || ["matched", "mismatched"].includes(intent.proof_status));
 
   return {
+    agentId: setupAgent?.id ?? null,
     hasProjectKey,
     hasActiveAgent,
+    hasInstalledActions,
     hasActionIntent,
     hasProofSignal,
   };
@@ -356,18 +364,6 @@ export default function HomePage() {
       }),
     [data.approvals, data.intents, data.mutations, data.outcomes, data.staleAttempts, lastLoadedAt],
   );
-  const previewRows = useMemo(
-    () =>
-      buildDecisionQueue({
-        intents: FIRST_RUN_PREVIEW_DATA.intents,
-        approvals: FIRST_RUN_PREVIEW_DATA.approvals,
-        outcomes: FIRST_RUN_PREVIEW_DATA.outcomes,
-        mutations: FIRST_RUN_PREVIEW_DATA.mutations,
-        staleAttempts: FIRST_RUN_PREVIEW_DATA.staleAttempts,
-        nowMs: new Date(PREVIEW_TIME).getTime(),
-      }),
-    [],
-  );
 
   const fleet = useMemo(() => buildFleetView({
     profiles: data.agentProfiles,
@@ -387,17 +383,6 @@ export default function HomePage() {
     data.outcomes,
     data.staleAttempts,
   ]);
-  const previewFleet = useMemo(() => buildFleetView({
-    profiles: FIRST_RUN_PREVIEW_DATA.agentProfiles,
-    profileMeta: FIRST_RUN_PREVIEW_DATA.agentProfileMeta,
-    intents: FIRST_RUN_PREVIEW_DATA.intents,
-    decisions: FIRST_RUN_PREVIEW_DATA.approvals,
-    outcomes: FIRST_RUN_PREVIEW_DATA.outcomes,
-    runners: FIRST_RUN_PREVIEW_DATA.actionRunners,
-    attempts: FIRST_RUN_PREVIEW_DATA.staleAttempts,
-    staleAttemptIds: [],
-  }), []);
-
   useEffect(() => {
     if (rows.length === 0) {
       setSelectedRowId(null);
@@ -412,16 +397,10 @@ export default function HomePage() {
   const homeUnlocked = hasProtectedActionSignal(signals);
   const verdict = homeVerdictForQueue(rows, homeUnlocked);
   const metrics = proofMetrics(data, availability);
-  const previewMetrics = proofMetrics(FIRST_RUN_PREVIEW_DATA, ALL_SOURCES_AVAILABLE);
   const loopStats = controlLoopStats(data, availability);
-  const previewLoopStats = controlLoopStats(FIRST_RUN_PREVIEW_DATA, ALL_SOURCES_AVAILABLE);
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0] ?? null;
   const selectedIntent = selectedRow?.actionId
     ? data.intents.find((intent) => intent.action_id === selectedRow.actionId) ?? null
-    : null;
-  const selectedPreviewRow = previewRows[0] ?? null;
-  const selectedPreviewIntent = selectedPreviewRow?.actionId
-    ? FIRST_RUN_PREVIEW_DATA.intents.find((intent) => intent.action_id === selectedPreviewRow.actionId) ?? null
     : null;
   const initialLoading = isLoading && lastLoadedAt == null;
   const showFirstRun = !homeUnlocked && !initialLoading;
@@ -445,25 +424,6 @@ export default function HomePage() {
       </div>
     </>
   );
-  const previewDashboardBody = (
-    <>
-      <ProofStrip metrics={previewMetrics} loading={false} />
-      <FleetContextLine fleet={previewFleet} loading={false} />
-      <ControlLoopStrip {...previewLoopStats} />
-      <div className="mc-main-grid">
-        <DecisionQueue
-          rows={previewRows}
-          selectedId={selectedPreviewRow?.id ?? null}
-          filter="all"
-          onFilterChange={() => undefined}
-          onSelect={() => undefined}
-          loading={false}
-        />
-        <SelectedProofRail row={selectedPreviewRow} intent={selectedPreviewIntent} />
-      </div>
-    </>
-  );
-
   return (
     <main className="mission-control-page">
       <div className="mc-shell">
@@ -478,10 +438,7 @@ export default function HomePage() {
         />
 
         {showFirstRun ? (
-          <section className="mc-locked-home" aria-label="Locked Home dashboard preview">
-            <div className="mc-locked-preview" aria-hidden="true" inert>
-              {previewDashboardBody}
-            </div>
+          <section className="mc-locked-home" aria-label="Home setup required">
             <FirstRunPanel signals={signals} />
           </section>
         ) : (

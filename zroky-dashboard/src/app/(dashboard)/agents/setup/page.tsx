@@ -44,6 +44,7 @@ import {
   listActionPacks,
   listAgentProfiles,
   listProjectApiKeys,
+  updateAgentProfile,
   type ActionPackResponse,
   type AgentProfileResponse,
 } from "@/lib/api";
@@ -98,7 +99,7 @@ const FRAMEWORKS = [
   "Custom agent runtime",
 ];
 
-const ENVIRONMENTS = ["production", "staging", "development"];
+const ENVIRONMENTS = ["staging", "development", "production"];
 const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
 type SetupStep = "key" | "connect" | "pack" | "run" | "next";
 
@@ -247,6 +248,11 @@ function agentProfileMatchesSetupRequest(profile: AgentProfileResponse, agentId:
   return profile.display_name.trim().toLowerCase() === name || profile.slug.trim().toLowerCase() === name;
 }
 
+function installedActionPackId(profile: AgentProfileResponse | null): string | null {
+  const value = profile?.metadata?.setup_action_pack_id;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 export default function ProtectedAgentSetupPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -297,6 +303,7 @@ export default function ProtectedAgentSetupPage() {
     agentProfileMatchesSetupRequest(item, requestedAgentId, agentName)
   )) ?? null;
   const connectedProfile = profile ?? existingProfile;
+  const persistedPackId = installedActionPackId(connectedProfile);
   const packsQuery = useQuery({
     queryKey: ["agent-setup", "action-packs"],
     queryFn: ({ signal }) => listActionPacks(signal),
@@ -306,7 +313,7 @@ export default function ProtectedAgentSetupPage() {
   const packs = (packsQuery.data?.items ?? [])
     .filter((pack) => PRIMARY_PACK_IDS.includes(pack.id))
     .sort(packSort);
-  const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? packs[0] ?? null;
+  const selectedPack = packs.find((pack) => pack.id === (persistedPackId ?? selectedPackId)) ?? packs[0] ?? null;
   const selectedPackLaunchReady = Boolean(selectedPack && LAUNCH_READY_PACK_IDS.has(selectedPack.id));
   const selectedPackRequestAccess = Boolean(selectedPack && !selectedPackLaunchReady);
   const isSupportPack = selectedPack?.id === "support-ops-v1";
@@ -337,7 +344,9 @@ export default function ProtectedAgentSetupPage() {
   const selectedEcommerceConnectors = selectedPack && isEcommercePack
     ? ecommerceConnectorsFor(ecommerceSystemId, ecommerceCapabilityIds)
     : [];
-  const packInstalled = Boolean(installedPack);
+  const persistedPack = persistedPackId ? packs.find((pack) => pack.id === persistedPackId) ?? null : null;
+  const effectiveInstalledPack = installedPack ?? persistedPack;
+  const packInstalled = Boolean(effectiveInstalledPack);
 
   const createKeyMutation = useMutation({
     mutationFn: async () => {
@@ -385,6 +394,9 @@ export default function ProtectedAgentSetupPage() {
         },
         verification_connectors: [],
         metadata: {
+          setup_source: "agent_control_setup_wizard",
+          setup_framework: framework,
+          setup_environment: environment,
           runner_verification: {
             runner_mode: "customer_hosted",
             credential_ref: runtimeCredentialRef(runtimeKeyPrefix),
@@ -429,11 +441,28 @@ export default function ProtectedAgentSetupPage() {
       if (!selectedPackLaunchReady) {
         throw new Error("This action pack is available by request during launch.");
       }
-      return installActionPack(selectedPack.id);
+      const result = await installActionPack(selectedPack.id);
+      if (!connectedProfile) {
+        return { result, updatedProfile: null };
+      }
+      const updatedProfile = await updateAgentProfile(connectedProfile.id, {
+        metadata: {
+          ...(connectedProfile.metadata ?? {}),
+          setup_source: "agent_control_setup_wizard",
+          setup_action_pack_id: result.pack.id,
+          setup_action_contract_versions: result.installed_contracts.map((item) => item.contract.contract_version),
+        },
+      });
+      return { result, updatedProfile };
     },
-    onSuccess: (result) => {
+    onSuccess: ({ result, updatedProfile }) => {
       setInstalledPack(result.pack);
+      if (updatedProfile) {
+        setProfile(updatedProfile);
+      }
       setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["agent-setup", "profiles"] });
+      void queryClient.invalidateQueries({ queryKey: ["agents", "profiles"] });
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Could not install protected actions.");
@@ -478,11 +507,14 @@ export default function ProtectedAgentSetupPage() {
       ? "polling"
       : "waiting";
 
-  const keyEnvSnippet = `ZROKY_API_KEY=${maskedRuntimeKey}
+  const keyEnvSnippet = `ZROKY_API_KEY=${newRuntimeKey?.api_key ?? maskedRuntimeKey}
 ZROKY_PROJECT_ID=${projectId || "proj_..."}`;
   const firstProtectedActionSnippet = `import zroky
 
-zroky.init()
+zroky.init(
+    agent_id="${connectedProfile?.id ?? "agent_..."}",
+    environment="${environment}",
+)
 
 receipt = zroky.protect(
     action="customer.access.grant",
@@ -1055,8 +1087,8 @@ print(receipt["status"])`;
                       <div className="agent-runtime-ready">
                         <CheckCircle2 aria-hidden="true" />
                         <div>
-                          <strong>{installedPack?.display_name ?? selectedPack.display_name} installed</strong>
-                          <span>{selectedPack.contract_templates.length} protected actions ready. Run a test action next.</span>
+                          <strong>{effectiveInstalledPack?.display_name ?? selectedPack.display_name} installed</strong>
+                          <span>{effectiveInstalledPack?.contract_templates.length ?? selectedPack.contract_templates.length} protected actions ready. Run a test action next.</span>
                         </div>
                       </div>
                     ) : selectedPackRequestAccess ? (
@@ -1106,13 +1138,8 @@ print(receipt["status"])`;
             {packInstalled ? (
               <div className="agent-run-snippets">
                 <CopyableCommand label="Install" value="pip install zroky" />
-                <CopyableCommand label="Check" value="zroky doctor" />
-                <CopyableCommand label="Send test action" value="zroky ingest --test" />
-                <CopyableCommand label="Run scenario" value="python agent.py access-grant" />
-                <details className="agent-python-example">
-                  <summary>Python example</summary>
-                  <CopyableCode label="Protected action" value={firstProtectedActionSnippet} />
-                </details>
+                <CopyableCode label="agent.py" value={firstProtectedActionSnippet} />
+                <CopyableCommand label="Run protected action" value="python agent.py" />
               </div>
             ) : (
               <div className="agent-run-locked">
@@ -1123,8 +1150,8 @@ print(receipt["status"])`;
             <div className="agent-setup-readiness-grid" aria-label="Live capture status">
               <div data-done={created ? "true" : "false"}>
                 {created ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
-                <strong>SDK ready</strong>
-                <span>{created ? "install the snippet" : "create agent first"}</span>
+                <strong>Agent profile</strong>
+                <span>{created ? "ready for SDK traffic" : "create agent first"}</span>
               </div>
               <div data-done={packInstalled ? "true" : "false"}>
                 {packInstalled ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}

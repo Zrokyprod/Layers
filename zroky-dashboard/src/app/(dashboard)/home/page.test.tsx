@@ -563,23 +563,20 @@ describe("Mission Control Home", () => {
     const { container } = render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
     const lockedHome = container.querySelector(".mc-locked-home");
-    const lockedPreview = container.querySelector(".mc-locked-preview");
     expect(lockedHome).toBeInTheDocument();
-    expect(lockedPreview?.getAttribute("aria-hidden")).toBe("true");
-    expect(lockedPreview?.hasAttribute("inert")).toBe(true);
-    expect(lockedPreview?.querySelector('[aria-label="Proof metrics"]')).toBeInTheDocument();
-    expect(lockedPreview?.textContent).toContain("Controlled actions");
-    expect(lockedPreview?.textContent).toContain("Refund Agent");
-    expect(lockedPreview?.textContent).toContain("Verified action loop");
-    expect(lockedPreview?.textContent).toContain("Sequence risk caught");
-    expect(lockedPreview?.textContent).toContain("Policy bypass mutation");
-    expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
+    expect(container.querySelector(".mc-locked-preview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Policy bypass mutation")).not.toBeInTheDocument();
     expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
-    const installCard = screen.getByText("Install SDK").closest(".mc-first-run-step-card");
+    const keyCard = screen.getByText("Create project key").closest(".mc-first-run-step-card");
+    const agentCard = screen.getByText("Connect agent").closest(".mc-first-run-step-card");
+    const actionsCard = screen.getByText("Install protected actions").closest(".mc-first-run-step-card");
     const submitCard = screen.getByText("Submit action").closest(".mc-first-run-step-card");
     const proofCard = screen.getByText("Approve and prove").closest(".mc-first-run-step-card");
-    expect(installCard?.getAttribute("data-state")).toBe("current");
+    expect(keyCard?.getAttribute("data-state")).toBe("current");
+    expect(agentCard?.getAttribute("data-state")).toBe("locked");
+    expect(actionsCard?.getAttribute("data-state")).toBe("locked");
     expect(submitCard?.getAttribute("data-state")).toBe("locked");
     expect(proofCard?.getAttribute("data-state")).toBe("locked");
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
@@ -590,11 +587,11 @@ describe("Mission Control Home", () => {
     expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
   });
 
-  it("tracks key and active-agent progress before the first action signal", async () => {
+  it("tracks durable key, agent, and protected-action progress before the first action signal", async () => {
     mockHomeData({
       apiKeys: [apiKey()],
       profiles: [
-        profile(),
+        profile({ metadata: { setup_action_pack_id: "support-ops-v1" } }),
       ],
     });
 
@@ -602,10 +599,14 @@ describe("Mission Control Home", () => {
 
     expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
-    expect(screen.getByText("Install SDK").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
+    expect(screen.getByText("Create project key").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
+    expect(screen.getByText("Connect agent").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
+    expect(screen.getByText("Install protected actions").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
     expect(screen.getByText("Submit action").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
-    expect(screen.getByText("Agent profile is active. Send the first verified action.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Send first action/i }).getAttribute("href")).toBe("/agents/setup");
+    expect(screen.getByText("Run the generated SDK example to submit the first intent.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Send first action/i }).getAttribute("href")).toBe(
+      "/agents/setup?agentId=agent_profile_inventory&source=home",
+    );
   });
 
   it("opens the mission dashboard after the first protected action signal", async () => {
