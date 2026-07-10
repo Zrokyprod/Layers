@@ -435,6 +435,42 @@ class OutcomeReconciliationSummaryResponse(BaseModel):
     cancelled: int
 
 
+class OutcomeMismatchResponseView(BaseModel):
+    id: str
+    project_id: str
+    reconciliation_check_id: str
+    action_intent_id: str | None
+    action_receipt_id: str | None
+    receipt_digest: str | None
+    alert_id: str | None
+    status: str
+    resolution_code: str | None
+    resolution_note: str | None
+    remediation: dict[str, Any]
+    evidence: dict[str, Any]
+    acknowledged_by_subject: str | None
+    acknowledged_at: datetime | None
+    resolved_by_subject: str | None
+    resolved_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OutcomeMismatchResponseListResponse(BaseModel):
+    items: list[OutcomeMismatchResponseView]
+    total_in_page: int
+
+
+class OutcomeMismatchResolveRequest(BaseModel):
+    resolution_code: str = Field(min_length=3, max_length=32)
+    resolution_note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("resolution_code")
+    @classmethod
+    def _normalise_resolution_code(cls, value: str) -> str:
+        return value.strip().lower()
+
+
 class SourceMutationIngest(BaseModel):
     source_system: str = Field(..., min_length=1, max_length=64)
     mutation_id: str = Field(..., min_length=1, max_length=255)

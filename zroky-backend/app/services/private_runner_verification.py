@@ -280,6 +280,7 @@ def finish_private_runner_verification(
         call_id=_text(_as_dict(context.get("trace")).get("call_id")),
         trace_id=_text(_as_dict(context.get("trace")).get("trace_id")),
         runtime_policy_decision_id=intent.runtime_policy_decision_id,
+        action_intent_id=intent.id,
         action_type=intent.action_type,
         system_ref=_text(context.get("system_ref")) or f"{row.connector_type}:{intent.id}",
         match_fields=[str(value) for value in context.get("match_fields", [])],

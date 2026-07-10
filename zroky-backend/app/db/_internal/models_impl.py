@@ -15,6 +15,7 @@ from app.db._internal.model_discovery import *
 from app.db._internal.model_growth import *
 from app.db._internal.model_provider_drift import *
 from app.db._internal.model_reliability import *
+from app.db._internal.model_mismatch_response import *
 from app.db._internal.model_verified_actions import *
 from app.db._internal.model_mcp import *
 from app.db._internal.model_approval_adaptation import *

@@ -16,7 +16,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.tenant import require_tenant_id
+from app.api.dependencies.authorization import ROLE_RANK
+from app.api.dependencies.tenant import TenantContext, require_tenant_context, require_tenant_id
 from app.api.routes.outcome_serializers import (
     _serialize_outcome,
     _serialize_reconciliation,
@@ -63,6 +64,9 @@ from app.schemas.outcomes import (
     OutcomeReconciliationListResponse,
     OutcomeReconciliationSummaryResponse,
     OutcomeReconciliationView,
+    OutcomeMismatchResolveRequest,
+    OutcomeMismatchResponseListResponse,
+    OutcomeMismatchResponseView,
     OutcomeTypeView,
     OutcomeView,
     PostgresReadReconciliationIngest,
@@ -101,6 +105,13 @@ from app.services.outcome_reconciliation import (
     list_reconciliations,
     reconcile_outcome,
 )
+from app.services.outcome_mismatch_response import (
+    acknowledge_mismatch_response,
+    get_mismatch_response,
+    list_mismatch_responses,
+    mismatch_response_to_dict,
+    resolve_mismatch_response,
+)
 from app.services.protected_action_billing import (
     ProtectedActionMeteringUnavailable,
     ProtectedActionQuotaExceeded,
@@ -132,6 +143,14 @@ from app.services.source_mutations import (
 )
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
 logger = logging.getLogger(__name__)
+
+
+def _require_mismatch_role(context: TenantContext, minimum_role: str) -> None:
+    if ROLE_RANK[context.role] < ROLE_RANK[minimum_role]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Tenant role '{minimum_role}' is required for this mismatch response action.",
+        )
 
 
 
@@ -708,6 +727,100 @@ def get_reconciliation_kpis(
         partial=summary.partial,
         cancelled=summary.cancelled,
     )
+
+
+@router.get(
+    "/reconciliation/mismatch-responses",
+    response_model=OutcomeMismatchResponseListResponse,
+)
+@limiter.limit("60/minute")
+def list_mismatch_response_cases(
+    request: Request,
+    response_status: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=100),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeMismatchResponseListResponse:
+    _require_mismatch_role(context, "viewer")
+    try:
+        rows = list_mismatch_responses(
+            db,
+            project_id=context.tenant_id,
+            status=response_status,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return OutcomeMismatchResponseListResponse(
+        items=[OutcomeMismatchResponseView(**mismatch_response_to_dict(db, row)) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
+@router.get(
+    "/reconciliation/mismatch-responses/{response_id}",
+    response_model=OutcomeMismatchResponseView,
+)
+@limiter.limit("60/minute")
+def get_mismatch_response_case(
+    request: Request,
+    response_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeMismatchResponseView:
+    _require_mismatch_role(context, "viewer")
+    row = get_mismatch_response(db, project_id=context.tenant_id, response_id=response_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mismatch response case not found.")
+    return OutcomeMismatchResponseView(**mismatch_response_to_dict(db, row))
+
+
+@router.post(
+    "/reconciliation/mismatch-responses/{response_id}/acknowledge",
+    response_model=OutcomeMismatchResponseView,
+)
+@limiter.limit("30/minute")
+def acknowledge_mismatch_response_case(
+    request: Request,
+    response_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeMismatchResponseView:
+    _require_mismatch_role(context, "member")
+    row = get_mismatch_response(db, project_id=context.tenant_id, response_id=response_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mismatch response case not found.")
+    row = acknowledge_mismatch_response(db, response=row, actor=context.subject)
+    return OutcomeMismatchResponseView(**mismatch_response_to_dict(db, row))
+
+
+@router.post(
+    "/reconciliation/mismatch-responses/{response_id}/resolve",
+    response_model=OutcomeMismatchResponseView,
+)
+@limiter.limit("30/minute")
+def resolve_mismatch_response_case(
+    request: Request,
+    response_id: str,
+    body: OutcomeMismatchResolveRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeMismatchResponseView:
+    _require_mismatch_role(context, "owner")
+    row = get_mismatch_response(db, project_id=context.tenant_id, response_id=response_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mismatch response case not found.")
+    try:
+        row = resolve_mismatch_response(
+            db,
+            response=row,
+            resolution_code=body.resolution_code,
+            resolution_note=body.resolution_note,
+            actor=context.subject,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return OutcomeMismatchResponseView(**mismatch_response_to_dict(db, row))
 
 
 @router.get(
