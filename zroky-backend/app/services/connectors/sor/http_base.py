@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import random
+import time
+
 from app.services.connectors.sor.core import *  # noqa: F403
 from app.services.connectors.sor.money import *  # noqa: F403
 
@@ -19,6 +22,8 @@ class HttpJsonRecordConnector:
     connector_type: str = "http_json_record"
     timeout_seconds: float = 5.0
     max_attempts: int = 2
+    retry_backoff_base_seconds: float = 0.1
+    retry_backoff_max_seconds: float = 1.0
     allow_private_hosts: bool = False
     fail_closed_config_errors: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
@@ -75,10 +80,17 @@ class HttpJsonRecordConnector:
         attempts = 0
         transient_errors: list[str] = []
         response: httpx.Response | None = None
+        timeout_seconds = max(0.1, float(self.timeout_seconds))
+        request_timeout = httpx.Timeout(
+            connect=min(timeout_seconds, 2.0),
+            read=timeout_seconds,
+            write=timeout_seconds,
+            pool=min(timeout_seconds, 1.0),
+        )
 
         try:
             with httpx.Client(
-                timeout=self.timeout_seconds, transport=self.transport
+                timeout=request_timeout, transport=self.transport
             ) as client:
                 for attempt in range(1, max_attempts + 1):
                     attempts = attempt
@@ -89,6 +101,7 @@ class HttpJsonRecordConnector:
                         error_code = _request_error_code(exc)
                         transient_errors.append(error_name)
                         if attempt < max_attempts:
+                            time.sleep(self._retry_delay(attempt))
                             continue
                         return SourceRecord(
                             record=None,
@@ -110,6 +123,7 @@ class HttpJsonRecordConnector:
                     if response.status_code in _RETRYABLE_HTTP_STATUSES:
                         transient_errors.append(f"http_{response.status_code}")
                         if attempt < max_attempts:
+                            time.sleep(self._retry_delay(attempt))
                             continue
                     break
         except httpx.RequestError as exc:
@@ -241,6 +255,14 @@ class HttpJsonRecordConnector:
                 transient_errors=transient_errors,
             ),
         )
+
+    def _retry_delay(self, attempt: int) -> float:
+        """Exponential backoff with jitter prevents provider recovery herds."""
+
+        base = max(0.0, float(self.retry_backoff_base_seconds))
+        maximum = max(base, float(self.retry_backoff_max_seconds))
+        delay = min(maximum, base * (2 ** max(0, attempt - 1)))
+        return random.uniform(delay * 0.5, delay * 1.5) if delay else 0.0
 
 
 def _normalise_refund_record(

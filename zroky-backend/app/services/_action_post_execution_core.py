@@ -7,11 +7,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import ActionExecutionAttempt, ActionIntent, ActionPostExecutionJob
+from app.db.models import (
+    ActionExecutionAttempt,
+    ActionIntent,
+    ActionPostExecutionJob,
+    VerificationDispatchState,
+)
 from app.services.action_receipts import generate_action_receipt
 from app.services.action_timeline import record_action_timeline_event
 from app.services.outcome_reconciliation import (
@@ -255,6 +260,9 @@ def enqueue_action_post_execution_job(
         max_attempts=max(1, int(max_attempts)),
         available_at=available_at or _now(),
     )
+    state = db.get(VerificationDispatchState, project_id)
+    if state is None:
+        db.add(VerificationDispatchState(project_id=project_id))
     db.add(row)
     db.flush()
     return row
@@ -305,11 +313,39 @@ def _claim_next_job(
     *,
     worker_id: str,
     lease_seconds: int = DEFAULT_JOB_LEASE_SECONDS,
+    max_in_flight_per_project: int | None = None,
     now: datetime | None = None,
 ) -> ActionPostExecutionJob | None:
     current = now or _now()
+    configured_cap = (
+        int(max_in_flight_per_project)
+        if max_in_flight_per_project is not None
+        else int(get_settings().VERIFICATION_MAX_IN_FLIGHT_PER_PROJECT)
+    )
+    per_project_cap = max(1, configured_cap)
+    active_by_project = (
+        select(
+            ActionPostExecutionJob.project_id.label("project_id"),
+            func.count(ActionPostExecutionJob.id).label("active_count"),
+        )
+        .where(
+            ActionPostExecutionJob.status.in_((JOB_CLAIMED, JOB_RUNNING)),
+            ActionPostExecutionJob.lease_expires_at.is_not(None),
+            ActionPostExecutionJob.lease_expires_at > current,
+        )
+        .group_by(ActionPostExecutionJob.project_id)
+        .subquery()
+    )
     query = (
-        select(ActionPostExecutionJob)
+        select(ActionPostExecutionJob, VerificationDispatchState)
+        .join(
+            VerificationDispatchState,
+            VerificationDispatchState.project_id == ActionPostExecutionJob.project_id,
+        )
+        .outerjoin(
+            active_by_project,
+            active_by_project.c.project_id == ActionPostExecutionJob.project_id,
+        )
         .where(
             or_(
                 and_(
@@ -321,20 +357,127 @@ def _claim_next_job(
                     ActionPostExecutionJob.lease_expires_at.is_not(None),
                     ActionPostExecutionJob.lease_expires_at <= current,
                 ),
-            )
+            ),
+            or_(
+                active_by_project.c.active_count.is_(None),
+                active_by_project.c.active_count < per_project_cap,
+            ),
         )
-        .order_by(ActionPostExecutionJob.available_at.asc(), ActionPostExecutionJob.created_at.asc())
+        .order_by(
+            case((VerificationDispatchState.last_dispatched_at.is_(None), 0), else_=1).asc(),
+            VerificationDispatchState.last_dispatched_at.asc(),
+            ActionPostExecutionJob.available_at.asc(),
+            ActionPostExecutionJob.created_at.asc(),
+        )
         .limit(1)
-        .with_for_update(skip_locked=True)
+        # Lock both the durable job and its project cursor. Explicit ``of``
+        # avoids PostgreSQL attempting to lock the aggregate in-flight
+        # subquery used only for admission control.
+        .with_for_update(
+            of=(ActionPostExecutionJob, VerificationDispatchState),
+            skip_locked=True,
+        )
     )
-    row = db.execute(query).scalar_one_or_none()
-    if row is None:
+    claimed = db.execute(query).first()
+    if claimed is None:
         return None
-    row.status = JOB_RUNNING
+    row, state = claimed
+    row.status = JOB_CLAIMED
     row.claimed_by = worker_id[:128]
     row.claimed_at = current
     row.lease_expires_at = current + timedelta(seconds=max(30, int(lease_seconds)))
     row.attempt_count = int(row.attempt_count or 0) + 1
+    row.updated_at = current
+    state.last_dispatched_at = current
+    state.dispatch_count = int(state.dispatch_count or 0) + 1
+    state.updated_at = current
+    db.add(row)
+    db.add(state)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def claim_action_post_execution_jobs(
+    db: Session,
+    *,
+    worker_id: str = "action-post-execution-dispatcher",
+    lease_seconds: int = DEFAULT_JOB_LEASE_SECONDS,
+    limit: int = 25,
+    max_in_flight_per_project: int | None = None,
+) -> list[ActionPostExecutionJob]:
+    """Fairly reserve durable jobs before publishing them to a Celery lane."""
+
+    jobs: list[ActionPostExecutionJob] = []
+    for _ in range(max(1, int(limit))):
+        job = _claim_next_job(
+            db,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            max_in_flight_per_project=max_in_flight_per_project,
+        )
+        if job is None:
+            break
+        jobs.append(job)
+    return jobs
+
+
+def start_claimed_action_post_execution_job(
+    db: Session,
+    *,
+    job_id: str,
+    worker_id: str,
+    now: datetime | None = None,
+) -> ActionPostExecutionJob | None:
+    """Atomically turn a dispatcher reservation into one worker execution.
+
+    Duplicate Celery delivery sees a running row and becomes a no-op instead of
+    making two source-of-record reads for the same protected action.
+    """
+
+    current = now or _now()
+    row = db.execute(
+        select(ActionPostExecutionJob)
+        .where(
+            ActionPostExecutionJob.id == job_id,
+            ActionPostExecutionJob.status == JOB_CLAIMED,
+            ActionPostExecutionJob.lease_expires_at.is_not(None),
+            ActionPostExecutionJob.lease_expires_at > current,
+        )
+        .with_for_update(skip_locked=True)
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    row.status = JOB_RUNNING
+    row.claimed_by = worker_id[:128]
+    row.updated_at = current
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def requeue_claimed_action_post_execution_job(
+    db: Session,
+    *,
+    job_id: str,
+    reason: str,
+    now: datetime | None = None,
+) -> ActionPostExecutionJob | None:
+    """Release a reservation when publishing it to Celery fails."""
+
+    current = now or _now()
+    row = db.execute(
+        select(ActionPostExecutionJob)
+        .where(ActionPostExecutionJob.id == job_id, ActionPostExecutionJob.status == JOB_CLAIMED)
+        .with_for_update(skip_locked=True)
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    row.status = JOB_RETRYING
+    row.error_message = f"dispatch_failed:{reason}"[:2000]
+    row.available_at = current + timedelta(seconds=5)
+    row.lease_expires_at = None
     row.updated_at = current
     db.add(row)
     db.commit()

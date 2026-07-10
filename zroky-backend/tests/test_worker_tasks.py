@@ -159,7 +159,7 @@ def test_pending_proof_sweep_registered_in_beat_schedule() -> None:
     if settings.PROOF_PENDING_SWEEP_ENABLED:
         entry = beat_schedule["pending-proof-reconciliation-sweep"]
         assert entry["task"] == "app.worker.tasks.sweep_pending_proof_reconciliations"
-        assert entry["options"] == {"queue": "diagnosis_fast"}
+        assert entry["options"] == {"queue": "verification_sweep"}
         assert entry["schedule"] >= 30
 
 

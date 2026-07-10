@@ -275,6 +275,32 @@ class PrivateRunnerVerificationJob(Base):
     )
 
 
+class VerificationDispatchState(Base):
+    """Durable round-robin state for post-execution verification work.
+
+    This state is deliberately in Postgres rather than Redis: Redis can help
+    coordinate a connector fetch, but it must never become the source of truth
+    for whether a protected action still needs a receipt or proof.
+    """
+
+    __tablename__ = "verification_dispatch_states"
+
+    project_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_dispatched_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    dispatch_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        Index("ix_verification_dispatch_states_last_dispatched", "last_dispatched_at"),
+    )
+
+
 class ActionTimelineEvent(Base):
     """Append-only lifecycle event for a protected action intent."""
 

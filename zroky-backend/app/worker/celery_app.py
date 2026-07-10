@@ -2,6 +2,7 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue
 
 from app.core.config import get_settings
 
@@ -49,24 +50,24 @@ beat_schedule["fix-watch-recurrence-check"] = {
 beat_schedule["action-post-execution-sweep"] = {
     "task": "app.worker.tasks.process_action_post_execution_jobs",
     "schedule": max(5, int(settings.ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS)),
-    "options": {"queue": "diagnosis_fast"},
+    "options": {"queue": "verification_control"},
 }
 beat_schedule["stale-action-execution-attempt-sweep"] = {
     "task": "app.worker.tasks.sweep_stale_action_execution_attempts",
     "schedule": max(30, int(settings.ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS)),
-    "options": {"queue": "diagnosis_fast"},
+    "options": {"queue": "verification_sweep"},
 }
 if settings.PROOF_PENDING_SWEEP_ENABLED:
     beat_schedule["pending-proof-reconciliation-sweep"] = {
         "task": "app.worker.tasks.sweep_pending_proof_reconciliations",
         "schedule": max(30, int(settings.PROOF_PENDING_SWEEP_INTERVAL_SECONDS)),
-        "options": {"queue": "diagnosis_fast"},
+        "options": {"queue": "verification_sweep"},
     }
 
 beat_schedule["stale-private-runner-verification-sweep"] = {
     "task": "app.worker.tasks.sweep_stale_private_runner_verifications",
     "schedule": max(30, int(settings.PRIVATE_RUNNER_VERIFICATION_SWEEP_INTERVAL_SECONDS)),
-    "options": {"queue": "diagnosis_fast"},
+    "options": {"queue": "verification_sweep"},
 }
 
 if settings.SOURCE_MUTATION_POLLER_ENABLED:
@@ -177,6 +178,13 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_default_queue="diagnosis_fast",
+    task_queues=(
+        Queue("diagnosis_fast"),
+        Queue("diagnosis_pattern"),
+        Queue("verification_control"),
+        Queue("verification_fetch"),
+        Queue("verification_sweep"),
+    ),
     task_soft_time_limit=300,
     task_time_limit=600,
     task_default_retry_delay=10,
@@ -184,6 +192,11 @@ celery_app.conf.update(
     task_routes={
         "app.worker.tasks.run_fast_diagnosis": {"queue": "diagnosis_fast"},
         "app.worker.tasks.run_pattern_diagnosis": {"queue": "diagnosis_pattern"},
+        "app.worker.tasks.process_action_post_execution_jobs": {"queue": "verification_control"},
+        "app.worker.tasks.execute_action_post_execution_job": {"queue": "verification_fetch"},
+        "app.worker.tasks.sweep_stale_action_execution_attempts": {"queue": "verification_sweep"},
+        "app.worker.tasks.sweep_pending_proof_reconciliations": {"queue": "verification_sweep"},
+        "app.worker.tasks.sweep_stale_private_runner_verifications": {"queue": "verification_sweep"},
     },
     broker_transport_options={
         "queue_order_strategy": "priority",

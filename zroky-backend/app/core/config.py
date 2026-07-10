@@ -155,6 +155,19 @@ class Settings(BaseSettings):
     ACTION_RECEIPT_SIGNING_KEY_ID: str = "zroky-action-receipt-v1"
     ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS: int = 10
     ACTION_POST_EXECUTION_SWEEP_LIMIT: int = 25
+    # The dispatcher allows only this many leased verification/receipt jobs per
+    # project at once. It bounds a single tenant's queue footprint before work
+    # reaches a shared fetch worker.
+    VERIFICATION_MAX_IN_FLIGHT_PER_PROJECT: int = 4
+    # Shared Redis controls are applied only to backend-owned remote SOR fetches.
+    # They do not participate in the inline MCP authorization path.
+    VERIFICATION_EXECUTION_CONTROLS_ENABLED: bool = True
+    VERIFICATION_EXECUTION_CONTROLS_FAIL_CLOSED: bool = True
+    VERIFICATION_CONNECTOR_MAX_IN_FLIGHT: int = 2
+    VERIFICATION_CONNECTOR_LEASE_SECONDS: int = 30
+    VERIFICATION_CONNECTOR_FAILURE_THRESHOLD: int = 3
+    VERIFICATION_CONNECTOR_FAILURE_WINDOW_SECONDS: int = 60
+    VERIFICATION_CONNECTOR_CIRCUIT_OPEN_SECONDS: int = 90
     ACTION_EXECUTION_ATTEMPT_STALE_SECONDS: int = 600
     ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS: int = 60
     ACTION_EXECUTION_ATTEMPT_SWEEP_LIMIT: int = 50
