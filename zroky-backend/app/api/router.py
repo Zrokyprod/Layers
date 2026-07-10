@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.action_intents import router as action_intents_router
+from app.api.routes.approval_adaptations import router as approval_adaptations_router
 from app.mcp.canary import router as mcp_canary_router
 from app.mcp.routes import router as mcp_ingress_router
 from app.api.routes.actions import router as actions_router
@@ -64,6 +65,7 @@ api_router.include_router(capture_router, tags=["capture"])
 api_router.include_router(calls_router, tags=["calls"])
 api_router.include_router(traces_router, tags=["traces"])
 api_router.include_router(action_intents_router, tags=["verified-actions"])
+api_router.include_router(approval_adaptations_router, tags=["approval-adaptations"])
 # MCP-native interception ingress. Always registered but inert (404) unless
 # Settings.MCP_INTERCEPTION_ENABLED is true — see app.mcp.routes.
 api_router.include_router(mcp_ingress_router, tags=["mcp"])

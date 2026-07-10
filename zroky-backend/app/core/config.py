@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.config_validation import is_jwt_configured, is_production_env, validate_runtime_settings
@@ -285,6 +286,13 @@ class Settings(BaseSettings):
     # Synthetic no-side-effect MCP server used only for production smoke tests.
     # Default OFF so the public route is inert unless an operator opts in.
     MCP_CANARY_UPSTREAM_ENABLED: bool = False
+
+    # Approval adaptation converts only owner-approved, evidence-backed action
+    # patterns into temporary auto-allow rules. Default OFF: creating a rule
+    # never changes live policy behavior until an operator enables this flag.
+    APPROVAL_ADAPTATION_ENABLED: bool = False
+    APPROVAL_ADAPTATION_MIN_MATCHED_APPROVALS: int = Field(default=5, ge=5, le=100)
+    APPROVAL_ADAPTATION_MAX_DURATION_DAYS: int = Field(default=30, ge=1, le=30)
 
     # Hosted billing uses Razorpay. When disabled, paid checkout/verification
     # endpoints return 503; self-host profiles keep billing disabled by default.

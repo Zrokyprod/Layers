@@ -691,6 +691,7 @@ def decide_action_intent(
         db,
         project_id=project_id,
         payload=build_runtime_policy_payload(intent, approval_id=effective_approval_id, actor=actor),
+        allow_approval_adaptation=True,
     )
     # Cross-action ("sequence") risk: a bulk read + external send, repeated money
     # movement, or a credential change + external transfer are dangerous only as
