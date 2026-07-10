@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decideActionIntent,
   approveRuntimePolicyDecision,
+  activateMcpUpstream,
+  disableMcpUpstream,
   enforceAgentProfile,
   getActionsLifecycleSummary,
   getBillingMe,
@@ -10,6 +12,7 @@ import {
   getActionIntentTimeline,
   getCustomerRecordConnectorStatus,
   getLedgerRefundConnectorStatus,
+  getMcpUpstreamBinding,
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
   getOutcomeReconciliationSummary,
@@ -21,6 +24,7 @@ import {
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
+  preflightMcpUpstream,
   reconcileSavedConnector,
   reconcileSavedCustomerRecord,
   reconcileSavedGenericRest,
@@ -28,6 +32,7 @@ import {
   reconcileSavedPostgresRead,
   saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
+  saveMcpUpstreamDraft,
   savePostgresReadConnectorConfig,
   setRuntimePolicyKillSwitch,
   testCustomerRecordConnector,
@@ -41,6 +46,21 @@ vi.mock("@/lib/auth", () => ({
   readRefreshTokenFromBrowser: vi.fn(() => null),
   storeAuthSession: vi.fn(),
 }));
+
+const mcpBindingResponse = {
+  endpoint_url: "https://mcp.example.com/mcp",
+  protocol_version: "2025-06-18",
+  credential_configured: true,
+  allowed_tools: ["refund.create"],
+  status: "draft",
+  test_status: "not_tested",
+  tested_at: null,
+  last_test_error: null,
+  activated_at: null,
+  version: 1,
+  created_at: "2026-07-11T09:00:00Z",
+  updated_at: "2026-07-11T09:00:00Z",
+};
 
 function mockFetchResponse(response: Response): void {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
@@ -123,6 +143,61 @@ describe("shared API error parsing", () => {
 
     expect(text).toHaveBeenCalledTimes(1);
     expect(json).not.toHaveBeenCalled();
+  });
+});
+
+describe("MCP upstream API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("treats a missing tenant binding as unconfigured", async () => {
+    mockFetchResponse(new Response(JSON.stringify({ detail: "Not found" }), { status: 404 }));
+
+    await expect(getMcpUpstreamBinding()).resolves.toBeNull();
+  });
+
+  it("uses the owner lifecycle endpoints and sends only a managed credential reference", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(mcpBindingResponse), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        binding: { ...mcpBindingResponse, test_status: "succeeded" },
+        discovered_tools: ["refund.create"],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...mcpBindingResponse,
+        status: "active",
+        test_status: "succeeded",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...mcpBindingResponse,
+        status: "disabled",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveMcpUpstreamDraft({
+      endpoint_url: "https://mcp.example.com/mcp",
+      protocol_version: "2025-06-18",
+      bearer_credential_id: "cred_managed_123",
+      allowed_tools: ["refund.create"],
+    });
+    await preflightMcpUpstream();
+    await activateMcpUpstream();
+    await disableMcpUpstream();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/zroky/v1/mcp-config/upstream", expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({
+        endpoint_url: "https://mcp.example.com/mcp",
+        protocol_version: "2025-06-18",
+        bearer_credential_id: "cred_managed_123",
+        allowed_tools: ["refund.create"],
+      }),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/zroky/v1/mcp-config/upstream/preflight", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/zroky/v1/mcp-config/upstream/activate", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/zroky/v1/mcp-config/upstream/disable", expect.objectContaining({ method: "POST" }));
   });
 });
 

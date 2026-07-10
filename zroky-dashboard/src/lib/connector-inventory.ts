@@ -4,6 +4,7 @@ import type {
   HubSpotCrmConnectorStatusResponse,
   JiraIssueConnectorStatusResponse,
   LedgerRefundConnectorStatusResponse,
+  McpUpstreamBindingResponse,
   NetSuiteFinanceConnectorStatusResponse,
   OutcomeReconciliationView,
   PostgresReadConnectorStatusResponse,
@@ -40,7 +41,8 @@ export type ProofConnectorId =
   | "customer_template"
   | "postgres_read";
 export type SupportConnectorId = "github" | "slack";
-export type ConnectorInventoryId = ProofConnectorId | SupportConnectorId;
+export type ControlConnectorId = "mcp_upstream";
+export type ConnectorInventoryId = ProofConnectorId | SupportConnectorId | ControlConnectorId;
 
 export const LAUNCH_VISIBLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "generic_rest",
@@ -79,8 +81,9 @@ export const CONNECTOR_DISPLAY_LABELS: Record<string, string> = {
   zendesk_ticket: "Zendesk tickets",
 };
 
-export type ConnectorTransport = "rest_http" | "sql_read" | "webhook_bridge" | "workflow";
+export type ConnectorTransport = "mcp_gateway" | "rest_http" | "sql_read" | "webhook_bridge" | "workflow";
 export type ConnectorTemplateKind =
+  | "mcp"
   | "custom"
   | "hubspot_crm"
   | "salesforce_crm"
@@ -99,7 +102,7 @@ export type ConnectorTemplateKind =
   | "refund_ledger"
   | "customer_record"
   | null;
-export type ConnectorInventoryKind = "proof" | "support";
+export type ConnectorInventoryKind = "control" | "proof" | "support";
 
 export type ConnectorInventoryState =
   | "missing"
@@ -248,6 +251,7 @@ export type BuildConnectorInventoryInput = {
   shopify?: ShopifyConnectorStatusResponse | null;
   zoho?: ZohoCrmConnectorStatusResponse | null;
   postgres: PostgresReadConnectorStatusResponse | null;
+  mcp?: McpUpstreamBindingResponse | null;
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
   checks?: OutcomeReconciliationView[];
@@ -273,9 +277,13 @@ type ProofConnectorDefinition = {
 
 type ActionConnectorHints = Map<string, ProofConnectorId[]>;
 
-const TRANSPORT_ORDER: ConnectorTransport[] = ["rest_http", "sql_read", "webhook_bridge", "workflow"];
+const TRANSPORT_ORDER: ConnectorTransport[] = ["mcp_gateway", "rest_http", "sql_read", "webhook_bridge", "workflow"];
 
 const TRANSPORT_COPY: Record<ConnectorTransport, { label: string; description: string }> = {
+  mcp_gateway: {
+    label: "MCP interception gateway",
+    description: "Inline tool discovery and policy gating for agent actions before they reach the upstream MCP server.",
+  },
   rest_http: {
     label: "REST / HTTP JSON verifier",
     description: "Read-only JSON endpoints for SaaS, internal APIs, and template-based source-of-record checks.",
@@ -336,6 +344,7 @@ const CATEGORY_COPY: Record<ConnectorBusinessCategory, { label: string; descript
 };
 
 const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCategory> = {
+  mcp_upstream: "database_custom",
   generic_rest: "database_custom",
   hubspot_crm: "crm",
   salesforce_crm: "crm",
@@ -543,6 +552,66 @@ function supportRow(
       maskedEndpoint: null,
       credentialSaved: null,
       supportAccount: account,
+    },
+  };
+}
+
+function mcpRow(status: McpUpstreamBindingResponse | null | undefined): ConnectorInventoryRow {
+  const active = status?.status === "active";
+  const failed = status?.test_status === "failed";
+  const ready = active && status?.test_status === "succeeded";
+  const state: ConnectorInventoryState = ready
+    ? "ready"
+    : failed
+      ? "failing"
+      : status
+        ? "not_tested"
+        : "missing";
+  const statusLabel = ready
+    ? "Active"
+    : status?.status === "disabled"
+      ? "Disabled"
+      : failed
+        ? "Preflight failed"
+        : status
+          ? "Draft"
+          : "Not configured";
+  const detail = ready
+    ? `${status.allowed_tools.length} allowed tool${status.allowed_tools.length === 1 ? "" : "s"} routed through the managed MCP gateway.`
+    : failed
+      ? "The upstream failed preflight. Fix endpoint, credential, or tool allowlist before activation."
+      : status?.status === "disabled"
+        ? "The managed upstream is disabled. Save a new draft and run preflight before reactivation."
+        : status
+          ? "Draft saved. Run preflight to verify initialize and tools/list before activation."
+          : "Add a public HTTPS MCP endpoint and an explicit tool allowlist before agent traffic can use it.";
+  return {
+    id: "mcp_upstream",
+    kind: "control",
+    transport: "mcp_gateway",
+    templateKind: "mcp",
+    title: "MCP Upstream",
+    category: "Agent tool gateway",
+    description: "Put Zroky inline between agents and an upstream MCP server for policy-gated execution.",
+    href: "/integrations?connector=mcp_upstream",
+    ctaLabel: "Configure MCP upstream",
+    state,
+    tone: connectorStateTone(state),
+    statusLabel,
+    detail,
+    connected: active,
+    healthStatus: status?.test_status ?? null,
+    readinessStatus: status?.status ?? null,
+    lastVerdict: status?.test_status ?? null,
+    lastErrorCode: status?.last_test_error ?? null,
+    latestCheck: null,
+    updatedAt: status?.updated_at ?? status?.tested_at ?? status?.created_at ?? null,
+    supportedActionTypes: status?.allowed_tools ?? [],
+    metadata: {
+      connectorType: "mcp_upstream",
+      maskedEndpoint: status?.endpoint_url ?? null,
+      credentialSaved: status?.credential_configured ?? null,
+      supportAccount: null,
     },
   };
 }
@@ -1137,6 +1206,9 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
     supportRow("github", input.github),
     supportRow("slack", input.slack),
   ].filter((row) => !visibleConnectorIds || visibleConnectorIds.has(row.id));
+  const controlRows = [mcpRow(input.mcp)].filter(
+    (row) => !visibleConnectorIds || visibleConnectorIds.has(row.id),
+  );
   const actionTypes = actionTypesForCoverage(input);
   const coverageRows = buildCoverageRows(actionTypes, proofRows, registryConnectorHints(input.registry));
   const counts: ConnectorInventoryCounts = {
@@ -1152,7 +1224,7 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
     actionTypesTotal: coverageRows.length,
     unverifiableActionTypes: coverageRows.filter((row) => row.status === "unverifiable").length,
   };
-  const rows = [...proofRows, ...supportRows];
+  const rows = [...controlRows, ...proofRows, ...supportRows];
 
   return {
     rows,

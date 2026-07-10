@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Database, Globe, Landmark, Receipt, Users } from "lucide-react";
+import { Database, Globe, Landmark, Network, Receipt, Users } from "lucide-react";
 import {
   SiFresh,
   SiGithub,
@@ -29,6 +29,7 @@ type LogoDef = {
 // template / SQL paths fall back to a neutral Zroky-tinted glyph so every
 // connector still reads as a first-class tile.
 const CONNECTOR_LOGOS: Record<ConnectorInventoryId, LogoDef> = {
+  mcp_upstream: { Icon: Network, color: "#167D84", branded: false },
   stripe_refund: { Icon: SiStripe, color: "#635BFF", branded: true },
   stripe_payment: { Icon: SiStripe, color: "#635BFF", branded: true },
   razorpay_refund: { Icon: SiRazorpay, color: "#3395FF", branded: true },

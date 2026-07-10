@@ -2324,6 +2324,69 @@ export interface PostgresReadConnectorTestResponse {
   connector: PostgresReadConnectorStatusResponse;
 }
 
+export interface McpUpstreamBindingResponse {
+  endpoint_url: string;
+  protocol_version: string;
+  credential_configured: boolean;
+  allowed_tools: string[];
+  status: "draft" | "active" | "disabled" | string;
+  test_status: "not_tested" | "succeeded" | "failed" | string;
+  tested_at: string | null;
+  last_test_error: string | null;
+  activated_at: string | null;
+  version: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface McpUpstreamDraftPayload {
+  endpoint_url: string;
+  protocol_version?: string;
+  bearer_credential_id?: string | null;
+  allowed_tools: string[];
+}
+
+export interface McpUpstreamPreflightResponse {
+  binding: McpUpstreamBindingResponse;
+  discovered_tools: string[];
+}
+
+export async function getMcpUpstreamBinding(): Promise<McpUpstreamBindingResponse | null> {
+  try {
+    return await request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export function saveMcpUpstreamDraft(
+  body: McpUpstreamDraftPayload,
+): Promise<McpUpstreamBindingResponse> {
+  return request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream", {
+    method: "PUT",
+    body,
+  });
+}
+
+export function preflightMcpUpstream(): Promise<McpUpstreamPreflightResponse> {
+  return request<McpUpstreamPreflightResponse>("/v1/mcp-config/upstream/preflight", {
+    method: "POST",
+  });
+}
+
+export function activateMcpUpstream(): Promise<McpUpstreamBindingResponse> {
+  return request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream/activate", {
+    method: "POST",
+  });
+}
+
+export function disableMcpUpstream(): Promise<McpUpstreamBindingResponse> {
+  return request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream/disable", {
+    method: "POST",
+  });
+}
+
 export function getLedgerRefundConnectorStatus(
   signal?: AbortSignal,
 ): Promise<LedgerRefundConnectorStatusResponse> {

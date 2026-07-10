@@ -6,6 +6,7 @@ import type {
   GenericRestConnectorStatusResponse,
   HubSpotCrmConnectorStatusResponse,
   JiraIssueConnectorStatusResponse,
+  McpUpstreamBindingResponse,
   NetSuiteFinanceConnectorStatusResponse,
   OutcomeReconciliationView,
   PostgresReadConnectorStatusResponse,
@@ -22,12 +23,15 @@ import { externalNavigator } from "@/lib/external-navigation";
 import IntegrationsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  activateMcpUpstream: vi.fn(),
+  disableMcpUpstream: vi.fn(),
   getCustomerRecordConnectorStatus: vi.fn(),
   getGenericRestConnectorStatus: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
   getHubSpotCrmConnectorStatus: vi.fn(),
   getJiraIssueConnectorStatus: vi.fn(),
   getLedgerRefundConnectorStatus: vi.fn(),
+  getMcpUpstreamBinding: vi.fn(),
   getNetSuiteFinanceConnectorStatus: vi.fn(),
   getPostgresReadConnectorStatus: vi.fn(),
   getRazorpayRefundConnectorStatus: vi.fn(),
@@ -40,9 +44,11 @@ const api = vi.hoisted(() => ({
   getSlackInstallStatus: vi.fn(),
   getToolRegistry: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
+  preflightMcpUpstream: vi.fn(),
   saveGenericRestConnectorConfig: vi.fn(),
   saveHubSpotCrmConnectorConfig: vi.fn(),
   saveJiraIssueConnectorConfig: vi.fn(),
+  saveMcpUpstreamDraft: vi.fn(),
   saveNetSuiteFinanceConnectorConfig: vi.fn(),
   saveRazorpayRefundConnectorConfig: vi.fn(),
   saveSalesforceCrmConnectorConfig: vi.fn(),
@@ -87,12 +93,15 @@ vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
+    activateMcpUpstream: api.activateMcpUpstream,
+    disableMcpUpstream: api.disableMcpUpstream,
     getCustomerRecordConnectorStatus: api.getCustomerRecordConnectorStatus,
     getGenericRestConnectorStatus: api.getGenericRestConnectorStatus,
     getGithubConnectionStatus: api.getGithubConnectionStatus,
     getHubSpotCrmConnectorStatus: api.getHubSpotCrmConnectorStatus,
     getJiraIssueConnectorStatus: api.getJiraIssueConnectorStatus,
     getLedgerRefundConnectorStatus: api.getLedgerRefundConnectorStatus,
+    getMcpUpstreamBinding: api.getMcpUpstreamBinding,
     getNetSuiteFinanceConnectorStatus: api.getNetSuiteFinanceConnectorStatus,
     getPostgresReadConnectorStatus: api.getPostgresReadConnectorStatus,
     getRazorpayRefundConnectorStatus: api.getRazorpayRefundConnectorStatus,
@@ -105,9 +114,11 @@ vi.mock("@/lib/api", async () => {
     getSlackInstallStatus: api.getSlackInstallStatus,
     getToolRegistry: api.getToolRegistry,
     listOutcomeReconciliations: api.listOutcomeReconciliations,
+    preflightMcpUpstream: api.preflightMcpUpstream,
     saveGenericRestConnectorConfig: api.saveGenericRestConnectorConfig,
     saveHubSpotCrmConnectorConfig: api.saveHubSpotCrmConnectorConfig,
     saveJiraIssueConnectorConfig: api.saveJiraIssueConnectorConfig,
+    saveMcpUpstreamDraft: api.saveMcpUpstreamDraft,
     saveNetSuiteFinanceConnectorConfig: api.saveNetSuiteFinanceConnectorConfig,
     saveRazorpayRefundConnectorConfig: api.saveRazorpayRefundConnectorConfig,
     saveSalesforceCrmConnectorConfig: api.saveSalesforceCrmConnectorConfig,
@@ -645,6 +656,24 @@ function renderWithConnector(connector: string) {
   render(<IntegrationsPage />);
 }
 
+function mcpStatus(overrides: Partial<McpUpstreamBindingResponse> = {}): McpUpstreamBindingResponse {
+  return {
+    endpoint_url: "https://mcp.example.com/mcp",
+    protocol_version: "2025-06-18",
+    credential_configured: true,
+    allowed_tools: ["refund.create"],
+    status: "draft",
+    test_status: "not_tested",
+    tested_at: null,
+    last_test_error: null,
+    activated_at: null,
+    version: 1,
+    created_at: "2026-07-11T09:00:00Z",
+    updated_at: "2026-07-11T09:00:00Z",
+    ...overrides,
+  };
+}
+
 describe("IntegrationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -654,6 +683,7 @@ describe("IntegrationsPage", () => {
       value: { writeText: clipboardWrite },
     });
     clipboardWrite.mockResolvedValue(undefined);
+    api.getMcpUpstreamBinding.mockResolvedValue(null);
     api.getGithubConnectionStatus.mockResolvedValue({
       connected: true,
       github_id: "gh_1",
@@ -1139,6 +1169,27 @@ describe("IntegrationsPage", () => {
         readiness: { status: "ready" },
       }),
     });
+    api.saveMcpUpstreamDraft.mockResolvedValue(mcpStatus());
+    api.preflightMcpUpstream.mockResolvedValue({
+      binding: mcpStatus({
+        test_status: "succeeded",
+        tested_at: "2026-07-11T09:01:00Z",
+        version: 2,
+      }),
+      discovered_tools: ["refund.create", "refund.read"],
+    });
+    api.activateMcpUpstream.mockResolvedValue(mcpStatus({
+      status: "active",
+      test_status: "succeeded",
+      tested_at: "2026-07-11T09:01:00Z",
+      activated_at: "2026-07-11T09:02:00Z",
+      version: 3,
+    }));
+    api.disableMcpUpstream.mockResolvedValue(mcpStatus({
+      status: "disabled",
+      test_status: "succeeded",
+      version: 4,
+    }));
   });
 
   it("frames connectors as a simple verifier inventory with search", async () => {
@@ -1696,5 +1747,41 @@ describe("IntegrationsPage", () => {
     } finally {
       assignSpy.mockRestore();
     }
+  });
+
+  it("saves, preflights, and activates an MCP upstream without collecting a secret", async () => {
+    renderWithConnector("mcp_upstream");
+
+    await screen.findByRole("heading", { name: "MCP Upstream" });
+    fireEvent.click(screen.getByRole("button", { name: "Configure MCP upstream" }));
+
+    fireEvent.change(await screen.findByLabelText("Upstream endpoint"), {
+      target: { value: "https://mcp.example.com/mcp" },
+    });
+    fireEvent.change(screen.getByLabelText("Managed credential ID"), {
+      target: { value: "cred_managed_123" },
+    });
+    fireEvent.change(screen.getByLabelText("Allowed tools"), {
+      target: { value: "refund.create\nrefund.read\nrefund.create" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(api.saveMcpUpstreamDraft).toHaveBeenCalledWith({
+        endpoint_url: "https://mcp.example.com/mcp",
+        protocol_version: "2025-06-18",
+        bearer_credential_id: "cred_managed_123",
+        allowed_tools: ["refund.create", "refund.read"],
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run preflight" }));
+    await waitFor(() => expect(api.preflightMcpUpstream).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("refund.read")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Activate" }));
+    await waitFor(() => expect(api.activateMcpUpstream).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("MCP upstream activated.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/secret|token/i)).not.toBeInTheDocument();
   });
 });
