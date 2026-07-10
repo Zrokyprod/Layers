@@ -286,6 +286,26 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 8px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .plan-card-footrow {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .plan-renew {
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .plan-usage-link {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 4px !important;
+  white-space: nowrap !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] :where(.plan-badge, .topbar-search-kbd, .nav-badge) {
   border: 1px solid var(--dash-border) !important;
   border-radius: 6px !important;

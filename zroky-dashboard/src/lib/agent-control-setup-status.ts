@@ -13,6 +13,7 @@ export type AgentControlSetupStatus = {
   complete: boolean;
   profileCount: number;
   setupProfileCount: number;
+  setupAgentId: string | null;
   completedCount: number;
   totalCount: number;
   progressPct: number;
@@ -130,8 +131,8 @@ function statusCopy(state: AgentControlSetupState): Pick<AgentControlSetupStatus
     return {
       title: "Project policy enabled",
       body: "The project runtime policy is enforced. Route one real protected action to generate the first verified receipt.",
-      ctaLabel: "Open actions",
-      ctaHref: "/actions",
+      ctaLabel: "Run first protected action",
+      ctaHref: "/agents/setup",
     };
   }
   return {
@@ -205,6 +206,7 @@ export function getAgentControlSetupStatus(
     complete: state === "live",
     profileCount: profiles.length,
     setupProfileCount: setupProfiles.length,
+    setupAgentId: primary?.id ?? null,
     completedCount,
     totalCount,
     progressPct: Math.round((completedCount / totalCount) * 100),

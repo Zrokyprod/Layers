@@ -57,8 +57,18 @@ function EmptyFirstRun() {
   );
 }
 
-function AgentsSetupActivationBanner({ status }: { status: AgentControlSetupStatus }) {
+function AgentsSetupActivationBanner({
+  runnerNeedsRecovery,
+  status,
+}: {
+  runnerNeedsRecovery: boolean;
+  status: AgentControlSetupStatus;
+}) {
   const visibleChecks = status.checks.filter((check) => !check.done).slice(0, 4);
+  const setupHref = status.setupAgentId
+    ? `/agents/setup?agentId=${encodeURIComponent(status.setupAgentId)}`
+    : "/agents/setup";
+  const primaryHref = status.ctaHref === "/agents/setup" ? setupHref : status.ctaHref;
   return (
     <section className="agents-setup-banner" aria-label="Agent control setup status">
       <div className="agents-panel-head">
@@ -78,11 +88,11 @@ function AgentsSetupActivationBanner({ status }: { status: AgentControlSetupStat
             </div>
           </div>
           <div className="agents-setup-banner-actions">
-            <DashboardButtonLink href={status.ctaHref} icon={<ArrowRight />} iconPosition="right" variant="primary">
+            <DashboardButtonLink href={primaryHref} icon={<ArrowRight />} iconPosition="right" variant="primary">
               {status.ctaLabel}
             </DashboardButtonLink>
-            <DashboardButtonLink href="/integrations" variant="soft">
-              Check connectors
+            <DashboardButtonLink href={runnerNeedsRecovery ? setupHref : "/integrations"} variant="soft">
+              {runnerNeedsRecovery ? "Restore runner" : "Check connectors"}
             </DashboardButtonLink>
           </div>
         </div>
@@ -134,11 +144,11 @@ export default function AgentsPage() {
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
-  const intentsQuery = useActionIntents({ limit: 200 });
+  const intentsQuery = useActionIntents({ limit: 100 });
   const approvalsQuery = useRuntimePolicyApprovals("all");
-  const outcomesQuery = useOutcomeReconciliations("all", 200);
+  const outcomesQuery = useOutcomeReconciliations("all", 100);
   const runnersQuery = useActionRunners();
-  const attemptsQuery = useProjectActionExecutionAttempts({ limit: 200 });
+  const attemptsQuery = useProjectActionExecutionAttempts({ limit: 100 });
   const sourceMutationsQuery = useQuery({
     queryKey: ["agents", "source-mutations", "unreceipted"],
     queryFn: ({ signal }) => listUnreceiptedSourceMutations(200, signal),
@@ -149,7 +159,7 @@ export default function AgentsPage() {
     status: ["planned", "claimed", "dispatched", "running"],
     stale: true,
     stale_after_seconds: 600,
-    limit: 200,
+    limit: 100,
   });
   const captureHealthQuery = useQuery({
     queryKey: ["agents", "capture-health"],
@@ -230,7 +240,12 @@ export default function AgentsPage() {
         onRefresh={refresh}
       />
 
-      {!setupStatus.complete ? <AgentsSetupActivationBanner status={setupStatus} /> : null}
+      {!setupStatus.complete ? (
+        <AgentsSetupActivationBanner
+          status={setupStatus}
+          runnerNeedsRecovery={fleet.runners.total > 0 && fleet.runners.online === 0}
+        />
+      ) : null}
       <UnmanagedAgentsNotice
         count={fleet.totals.telemetryOnly}
         locked={fleet.meter.reached}

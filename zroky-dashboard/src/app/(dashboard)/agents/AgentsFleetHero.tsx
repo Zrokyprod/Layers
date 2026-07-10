@@ -20,7 +20,7 @@ type AgentsFleetHeroProps = {
   onRefresh: () => void;
 };
 
-function heroCopy(fleet: AgentFleetView, error: boolean): {
+function heroCopy(fleet: AgentFleetView, error: boolean, setupIncomplete: boolean): {
   tone: DashboardScaffoldTone;
   title: string;
   body: string;
@@ -81,6 +81,15 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
       ctaHref: "/actions?filter=not_verified",
     };
   }
+  if (setupIncomplete) {
+    return {
+      tone: "warning",
+      title: "Agent control incomplete",
+      body: "Managed profiles exist, but policy, execution, verification, or first-action proof still needs activation.",
+      cta: "Continue setup",
+      ctaHref: "/agents/setup",
+    };
+  }
   if (fleet.rows.length === 0) {
     return {
       tone: "setup",
@@ -107,7 +116,7 @@ export function AgentsFleetHero({
   onRefresh,
   setupIncomplete = false,
 }: AgentsFleetHeroProps) {
-  const copy = heroCopy(fleet, error);
+  const copy = heroCopy(fleet, error, setupIncomplete);
   const capLabel = fleet.meter.cap === -1
     ? `${formatCount(fleet.meter.active)} managed \u00b7 unlimited`
     : fleet.meter.active > fleet.meter.cap
