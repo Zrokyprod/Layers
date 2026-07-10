@@ -7,9 +7,12 @@ import {
   ClipboardCheck,
   Copy,
   Database,
+  Power,
+  PowerOff,
   RefreshCw,
   Save,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
@@ -19,12 +22,15 @@ import {
 } from "@/components/dashboard-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import {
+  activateMcpUpstream,
+  disableMcpUpstream,
   getCustomerRecordConnectorStatus,
   getGenericRestConnectorStatus,
   getGithubConnectionStatus,
   getHubSpotCrmConnectorStatus,
   getJiraIssueConnectorStatus,
   getLedgerRefundConnectorStatus,
+  getMcpUpstreamBinding,
   getNetSuiteFinanceConnectorStatus,
   getPostgresReadConnectorStatus,
   getRazorpayRefundConnectorStatus,
@@ -37,9 +43,11 @@ import {
   getStripeRefundConnectorStatus,
   getToolRegistry,
   listOutcomeReconciliations,
+  preflightMcpUpstream,
   saveGenericRestConnectorConfig,
   saveHubSpotCrmConnectorConfig,
   saveJiraIssueConnectorConfig,
+  saveMcpUpstreamDraft,
   saveNetSuiteFinanceConnectorConfig,
   saveRazorpayRefundConnectorConfig,
   saveSalesforceCrmConnectorConfig,
@@ -65,6 +73,7 @@ import {
   type HubSpotCrmConnectorStatusResponse,
   type JiraIssueConnectorStatusResponse,
   type LedgerRefundConnectorStatusResponse,
+  type McpUpstreamBindingResponse,
   type NetSuiteFinanceConnectorStatusResponse,
   type OutcomeReconciliationView,
   type PostgresReadConnectorStatusResponse,
@@ -96,6 +105,7 @@ import type {
 } from "@/lib/types";
 
 type ConnectorsOverviewState = {
+  mcp: McpUpstreamBindingResponse | null;
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
   ledger: LedgerRefundConnectorStatusResponse | null;
@@ -125,6 +135,12 @@ type GenericRestFormState = {
   actionType: string;
   claimedJson: string;
   matchFieldsText: string;
+};
+
+type McpUpstreamFormState = {
+  endpointUrl: string;
+  credentialId: string;
+  allowedToolsText: string;
 };
 
 type StripeRefundFormState = {
@@ -214,6 +230,7 @@ type ShopifyFormState = {
 };
 
 const initialOverview: ConnectorsOverviewState = {
+  mcp: null,
   github: null,
   slack: null,
   ledger: null,
@@ -232,6 +249,12 @@ const initialOverview: ConnectorsOverviewState = {
   postgres: null,
   checks: [],
   registry: null,
+};
+
+const defaultMcpUpstreamForm: McpUpstreamFormState = {
+  endpointUrl: "",
+  credentialId: "",
+  allowedToolsText: "",
 };
 
 const defaultGenericRestForm: GenericRestFormState = {
@@ -435,6 +458,7 @@ const ADVANCED_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
 ]);
 
 const SETUP_PANEL_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
+  "mcp_upstream",
   "generic_rest",
   "stripe_refund",
   "stripe_payment",
@@ -483,6 +507,10 @@ function matchFieldsFromText(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function mcpToolsFromText(value: string): string[] {
+  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
 }
 
 function hubSpotQueryFromForm(form: HubSpotFormState): Record<string, string> {
@@ -590,6 +618,7 @@ function filterCategoryGroups(
 }
 
 function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
+  if (row.id === "mcp_upstream") return "Configure MCP upstream";
   if (row.kind === "support") return row.ctaLabel;
   if (row.id === "generic_rest") return "Set up custom REST";
   if (row.id === "postgres_read") return "Set up database";
@@ -598,6 +627,7 @@ function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
 }
 
 function connectorSystemLabel(row: ConnectorInventoryRow): string {
+  if (row.id === "mcp_upstream") return "MCP Upstream";
   if (row.id === "generic_rest") return "Custom REST API";
   if (row.id === "postgres_read") return "SQL database";
   if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Stripe";
@@ -608,6 +638,7 @@ function connectorSystemLabel(row: ConnectorInventoryRow): string {
 }
 
 function connectorCardMeta(row: ConnectorInventoryRow): string {
+  if (row.id === "mcp_upstream") return "Inline gateway";
   if (row.kind === "support") return "Workflow";
   if (row.transport === "sql_read") return "SQL read";
   if (row.id === "generic_rest") return "Custom REST";
@@ -618,6 +649,7 @@ function connectorCardMeta(row: ConnectorInventoryRow): string {
 }
 
 function connectorInspectorEyebrow(row: ConnectorInventoryRow): string {
+  if (row.id === "mcp_upstream") return "Agent execution rail";
   if (row.kind === "support") return "Workflow";
   if (row.id === "generic_rest") return "Custom connector";
   if (row.id === "postgres_read") return "Database connector";
@@ -625,6 +657,9 @@ function connectorInspectorEyebrow(row: ConnectorInventoryRow): string {
 }
 
 function connectorInspectorCopy(row: ConnectorInventoryRow): string {
+  if (row.id === "mcp_upstream") {
+    return "Gate agent tool calls before they reach the real MCP server.";
+  }
   const system = connectorSystemLabel(row);
   if (row.kind === "support") return "Approvals and alerts for protected actions.";
   if (row.id === "generic_rest") return "Verify any read-only API.";
@@ -2794,7 +2829,189 @@ function ShopifySetupPanel({
   );
 }
 
+function McpUpstreamSetupPanel({
+  onStatusChange,
+  status,
+}: {
+  onStatusChange: (status: McpUpstreamBindingResponse) => void;
+  status: McpUpstreamBindingResponse | null;
+}) {
+  const [form, setForm] = useState<McpUpstreamFormState>(defaultMcpUpstreamForm);
+  const [discoveredTools, setDiscoveredTools] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [disabling, setDisabling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      endpointUrl: status.endpoint_url,
+      allowedToolsText: status.allowed_tools.join("\n"),
+    }));
+  }, [status]);
+
+  const runAction = async (
+    action: () => Promise<McpUpstreamBindingResponse>,
+    setLoading: (value: boolean) => void,
+    successMessage: string,
+  ) => {
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const nextStatus = await action();
+      onStatusChange(nextStatus);
+      setMessage(successMessage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "MCP upstream operation failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveDraft = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const allowedTools = mcpToolsFromText(form.allowedToolsText);
+    await runAction(
+      () => saveMcpUpstreamDraft({
+        endpoint_url: form.endpointUrl.trim(),
+        protocol_version: "2025-06-18",
+        bearer_credential_id: form.credentialId.trim() || null,
+        allowed_tools: allowedTools,
+      }),
+      setSaving,
+      "Draft saved. Run preflight before activation.",
+    );
+    setForm((current) => ({ ...current, credentialId: "" }));
+  };
+
+  const runPreflight = async () => {
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await preflightMcpUpstream();
+      onStatusChange(result.binding);
+      setDiscoveredTools(result.discovered_tools);
+      if (result.binding.test_status === "succeeded") {
+        setMessage(`Preflight passed. ${result.discovered_tools.length} upstream tools discovered.`);
+      } else {
+        setError(result.binding.last_test_error ?? "Upstream preflight failed.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "MCP upstream preflight failed.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const isActive = status?.status === "active";
+  const canActivate = status?.test_status === "succeeded" && !isActive;
+
+  return (
+    <section className="connectors-generic-panel" aria-label="MCP upstream setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">MCP upstream</span>
+          <h2>Put Zroky in the agent tool path</h2>
+          <p>Connect one MCP server, verify its tool inventory, then activate the tenant-scoped gateway.</p>
+        </div>
+        <StatusPill value={status?.status ?? "not_configured"} tone={isActive ? "success" : "neutral"} />
+      </div>
+
+      <form className="connectors-generic-form" onSubmit={saveDraft}>
+        <div className="connectors-generic-form-head">
+          <strong>1. Draft configuration</strong>
+          <span>Only a managed credential reference is accepted here. Secret values never render in this form.</span>
+        </div>
+        <div className="connectors-generic-grid">
+          <label className="connectors-generic-wide">
+            <span>Upstream endpoint</span>
+            <input
+              type="url"
+              value={form.endpointUrl}
+              onChange={(event) => setForm((current) => ({ ...current, endpointUrl: event.target.value }))}
+              placeholder="https://mcp.example.com/mcp"
+              required
+            />
+          </label>
+          <label>
+            <span>Managed credential ID</span>
+            <input
+              value={form.credentialId}
+              onChange={(event) => setForm((current) => ({ ...current, credentialId: event.target.value }))}
+              placeholder={status?.credential_configured ? "Credential configured" : "Optional credential reference"}
+            />
+          </label>
+          <label className="connectors-generic-wide">
+            <span>Allowed tools</span>
+            <textarea
+              value={form.allowedToolsText}
+              onChange={(event) => setForm((current) => ({ ...current, allowedToolsText: event.target.value }))}
+              placeholder={"refund.create\naccount.disable"}
+              rows={5}
+              required
+            />
+          </label>
+        </div>
+        <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+          Save draft
+        </DashboardButton>
+      </form>
+
+      <div className="connectors-generic-form">
+        <div className="connectors-generic-form-head">
+          <strong>2. Verify and activate</strong>
+          <span>Preflight initializes the MCP session and checks that every allowed tool exists upstream.</span>
+        </div>
+        <div className="connectors-rest-actions">
+          <DashboardButton disabled={!status || isActive} icon={<ShieldCheck />} loading={testing} onClick={() => void runPreflight()} variant="soft">
+            Run preflight
+          </DashboardButton>
+          <DashboardButton
+            disabled={!canActivate}
+            icon={<Power />}
+            loading={activating}
+            onClick={() => void runAction(activateMcpUpstream, setActivating, "MCP upstream activated.")}
+            variant="primary"
+          >
+            Activate
+          </DashboardButton>
+          <DashboardButton
+            disabled={!isActive}
+            icon={<PowerOff />}
+            loading={disabling}
+            onClick={() => void runAction(disableMcpUpstream, setDisabling, "MCP upstream disabled.")}
+            variant="soft"
+          >
+            Disable
+          </DashboardButton>
+        </div>
+        <div className="connector-fact-grid">
+          <Fact label="Preflight" value={status ? humanize(status.test_status) : null} />
+          <Fact label="Protocol" value={status?.protocol_version ?? null} />
+          <Fact label="Credential" value={status?.credential_configured ? "Managed reference saved" : "None"} />
+          <Fact label="Version" value={status ? String(status.version) : null} />
+        </div>
+        {discoveredTools.length > 0 ? (
+          <div className="connector-action-tags" aria-label="Discovered MCP tools">
+            {discoveredTools.map((tool) => <span key={tool}>{tool}</span>)}
+          </div>
+        ) : null}
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
 function ConnectorInspector({
+  mcpStatus,
   genericStatus,
   hubspotStatus,
   jiraStatus,
@@ -2817,8 +3034,10 @@ function ConnectorInspector({
   onStripeStatusChange,
   onZendeskStatusChange,
   onZohoStatusChange,
+  onMcpStatusChange,
   row,
 }: {
+  mcpStatus: McpUpstreamBindingResponse | null;
   genericStatus: GenericRestConnectorStatusResponse | null;
   hubspotStatus: HubSpotCrmConnectorStatusResponse | null;
   jiraStatus: JiraIssueConnectorStatusResponse | null;
@@ -2841,6 +3060,7 @@ function ConnectorInspector({
   onStripeStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
   onZendeskStatusChange: (status: ZendeskTicketConnectorStatusResponse) => void;
   onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
+  onMcpStatusChange: (status: McpUpstreamBindingResponse) => void;
   row: ConnectorInventoryRow | null;
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
@@ -2892,7 +3112,7 @@ function ConnectorInspector({
       </div>
 
       <div className="connector-inspector-actions">
-        {row.kind === "proof" ? (
+        {row.kind === "proof" || row.id === "mcp_upstream" ? (
           <DashboardButton onClick={() => setSetupOpen(true)} variant="primary">
             {connectorPrimaryCtaLabel(row)}
           </DashboardButton>
@@ -2939,15 +3159,15 @@ function ConnectorInspector({
         ) : null}
       </details>
 
-      {row.kind === "proof" ? (
+      {row.kind === "proof" || row.id === "mcp_upstream" ? (
         <details
           className="connector-setup-details"
           open={setupOpen}
           onToggle={(event) => setSetupOpen(event.currentTarget.open)}
         >
           <summary>
-            <span>{row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Connect access"}</span>
-            <small>{row.id === "generic_rest" || row.id === "postgres_read" ? "Manual config" : "Secure setup"}</small>
+            <span>{row.id === "mcp_upstream" ? "Gateway setup" : row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Connect access"}</span>
+            <small>{row.id === "mcp_upstream" ? "Owner only" : row.id === "generic_rest" || row.id === "postgres_read" ? "Manual config" : "Secure setup"}</small>
           </summary>
           {setupOpen ? (
             <div className="connector-setup-body">
@@ -3034,6 +3254,9 @@ function ConnectorInspector({
                   status={shopifyStatus}
                 />
               ) : null}
+              {row.id === "mcp_upstream" ? (
+                <McpUpstreamSetupPanel onStatusChange={onMcpStatusChange} status={mcpStatus} />
+              ) : null}
             </div>
           ) : null}
         </details>
@@ -3052,6 +3275,7 @@ export default function IntegrationsPage() {
   const loadOverview = useCallback(async () => {
     setLoading(true);
     const [
+      mcpResult,
       githubResult,
       slackResult,
       ledgerResult,
@@ -3071,6 +3295,7 @@ export default function IntegrationsPage() {
       checksResult,
       registryResult,
     ] = await Promise.allSettled([
+      getMcpUpstreamBinding(),
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
       getLedgerRefundConnectorStatus(),
@@ -3092,6 +3317,7 @@ export default function IntegrationsPage() {
     ]);
 
     setOverview({
+      mcp: mcpResult.status === "fulfilled" ? mcpResult.value : null,
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
       ledger: ledgerResult.status === "fulfilled" ? ledgerResult.value : null,
@@ -3112,6 +3338,7 @@ export default function IntegrationsPage() {
       registry: registryResult.status === "fulfilled" ? registryResult.value : null,
     });
     setPartialFailure([
+      mcpResult,
       githubResult,
       slackResult,
       ledgerResult,
@@ -3190,6 +3417,7 @@ export default function IntegrationsPage() {
         }
         right={
           <ConnectorInspector
+            mcpStatus={overview.mcp}
             genericStatus={overview.generic}
             hubspotStatus={overview.hubspot}
             jiraStatus={overview.jira}
@@ -3212,6 +3440,7 @@ export default function IntegrationsPage() {
             onStripeStatusChange={(stripe) => setOverview((current) => ({ ...current, stripe }))}
             onZendeskStatusChange={(zendesk) => setOverview((current) => ({ ...current, zendesk }))}
             onZohoStatusChange={(zoho) => setOverview((current) => ({ ...current, zoho }))}
+            onMcpStatusChange={(mcp) => setOverview((current) => ({ ...current, mcp }))}
             row={selectedRow}
           />
         }

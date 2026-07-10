@@ -6,6 +6,7 @@ import type {
   HubSpotCrmConnectorStatusResponse,
   JiraIssueConnectorStatusResponse,
   LedgerRefundConnectorStatusResponse,
+  McpUpstreamBindingResponse,
   NetSuiteFinanceConnectorStatusResponse,
   OutcomeReconciliationView,
   PostgresReadConnectorStatusResponse,
@@ -521,7 +522,7 @@ describe("connector-inventory", () => {
     expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
     expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "intercom", "freshdesk_ticket", "jira_issue"]);
     expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance", "quickbooks_ledger", "generic_finance"]);
-    expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
+    expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["mcp_upstream", "generic_rest", "postgres_read"]);
     expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
     expect(inventory.supportRows.every((row) => row.kind === "support" && row.transport === "workflow")).toBe(true);
   });
@@ -1158,5 +1159,39 @@ describe("connector-inventory", () => {
     expect(connectorStateLabel("ready")).toBe("Healthy");
     expect(connectorUpdatedLabel({ updatedAt: null })).toBe("Not checked");
     expect(connectorUpdatedLabel({ updatedAt: "2026-06-20T09:00:00Z" })).toContain("Jun");
+  });
+
+  it("shows the tenant MCP upstream as an active control-plane connector", () => {
+    const mcp: McpUpstreamBindingResponse = {
+      endpoint_url: "https://mcp.example.com/mcp",
+      protocol_version: "2025-06-18",
+      credential_configured: true,
+      allowed_tools: ["refund.create"],
+      status: "active",
+      test_status: "succeeded",
+      tested_at: "2026-07-11T09:01:00Z",
+      last_test_error: null,
+      activated_at: "2026-07-11T09:02:00Z",
+      version: 3,
+      created_at: "2026-07-11T09:00:00Z",
+      updated_at: "2026-07-11T09:02:00Z",
+    };
+
+    const inventory = buildConnectorInventory({
+      mcp,
+      ledger: null,
+      customer: null,
+      generic: null,
+      postgres: null,
+      github: null,
+      slack: null,
+    });
+    expect(inventory.rows.find((row) => row.id === "mcp_upstream")).toMatchObject({
+      kind: "control",
+      state: "ready",
+      transport: "mcp_gateway",
+      supportedActionTypes: ["refund.create"],
+    });
+    expect(inventory.proofRows.some((row) => row.id === "mcp_upstream")).toBe(false);
   });
 });
