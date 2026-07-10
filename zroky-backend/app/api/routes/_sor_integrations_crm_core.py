@@ -161,7 +161,7 @@ def test_hubspot_crm_connector(
         claimed["email"] = record_ref.strip().lower()
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_hubspot_crm_connector(
             config,
             record_ref=record_ref,
@@ -290,7 +290,7 @@ def test_zendesk_ticket_connector(
     claimed.setdefault("ticket_id", record_ref)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_zendesk_ticket_connector(
             config,
             record_ref=record_ref,
@@ -420,7 +420,7 @@ def test_jira_issue_connector(
     claimed.setdefault("issue_key", record_ref)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_jira_issue_connector(
             config,
             record_ref=record_ref,

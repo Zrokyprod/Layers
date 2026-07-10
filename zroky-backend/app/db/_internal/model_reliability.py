@@ -172,6 +172,130 @@ class SourceMutationRecord(Base):
     )
 
 
+class ConnectorCredential(Base):
+    """Versioned, tenant-scoped connector credential metadata.
+
+    Secrets live here only when the customer explicitly chooses
+    ``zroky_managed`` custody. Customer-managed and private-runner
+    credentials retain an opaque reference only; the reference is never
+    returned from the API or copied to audit metadata.
+    """
+
+    __tablename__ = "connector_credentials"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    credential_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    custody_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    secret_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    key_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    key_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    kms_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    scopes_json: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'[]'")
+    )
+    allowed_connector_types_json: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'[]'")
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    rotation_due_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime, nullable=True
+    )
+    supersedes_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("connector_credentials.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true"), default=True
+    )
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "credential_kind IN ('bearer_token','oauth_refresh_token','database_url')",
+            name="ck_connector_credentials_kind",
+        ),
+        CheckConstraint(
+            "custody_mode IN ('zroky_managed','customer_managed','private_runner')",
+            name="ck_connector_credentials_custody",
+        ),
+        CheckConstraint(
+            "(custody_mode = 'zroky_managed' AND ciphertext IS NOT NULL AND secret_ref IS NULL) "
+            "OR (custody_mode IN ('customer_managed','private_runner') "
+            "AND ciphertext IS NULL AND secret_ref IS NOT NULL)",
+            name="ck_connector_credentials_custody_payload",
+        ),
+        UniqueConstraint(
+            "project_id", "name", "version", name="ux_connector_credentials_project_name_version"
+        ),
+        Index(
+            "ix_connector_credentials_project_name_active",
+            "project_id",
+            "name",
+            "is_active",
+        ),
+        Index(
+            "ix_connector_credentials_project_rotation_due",
+            "project_id",
+            "rotation_due_at",
+        ),
+    )
+
+
+class ConnectorCredentialAuditEvent(Base):
+    """Append-only credential lifecycle audit; secret material is excluded."""
+
+    __tablename__ = "connector_credential_audit_events"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    credential_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("connector_credentials.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'{}'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('created','rotated','bound','revoked','used')",
+            name="ck_connector_credential_audit_event_type",
+        ),
+        Index(
+            "ix_connector_credential_audit_project_created",
+            "project_id",
+            "created_at",
+        ),
+        Index(
+            "ix_connector_credential_audit_credential_created",
+            "credential_id",
+            "created_at",
+        ),
+    )
+
+
 class SystemOfRecordConnectorConfig(Base):
     """Tenant-scoped connector config for outcome verification."""
 
@@ -212,6 +336,15 @@ class SystemOfRecordConnectorConfig(Base):
         String(64), nullable=True
     )
     database_url_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    bearer_credential_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("connector_credentials.id", ondelete="SET NULL"), nullable=True
+    )
+    oauth_refresh_credential_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("connector_credentials.id", ondelete="SET NULL"), nullable=True
+    )
+    database_url_credential_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("connector_credentials.id", ondelete="SET NULL"), nullable=True
+    )
     kms_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
@@ -246,6 +379,9 @@ class SystemOfRecordConnectorConfig(Base):
             "is_active",
         ),
         Index("ix_sor_connector_project_updated", "project_id", "updated_at"),
+        Index("ix_sor_connector_bearer_credential", "bearer_credential_id"),
+        Index("ix_sor_connector_oauth_credential", "oauth_refresh_credential_id"),
+        Index("ix_sor_connector_database_credential", "database_url_credential_id"),
     )
 
 

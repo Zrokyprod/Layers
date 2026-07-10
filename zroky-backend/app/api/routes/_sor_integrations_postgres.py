@@ -155,7 +155,7 @@ def test_postgres_read_connector(
 
     settings = get_settings()
     try:
-        database_url = decrypt_connector_database_url(config, project_id=tenant_id)
+        database_url = decrypt_connector_database_url(config, project_id=tenant_id, db=db)
         if not database_url:
             raise InvalidSystemOfRecordConnectorError(
                 "PostgreSQL database URL is not configured."

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from sqlalchemy.orm import Session
+
+from app.services.connector_credentials import resolve_connector_credential
 from app.services.connectors.sor.config.core import *  # noqa: F403
 
 
@@ -7,7 +10,14 @@ def decrypt_connector_bearer_token(
     row: SystemOfRecordConnectorConfig,
     *,
     project_id: str,
+    db: Session | None = None,
 ) -> str | None:
+    if row.bearer_credential_id:
+        if db is None:
+            raise RuntimeError("database session is required for a bound connector credential")
+        return resolve_connector_credential(
+            db, row=row, project_id=project_id, purpose="bearer_token"
+        )
     if not row.bearer_token_ciphertext:
         return None
     return decrypt_provider_key(
@@ -20,7 +30,14 @@ def decrypt_connector_oauth_refresh_token(
     row: SystemOfRecordConnectorConfig,
     *,
     project_id: str,
+    db: Session | None = None,
 ) -> str | None:
+    if row.oauth_refresh_credential_id:
+        if db is None:
+            raise RuntimeError("database session is required for a bound connector credential")
+        return resolve_connector_credential(
+            db, row=row, project_id=project_id, purpose="oauth_refresh_token"
+        )
     if not row.oauth_refresh_token_ciphertext:
         return None
     return decrypt_provider_key(
@@ -33,7 +50,14 @@ def decrypt_connector_database_url(
     row: SystemOfRecordConnectorConfig,
     *,
     project_id: str,
+    db: Session | None = None,
 ) -> str | None:
+    if row.database_url_credential_id:
+        if db is None:
+            raise RuntimeError("database session is required for a bound connector credential")
+        return resolve_connector_credential(
+            db, row=row, project_id=project_id, purpose="database_url"
+        )
     if not row.database_url_ciphertext:
         return None
     return decrypt_provider_key(
