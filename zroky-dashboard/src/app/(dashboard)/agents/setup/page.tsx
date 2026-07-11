@@ -366,11 +366,21 @@ export default function ProtectedAgentSetupPage() {
   const effectiveInstalledPack = installedPack ?? persistedPack;
   const packInstalled = Boolean(effectiveInstalledPack);
   const installedPackToolNames = effectiveInstalledPack?.contract_templates.map((item) => item.action_type) ?? [];
+  const existingRunnerVerification = (
+    connectedProfile?.metadata?.runner_verification &&
+    typeof connectedProfile.metadata.runner_verification === "object" &&
+    !Array.isArray(connectedProfile.metadata.runner_verification)
+  )
+    ? connectedProfile.metadata.runner_verification as Record<string, unknown>
+    : {};
+  const runnerCredentialRefReady = typeof existingRunnerVerification.credential_ref === "string" &&
+    existingRunnerVerification.credential_ref.trim().length > 0;
   const policyActivationNeeded = Boolean(
     connectedProfile &&
     (
       installedPackToolNames.some((toolName) => !(connectedProfile.tool_names ?? []).includes(toolName)) ||
-      (connectedProfile.allowed_action_types ?? []).length === 0
+      (connectedProfile.allowed_action_types ?? []).length === 0 ||
+      !runnerCredentialRefReady
     ),
   );
 
@@ -519,6 +529,14 @@ export default function ProtectedAgentSetupPage() {
           ...(connectedProfile.allowed_action_types ?? []),
           ...riskActionTypesForTools(installedPackToolNames),
         ])),
+        metadata: {
+          ...(connectedProfile.metadata ?? {}),
+          runner_verification: {
+            ...existingRunnerVerification,
+            runner_mode: existingRunnerVerification.runner_mode ?? "customer_hosted",
+            credential_ref: runtimeCredentialRef(runtimeKeyPrefix),
+          },
+        },
       });
       return enforceAgentProfile(updatedProfile.id);
     },
