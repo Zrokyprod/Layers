@@ -416,7 +416,7 @@ export default function Hero() {
       <BifrostRingScene progress={progress} />
 
       <div className="relative z-10 mx-auto min-w-0 max-w-[1260px]">
-        <div className="mx-auto min-w-0 max-w-[860px] text-center">
+        <div className="mx-auto min-w-0 max-w-[1040px] text-center">
           <Reveal>
             <div className="inline-flex max-w-full items-center justify-center border border-[#ded9cf] bg-[#fbfaf6]/86 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.11em] text-[#3f433d] shadow-[0_1px_2px_rgba(17,20,15,0.04)] backdrop-blur sm:text-[11px] sm:tracking-[0.14em]">
               Enterprise AI agent action control plane
@@ -428,7 +428,7 @@ export default function Hero() {
           </Reveal>
 
           <Reveal delay={0.07}>
-            <h1 className="mx-auto mt-3 max-w-[670px] text-[1.92rem] font-semibold leading-[1.03] tracking-[-0.02em] text-[#090b08] min-[380px]:text-[2.22rem] sm:text-[2.68rem] md:text-[3.12rem] lg:text-[3.5rem] lg:tracking-[-0.03em]">
+            <h1 className="mx-auto mt-3 max-w-[980px] text-[1.92rem] font-semibold leading-[1.03] tracking-[-0.02em] text-[#090b08] min-[380px]:text-[2.22rem] sm:text-[2.68rem] md:text-[3.12rem] lg:text-[3.5rem] lg:tracking-[-0.03em]">
               <span className="block">Scale AI agents across your enterprise.</span>
               {' '}
               <span className="block">Control every action they take.</span>
@@ -436,7 +436,7 @@ export default function Hero() {
           </Reveal>
 
           <Reveal delay={0.13}>
-            <p className="mx-auto mt-4 max-w-[610px] text-balance text-[0.84rem] leading-[1.58] text-[#5f635b] sm:text-[0.9rem] md:text-[0.94rem]">
+            <p className="mx-auto mt-4 max-w-[850px] text-balance text-[0.84rem] leading-[1.58] text-[#5f635b] sm:text-[0.9rem] md:text-[0.94rem]">
               Zroky intercepts agent tool calls before they reach business systems, enforces policy and approvals, verifies outcomes in systems of record, and issues a signed receipt for every protected action.
             </p>
           </Reveal>
