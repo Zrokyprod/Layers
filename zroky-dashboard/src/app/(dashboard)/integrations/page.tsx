@@ -801,9 +801,14 @@ function Fact({
 }
 
 function CoverageMap({ rows }: { rows: ConnectorCoverageRow[] }) {
+  const hasCoverageGap = rows.some((row) => row.status !== "healthy" && row.status !== "generic_fallback");
   return (
-    <section className="panel connectors-coverage-panel connectors-coverage-panel-secondary" aria-label="Verification coverage audit">
-      <details className="connectors-coverage-details">
+    <section
+      className="panel connectors-coverage-panel connectors-coverage-panel-secondary"
+      aria-label="Verification coverage audit"
+      id="verification-coverage"
+    >
+      <details className="connectors-coverage-details" open={hasCoverageGap}>
         <summary>
           <span>
             <span className="dashboard-eyebrow">Coverage audit</span>

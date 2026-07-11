@@ -1200,6 +1200,12 @@ describe("IntegrationsPage", () => {
     ).toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Verification coverage audit" })).toBeInTheDocument();
+    const coverageRegion = screen.getByRole("region", { name: "Verification coverage audit" });
+    expect(coverageRegion.getAttribute("id")).toBe("verification-coverage");
+    expect(coverageRegion.querySelector("details")?.hasAttribute("open")).toBe(true);
+    expect(screen.getByRole("link", { name: "Review coverage" }).getAttribute("href")).toBe(
+      "/integrations#verification-coverage",
+    );
     expect(screen.getAllByText("refund").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Verifier healthy").length).toBeGreaterThan(0);
     expect(screen.getByText("custom")).toBeInTheDocument();
