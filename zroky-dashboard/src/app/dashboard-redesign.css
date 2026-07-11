@@ -7699,6 +7699,38 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--dash-text) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-secret-confirm {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 10px !important;
+  width: fit-content !important;
+  color: var(--dash-text) !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-secret-confirm input {
+  width: 16px !important;
+  height: 16px !important;
+  margin: 2px 0 0 !important;
+  accent-color: #2f6f73 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-secret-confirm span {
+  display: grid !important;
+  gap: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-secret-confirm strong {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-secret-confirm small {
+  color: var(--dash-text-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-primary-grid {
   display: grid !important;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.45fr) !important;
