@@ -428,7 +428,7 @@ export default function Hero() {
           </Reveal>
 
           <Reveal delay={0.07}>
-            <h1 className="mx-auto mt-3 max-w-[980px] text-[1.92rem] font-semibold leading-[1.03] tracking-[-0.02em] text-[#090b08] min-[380px]:text-[2.22rem] sm:text-[2.68rem] md:text-[3.12rem] lg:text-[3.5rem] lg:tracking-[-0.03em]">
+            <h1 className="mx-auto mt-3 max-w-[980px] text-[1.56rem] font-semibold leading-[1.08] text-[#090b08] min-[380px]:text-[1.72rem] sm:text-[2.28rem] md:text-[2.68rem] lg:text-[3.08rem] xl:text-[3.28rem]">
               <span className="block">Scale AI agents across your enterprise.</span>
               {' '}
               <span className="block">Control every action they take.</span>
@@ -436,7 +436,7 @@ export default function Hero() {
           </Reveal>
 
           <Reveal delay={0.13}>
-            <p className="mx-auto mt-4 max-w-[850px] text-balance text-[0.84rem] leading-[1.58] text-[#5f635b] sm:text-[0.9rem] md:text-[0.94rem]">
+            <p className="mx-auto mt-4 max-w-[780px] text-balance text-[0.82rem] leading-[1.6] text-[#5f635b] sm:text-[0.86rem] md:text-[0.9rem]">
               Zroky intercepts agent tool calls before they reach business systems, enforces policy and approvals, verifies outcomes in systems of record, and issues a signed receipt for every protected action.
             </p>
           </Reveal>
