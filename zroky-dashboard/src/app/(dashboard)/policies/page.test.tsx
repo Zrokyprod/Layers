@@ -298,6 +298,20 @@ function renderPoliciesPage() {
   );
 }
 
+function renderUnseededPoliciesPage() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <PoliciesPage />
+    </QueryClientProvider>,
+  );
+}
+
 describe("PoliciesPage mandate control", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -333,6 +347,20 @@ describe("PoliciesPage mandate control", () => {
     expect(within(feed).getByText("pending approval")).toBeInTheDocument();
     expect(within(feed).getByText("delete")).toBeInTheDocument();
     expect(within(feed).getByText("tool_not_allowed")).toBeInTheDocument();
+  });
+
+  it("terminates loading with an honest plan-limited policy state", async () => {
+    api.getPilotPolicy.mockRejectedValue(new Error("Your plan does not include 'pilot.autopilot_enabled'. Upgrade to use this feature."));
+
+    renderUnseededPoliciesPage();
+
+    expect(await screen.findByRole("heading", { name: "Policy upgrade required" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Policy status loading" })).not.toBeInTheDocument();
+    expect(screen.getByText("This plan cannot configure Runtime Action Control. Existing policy decisions remain visible in the audit trail.")).toBeInTheDocument();
+    const summary = screen.getByLabelText("Policy safety summary");
+    expect(within(summary).getByText("Unavailable")).toBeInTheDocument();
+    expect(within(summary).getByText("Unknown")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save policy" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("saves comma-separated tool policy as structured arrays", async () => {
