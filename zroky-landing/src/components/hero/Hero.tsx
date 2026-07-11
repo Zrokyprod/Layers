@@ -6,7 +6,7 @@ import { SIGN_UP_URL } from '../../lib/links';
 const ease = [0.16, 1, 0.3, 1] as const;
 const loopSeconds = 6.2;
 
-const statusFrames = ['ACTION CAPTURED', 'POLICY ENFORCED', 'SCOPE LOCKED', 'PROOF SIGNED'] as const;
+const statusFrames = ['INTENT CAPTURED', 'APPROVAL REQUIRED', 'SOURCE MATCHED', 'RECEIPT SIGNED'] as const;
 
 function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
   const reduce = useReducedMotion();
@@ -368,8 +368,8 @@ function BifrostRingScene({ progress }: { progress: number }) {
 
 function CommandModule({ progress, frame }: { progress: number; frame: number }) {
   const reduce = Boolean(useReducedMotion());
-  const command = 'zroky guard refund --require approval';
-  const receipt = 'proof: signed_receipt.7f3a9e10';
+  const command = 'zroky protect refund.create --policy finance.refund.v4';
+  const receipt = 'receipt: zrk_rc_7f3a9e10';
   const commandChars = reduce ? command.length : Math.round(command.length * clamp((progress - 0.5) / 1.35, 0, 1));
   const receiptChars = reduce ? receipt.length : Math.round(receipt.length * clamp((progress - 3.45) / 1.2, 0, 1));
   const status = statusFrames[frame];
@@ -382,7 +382,7 @@ function CommandModule({ progress, frame }: { progress: number; frame: number })
         <span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 border-b border-l border-[#cfc9bd]" />
         <span className="absolute -bottom-1.5 -right-1.5 h-3 w-3 border-b border-r border-[#cfc9bd]" />
 
-        <p className="font-mono text-[12px] font-semibold text-[#3a747c]">/* Controlled agent action */</p>
+        <p className="font-mono text-[12px] font-semibold text-[#3a747c]">/* Protected action. Verified outcome. */</p>
         <div className="mt-3 space-y-2 font-mono text-[13px] leading-relaxed text-[#20231f]">
           <p>
             <span className="text-[#3a747c]">$ </span>
@@ -419,25 +419,25 @@ export default function Hero() {
         <div className="mx-auto min-w-0 max-w-[860px] text-center">
           <Reveal>
             <div className="inline-flex max-w-full items-center justify-center border border-[#ded9cf] bg-[#fbfaf6]/86 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.11em] text-[#3f433d] shadow-[0_1px_2px_rgba(17,20,15,0.04)] backdrop-blur sm:text-[11px] sm:tracking-[0.14em]">
-              All your agents, one control layer
+              Enterprise AI agent action control plane
             </div>
           </Reveal>
 
           <Reveal delay={0.04}>
-            <p className="mt-7 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[#3a747c]">[ Policy. Approval. Proof. ]</p>
+            <p className="mt-7 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[#3a747c]">[ Intercept. Authorize. Verify. ]</p>
           </Reveal>
 
           <Reveal delay={0.07}>
             <h1 className="mx-auto mt-3 max-w-[670px] text-[1.92rem] font-semibold leading-[1.03] tracking-[-0.02em] text-[#090b08] min-[380px]:text-[2.22rem] sm:text-[2.68rem] md:text-[3.12rem] lg:text-[3.5rem] lg:tracking-[-0.03em]">
-              <span className="block">Deploy AI agents at scale</span>
+              <span className="block">Scale AI agents across your enterprise.</span>
               {' '}
-              <span className="block">without losing control</span>
+              <span className="block">Control every action they take.</span>
             </h1>
           </Reveal>
 
           <Reveal delay={0.13}>
             <p className="mx-auto mt-4 max-w-[610px] text-balance text-[0.84rem] leading-[1.58] text-[#5f635b] sm:text-[0.9rem] md:text-[0.94rem]">
-              Zroky sits between agents and business systems to enforce approvals, scoped permissions, policy checks, and signed audit trails for every action.
+              Zroky intercepts agent tool calls before they reach business systems, enforces policy and approvals, verifies outcomes in systems of record, and issues a signed receipt for every protected action.
             </p>
           </Reveal>
 
@@ -447,7 +447,7 @@ export default function Hero() {
                 href={SIGN_UP_URL}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#3a747c,#2f5f66)] px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_30px_-18px_rgba(47,95,102,0.66)] transition hover:-translate-y-px active:scale-[0.98] sm:w-auto"
               >
-                Get started <ArrowRight size={14} />
+                Protect your first agent <ArrowRight size={14} />
               </a>
             </div>
           </Reveal>
