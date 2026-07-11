@@ -501,6 +501,12 @@ describe("Protected agent setup (minimal)", () => {
     await waitFor(() => expect(api.updateAgentProfile).toHaveBeenCalledWith("agent_1", expect.objectContaining({
       tool_names: expect.arrayContaining(["customer.access.grant", "support.ticket.close"]),
       allowed_action_types: expect.arrayContaining(["custom", "ticket_close", "customer_record_update"]),
+      metadata: expect.objectContaining({
+        runner_verification: expect.objectContaining({
+          runner_mode: "customer_hosted",
+          credential_ref: "customer-runner-secret://zroky/project-key/zk_live_demo",
+        }),
+      }),
     })));
     await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(screen.getByText("python agent.py")).toBeInTheDocument();
