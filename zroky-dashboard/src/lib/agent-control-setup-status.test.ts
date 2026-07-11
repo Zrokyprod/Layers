@@ -154,6 +154,31 @@ describe("getAgentControlSetupStatus", () => {
     expect(status.title).toBe("Project policy enabled");
   });
 
+  it("counts the compact action-pack setup schema without claiming verifier readiness", () => {
+    const status = getAgentControlSetupStatus(
+      [agentProfile({
+        tool_names: ["support.ticket.close", "customer.refund.create"],
+        allowed_action_types: ["ticket_close", "refund"],
+        metadata: {
+          setup_source: "agent_control_setup_wizard",
+          setup_action_pack_id: "support-ops-v1",
+          setup_action_contract_versions: ["support.ticket.close/1.0", "customer.refund.create/1.0"],
+          runtime_policy_mandate_enforced: true,
+          runner_verification: {
+            runner_mode: "customer_hosted",
+            credential_ref: "customer-runner-secret://zroky/project-key/zk_live_demo",
+          },
+        },
+      })],
+      captureHealth({ calls_24h: 2, outcome_events_24h: 0 }),
+    );
+
+    expect(status.state).toBe("incomplete");
+    expect(status.completedCount).toBe(5);
+    expect(status.progressPct).toBe(83);
+    expect(status.checks.find((check) => check.id === "runner_verifier")?.done).toBe(false);
+  });
+
   it("marks setup live when saved setup, enforced mandate, and live capture are present", () => {
     const status = getAgentControlSetupStatus(
       [agentProfile({
