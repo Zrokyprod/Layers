@@ -15,6 +15,7 @@ import type {
 import PoliciesPage from "./page";
 
 const api = vi.hoisted(() => ({
+  getBillingMe: vi.fn(),
   getPilotPolicy: vi.fn(),
   createRuntimePolicyRule: vi.fn(),
   disableRuntimePolicyRule: vi.fn(),
@@ -52,6 +53,10 @@ let seededApprovalsResponse: { items: RuntimePolicyDecisionResponse[]; total_in_
 let seededAgentsResponse: { items: AgentProfileResponse[]; total: number; limit: number; offset: number; active_count: number; max_active_agents: number; limit_reached: boolean };
 let seededRulesResponse: { items: RuntimePolicyRuleResponse[]; total_in_page: number };
 let seededPreviewResponse: RuntimePolicyResolvePreviewResponse;
+let seededBillingResponse: {
+  plan_code: string;
+  plan_template: Record<string, unknown>;
+};
 
 function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload {
   return {
@@ -265,6 +270,11 @@ function mockPolicies({
       },
     ],
   };
+  seededBillingResponse = {
+    plan_code: "team",
+    plan_template: { "pilot.autopilot_enabled": true },
+  };
+  api.getBillingMe.mockResolvedValue(seededBillingResponse);
   api.getPilotPolicy.mockResolvedValue(response);
   api.updatePilotPolicy.mockResolvedValue(response);
   api.setRuntimePolicyKillSwitch.mockResolvedValue({ project_id: "proj_1", enabled: true, policy: { kill_switch: true } });
@@ -290,6 +300,7 @@ function renderPoliciesPage() {
   client.setQueryData(["agents", "profiles", "policy-rules"], seededAgentsResponse);
   client.setQueryData(["runtime-policy", "rules"], seededRulesResponse);
   client.setQueryData(["runtime-policy", "resolve-preview", "", "refund", "production"], seededPreviewResponse);
+  client.setQueryData(["billing", "me"], seededBillingResponse);
 
   return render(
     <QueryClientProvider client={client}>
@@ -361,6 +372,19 @@ describe("PoliciesPage mandate control", () => {
     expect(within(summary).getByText("Unavailable")).toBeInTheDocument();
     expect(within(summary).getByText("Unknown")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save policy" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("keeps free-plan policy visible but disables paid configuration", async () => {
+    seededBillingResponse = { plan_code: "free", plan_template: {} };
+
+    const { container } = renderPoliciesPage();
+
+    expect(await screen.findByRole("heading", { name: "Human review waiting" })).toBeInTheDocument();
+    expect(screen.getByText(/Read-only policy view/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Upgrade plan" }).getAttribute("href")).toBe("/settings/billing");
+    expect(screen.getByRole("button", { name: "Save policy" }).hasAttribute("disabled")).toBe(true);
+    expect(container.querySelector(".policies-configuration-scope")?.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Allowed surface")).toBeInTheDocument();
   });
 
   it("saves comma-separated tool policy as structured arrays", async () => {
