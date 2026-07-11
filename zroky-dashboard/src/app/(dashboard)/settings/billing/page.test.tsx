@@ -79,7 +79,7 @@ describe("BillingPage", () => {
       replay: usageMeter(0, 0, "blocked"),
       goldens: { ...usageMeter(0, 0, "blocked"), resets_at: null },
       golden_sets: { ...usageMeter(0, 0, "blocked"), resets_at: null },
-      protected_actions: usageMeter(7, 500),
+      protected_actions: usageMeter(2, 500),
       policy_checks: usageMeter(18, 1000),
       runner_executions: usageMeter(4, 500),
       action_receipts: usageMeter(4, 500),
@@ -107,7 +107,9 @@ describe("BillingPage", () => {
     expect(screen.queryByText("Replay runs")).not.toBeInTheDocument();
     expect(screen.queryByText("Spend limits")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
-    expect(screen.getAllByText("7 / 500").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2 / 500").length).toBeGreaterThan(0);
+    const protectedActionRow = screen.getByText("Protected actions").closest(".billing-usage-row") as HTMLElement;
+    expect(within(protectedActionRow).getByLabelText("<1% used")).toBeInTheDocument();
     expect(screen.queryByText("Policy checks")).not.toBeInTheDocument();
     expect(screen.queryByText("Runner executions")).not.toBeInTheDocument();
     expect(screen.queryByText("Managed AgentProfile capacity")).not.toBeInTheDocument();
