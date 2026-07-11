@@ -347,6 +347,11 @@ export default function ProtectedAgentSetupPage() {
   const persistedPack = persistedPackId ? packs.find((pack) => pack.id === persistedPackId) ?? null : null;
   const effectiveInstalledPack = installedPack ?? persistedPack;
   const packInstalled = Boolean(effectiveInstalledPack);
+  const installedPackToolNames = effectiveInstalledPack?.contract_templates.map((item) => item.action_type) ?? [];
+  const policyActivationNeeded = Boolean(
+    connectedProfile &&
+    installedPackToolNames.some((toolName) => !(connectedProfile.tool_names ?? []).includes(toolName)),
+  );
 
   const createKeyMutation = useMutation({
     mutationFn: async () => {
@@ -445,7 +450,12 @@ export default function ProtectedAgentSetupPage() {
       if (!connectedProfile) {
         return { result, updatedProfile: null };
       }
+      const installedToolNames = result.installed_contracts.map((item) => item.contract.action_type);
       const updatedProfile = await updateAgentProfile(connectedProfile.id, {
+        tool_names: Array.from(new Set([
+          ...(connectedProfile.tool_names ?? []),
+          ...installedToolNames,
+        ])),
         metadata: {
           ...(connectedProfile.metadata ?? {}),
           setup_source: "agent_control_setup_wizard",
@@ -453,7 +463,8 @@ export default function ProtectedAgentSetupPage() {
           setup_action_contract_versions: result.installed_contracts.map((item) => item.contract.contract_version),
         },
       });
-      return { result, updatedProfile };
+      const enforcedProfile = await enforceAgentProfile(updatedProfile.id);
+      return { result, updatedProfile: enforcedProfile };
     },
     onSuccess: ({ result, updatedProfile }) => {
       setInstalledPack(result.pack);
@@ -466,6 +477,30 @@ export default function ProtectedAgentSetupPage() {
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Could not install protected actions.");
+    },
+  });
+
+  const activatePackPolicyMutation = useMutation({
+    mutationFn: async () => {
+      if (!connectedProfile || installedPackToolNames.length === 0) {
+        throw new Error("Installed action contracts are not ready for policy activation.");
+      }
+      const updatedProfile = await updateAgentProfile(connectedProfile.id, {
+        tool_names: Array.from(new Set([
+          ...(connectedProfile.tool_names ?? []),
+          ...installedPackToolNames,
+        ])),
+      });
+      return enforceAgentProfile(updatedProfile.id);
+    },
+    onSuccess: (updatedProfile) => {
+      setProfile(updatedProfile);
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["agent-setup", "profiles"] });
+      void queryClient.invalidateQueries({ queryKey: ["agents", "profiles"] });
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Could not activate the installed action policy.");
     },
   });
 
@@ -509,18 +544,20 @@ export default function ProtectedAgentSetupPage() {
 
   const keyEnvSnippet = `ZROKY_API_KEY=${newRuntimeKey?.api_key ?? maskedRuntimeKey}
 ZROKY_PROJECT_ID=${projectId || "proj_..."}`;
-  const firstProtectedActionSnippet = `import zroky
+  const firstProtectedActionSnippet = `import os
+import zroky
 
 zroky.init(
+    api_key=os.environ["ZROKY_API_KEY"],
+    project=os.environ["ZROKY_PROJECT_ID"],
     agent_id="${connectedProfile?.id ?? "agent_..."}",
     environment="${environment}",
 )
 
 receipt = zroky.protect(
-    action="customer.access.grant",
+    action="support.ticket.close",
     operation_kind="UPDATE",
-    params={"role": "viewer", "reason": "Support case verified"},
-    resource={"customer_id": "cus_123"},
+    params={"status": "closed", "reason": "Support case resolved"},
     raise_on_approval=False,
 )
 
@@ -1090,6 +1127,16 @@ print(receipt["status"])`;
                           <strong>{effectiveInstalledPack?.display_name ?? selectedPack.display_name} installed</strong>
                           <span>{effectiveInstalledPack?.contract_templates.length ?? selectedPack.contract_templates.length} protected actions ready. Run a test action next.</span>
                         </div>
+                        {policyActivationNeeded ? (
+                          <DashboardButton
+                            type="button"
+                            variant="primary"
+                            loading={activatePackPolicyMutation.isPending}
+                            onClick={() => activatePackPolicyMutation.mutate()}
+                          >
+                            Activate policy
+                          </DashboardButton>
+                        ) : null}
                       </div>
                     ) : selectedPackRequestAccess ? (
                       <div className="agent-runtime-ready">

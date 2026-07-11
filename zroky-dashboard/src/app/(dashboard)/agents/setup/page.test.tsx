@@ -347,7 +347,14 @@ describe("Protected agent setup (minimal)", () => {
     });
     api.installActionPack.mockReset().mockResolvedValue({
       pack: pack(),
-      installed_contracts: [{ contract: { id: "contract_1", contract_version: "customer.record.update/1.0" }, created: true }],
+      installed_contracts: [{
+        contract: {
+          id: "contract_1",
+          action_type: "customer.record.update",
+          contract_version: "customer.record.update/1.0",
+        },
+        created: true,
+      }],
     });
     api.updateAgentProfile.mockReset().mockImplementation(async (_agentId, payload) => profile({
       metadata: payload.metadata,
@@ -446,12 +453,14 @@ describe("Protected agent setup (minimal)", () => {
 
     await waitFor(() => expect(api.installActionPack).toHaveBeenCalledWith("support-ops-v1"));
     await waitFor(() => expect(api.updateAgentProfile).toHaveBeenCalledWith("agent_1", expect.objectContaining({
+      tool_names: ["customer.record.update"],
       metadata: expect.objectContaining({
         setup_action_pack_id: "support-ops-v1",
         setup_action_contract_versions: ["customer.record.update/1.0"],
         setup_source: "agent_control_setup_wizard",
       }),
     })));
+    await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(await screen.findByText(/Support operations installed/i)).toBeInTheDocument();
     expect(screen.getByText("Install")).toBeInTheDocument();
     expect(screen.getByText("agent.py")).toBeInTheDocument();
@@ -459,25 +468,39 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("python agent.py")).toBeInTheDocument();
     expect(screen.getByText(/agent_id="agent_1"/i)).toBeInTheDocument();
     expect(screen.getByText(/environment="staging"/i)).toBeInTheDocument();
+    expect(screen.getByText(/api_key=os\.environ\["ZROKY_API_KEY"\]/i)).toBeInTheDocument();
+    expect(screen.getByText(/project=os\.environ\["ZROKY_PROJECT_ID"\]/i)).toBeInTheDocument();
+    expect(screen.getByText(/action="support\.ticket\.close"/i)).toBeInTheDocument();
   });
 
   it("restores installed action-pack progress after a page reload", async () => {
+    const installedMetadata = {
+      setup_source: "agent_control_setup_wizard",
+      setup_action_pack_id: "support-ops-v1",
+    };
     api.listAgentProfiles.mockResolvedValue({
       items: [profile({
         display_name: "Persistent Agent",
-        metadata: {
-          setup_source: "agent_control_setup_wizard",
-          setup_action_pack_id: "support-ops-v1",
-        },
+        metadata: installedMetadata,
       })],
       total: 1,
     });
+    api.enforceAgentProfile.mockResolvedValueOnce(profile({
+      display_name: "Persistent Agent",
+      metadata: installedMetadata,
+      tool_names: ["customer.access.grant", "support.ticket.close"],
+    }));
 
     renderPage();
 
     expect(await screen.findByText("Persistent Agent")).toBeInTheDocument();
     expect(await screen.findByText("Support operations installed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Install protected actions" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Activate policy" }));
+    await waitFor(() => expect(api.updateAgentProfile).toHaveBeenCalledWith("agent_1", expect.objectContaining({
+      tool_names: expect.arrayContaining(["customer.access.grant", "support.ticket.close"]),
+    })));
+    await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(screen.getByText("python agent.py")).toBeInTheDocument();
     expect(api.installActionPack).not.toHaveBeenCalled();
   });
