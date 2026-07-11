@@ -84,6 +84,7 @@ export default function AccountPage() {
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingMessage, setBillingMessage] = useState("");
   const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+  const [showLogoutAllConfirm, setShowLogoutAllConfirm] = useState(false);
   const [mfaLoading, setMfaLoading] = useState(false);
   const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [mfaPassword, setMfaPassword] = useState("");
@@ -113,6 +114,7 @@ export default function AccountPage() {
       ? "Needs review"
       : accountPostureLabel(me, security);
   const accountInitial = displayName.charAt(0).toUpperCase();
+  const profileIsDirty = displayNameInput.trim() !== (me?.display_name ?? "").trim();
   const connectedLogin = securityLoading ? "Loading" : security ? connectedLoginLabel(security) : "Unavailable";
   const memberSince = me?.created_at
     ? new Date(me.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -279,6 +281,7 @@ export default function AccountPage() {
     setSecurityMessage("");
     try {
       await logoutAllSessions();
+      setShowLogoutAllConfirm(false);
       await clearAccessToken();
       router.push("/login");
     } catch (err) {
@@ -533,7 +536,7 @@ export default function AccountPage() {
             disabled={logoutAllLoading || security?.global_logout_available === false}
             loading={logoutAllLoading}
             icon={<LogOut />}
-            onClick={() => void onLogoutAllSessions()}
+            onClick={() => setShowLogoutAllConfirm(true)}
           >
             {logoutAllLoading ? "Revoking..." : "Log out all sessions"}
           </DashboardButton>
@@ -598,7 +601,12 @@ export default function AccountPage() {
               {profileError && <p className="account-message is-error">{profileError}</p>}
               {profileSuccess && <p className="account-message is-success">{profileSuccess}</p>}
               <div className="actions">
-                <DashboardButton type="submit" variant="primary" loading={updateMeMutation.isPending}>
+                <DashboardButton
+                  type="submit"
+                  variant="primary"
+                  disabled={!profileIsDirty || updateMeMutation.isPending}
+                  loading={updateMeMutation.isPending}
+                >
                   {updateMeMutation.isPending ? "Saving..." : "Save profile"}
                 </DashboardButton>
               </div>
@@ -719,6 +727,50 @@ export default function AccountPage() {
           </div>
         )}
       </section>
+
+      {showLogoutAllConfirm && (
+        <div
+          className="fix-modal-backdrop"
+          role="presentation"
+          onClick={() => !logoutAllLoading && setShowLogoutAllConfirm(false)}
+        >
+          <section
+            className="panel keys-revoke-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Log out all sessions"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header">
+              <div>
+                <h2>Log out every session?</h2>
+                <p>
+                  This immediately revokes all active sessions, including this browser. You will need to sign in again
+                  on every device.
+                </p>
+              </div>
+            </header>
+            <div className="actions">
+              <DashboardButton
+                type="button"
+                variant="danger"
+                loading={logoutAllLoading}
+                onClick={() => void onLogoutAllSessions()}
+              >
+                {logoutAllLoading ? "Revoking..." : "Yes, log out everywhere"}
+              </DashboardButton>
+              <DashboardButton
+                type="button"
+                variant="soft"
+                disabled={logoutAllLoading}
+                onClick={() => setShowLogoutAllConfirm(false)}
+              >
+                Cancel
+              </DashboardButton>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
