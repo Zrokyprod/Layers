@@ -29,6 +29,7 @@ export type ActionLifecycleStageId =
   | "receipted"
   | "blocked"
   | "bypassed"
+  | "awaiting_runner"
   | "no_runner"
   | "execution_stalled"
   | "guard_only";
@@ -100,6 +101,7 @@ export type ActionLifecycleCounts = {
   protectedActions: number;
   guardOnly: number;
   held: number;
+  awaitingRunner: number;
   executing: number;
   mismatched: number;
   notVerified: number;
@@ -297,7 +299,7 @@ function stageForAttempt(
   if (!attempt) {
     if (view.status === "authorized" && ["not_started", "pending"].includes(view.proofStatus)) {
       return {
-        id: "execution",
+        id: "awaiting_runner",
         label: "Awaiting runner",
         detail: "Action is authorized, but no protected runner attempt is attached yet.",
         tone: "warning",
@@ -392,7 +394,7 @@ function isHeld(row: ActionLifecycleRow): boolean {
 }
 
 function isExecuting(row: ActionLifecycleRow): boolean {
-  return ["authorized", "execution", "no_runner", "execution_stalled"].includes(row.stage.id);
+  return ["authorized", "awaiting_runner", "execution", "no_runner", "execution_stalled"].includes(row.stage.id);
 }
 
 function isMismatched(row: ActionLifecycleRow): boolean {
@@ -668,6 +670,7 @@ export function actionLifecycleCounts(rows: ActionLifecycleRow[]): ActionLifecyc
     protectedActions: rows.filter((row) => row.kind === "action_intent").length,
     guardOnly: rows.filter((row) => row.kind === "orphan_decision").length,
     held: rows.filter(isHeld).length,
+    awaitingRunner: rows.filter((row) => row.stage.id === "awaiting_runner").length,
     executing: rows.filter(isExecuting).length,
     mismatched: rows.filter(isMismatched).length,
     notVerified: rows.filter(isNotVerified).length,
