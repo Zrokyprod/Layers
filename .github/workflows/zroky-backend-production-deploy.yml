@@ -1,0 +1,182 @@
+name: Zroky Backend Production Deploy
+
+on:
+  workflow_run:
+    workflows: ["Zroky Backend CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      deploy_sha:
+        description: "Commit SHA to deploy (defaults to main)"
+        required: false
+        type: string
+
+concurrency:
+  group: zroky-backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+  RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+  RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_BACKEND_SERVICE_ID }}
+  PRODUCTION_API_URL: https://api.zroky.com
+
+jobs:
+  deploy:
+    name: Deploy tested backend to Railway production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: Production
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Resolve tested revision
+        id: revision
+        env:
+          DISPATCH_SHA: ${{ inputs.deploy_sha }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            SHA="${DISPATCH_SHA:-main}"
+          else
+            SHA="${TESTED_SHA}"
+          fi
+          echo "sha=${SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout tested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.revision.outputs.sha }}
+
+      - name: Require production deployment configuration
+        run: |
+          set -euo pipefail
+          for name in RAILWAY_TOKEN RAILWAY_PROJECT_ID RAILWAY_ENVIRONMENT_ID RAILWAY_SERVICE_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::${name} is not configured"
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pinned Railway CLI
+        run: npm install --global @railway/cli@4.33.0
+
+      - name: Submit backend deployment
+        id: submit
+        working-directory: zroky-backend
+        env:
+          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          set -euo pipefail
+          BEFORE_JSON="$(railway deployment list \
+            --environment "${RAILWAY_ENVIRONMENT_ID}" \
+            --service "${RAILWAY_SERVICE_ID}" \
+            --limit 1 \
+            --json)"
+          BEFORE_ID="$(jq -r '.[0].id // empty' <<<"${BEFORE_JSON}")"
+
+          railway up . \
+            --path-as-root \
+            --project "${RAILWAY_PROJECT_ID}" \
+            --environment "${RAILWAY_ENVIRONMENT_ID}" \
+            --service "${RAILWAY_SERVICE_ID}" \
+            --detach \
+            --message "GitHub revision ${DEPLOY_SHA}"
+
+          DEPLOYMENT_ID=""
+          for attempt in {1..12}; do
+            DEPLOYMENT_JSON="$(railway deployment list \
+              --environment "${RAILWAY_ENVIRONMENT_ID}" \
+              --service "${RAILWAY_SERVICE_ID}" \
+              --limit 1 \
+              --json)"
+            CANDIDATE_ID="$(jq -r '.[0].id // empty' <<<"${DEPLOYMENT_JSON}")"
+            if [[ -n "${CANDIDATE_ID}" && "${CANDIDATE_ID}" != "${BEFORE_ID}" ]]; then
+              DEPLOYMENT_ID="${CANDIDATE_ID}"
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "${DEPLOYMENT_ID}" ]]; then
+            echo "::error::Railway did not expose the newly submitted deployment id"
+            exit 1
+          fi
+          echo "deployment_id=${DEPLOYMENT_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for Railway deployment
+        working-directory: zroky-backend
+        env:
+          DEPLOYMENT_ID: ${{ steps.submit.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..90}; do
+            DEPLOYMENT_JSON="$(railway deployment list \
+              --environment "${RAILWAY_ENVIRONMENT_ID}" \
+              --service "${RAILWAY_SERVICE_ID}" \
+              --limit 20 \
+              --json)"
+            STATUS="$(jq -r --arg id "${DEPLOYMENT_ID}" '.[] | select(.id == $id) | .status' <<<"${DEPLOYMENT_JSON}")"
+            case "${STATUS}" in
+              SUCCESS)
+                echo "Railway deployment ${DEPLOYMENT_ID} succeeded"
+                exit 0
+                ;;
+              FAILED|CRASHED|REMOVED)
+                echo "::error::Railway deployment ${DEPLOYMENT_ID} ended with ${STATUS}"
+                exit 1
+                ;;
+              BUILDING|DEPLOYING|INITIALIZING|WAITING|QUEUED|"")
+                sleep 10
+                ;;
+              *)
+                echo "Waiting for Railway deployment ${DEPLOYMENT_ID}; status=${STATUS}"
+                sleep 10
+                ;;
+            esac
+          done
+          echo "::error::Timed out waiting for Railway deployment ${DEPLOYMENT_ID}"
+          exit 1
+
+      - name: Set up Python for smoke checks
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify production health and provisioning guard
+        working-directory: zroky-backend
+        run: |
+          python scripts/railway_smoke_check.py \
+            --base-url "${PRODUCTION_API_URL}" \
+            --expected-unauthorized-status 401 \
+            --timeout-seconds 20
+
+      - name: Publish deployment summary
+        if: always()
+        env:
+          DEPLOYMENT_ID: ${{ steps.submit.outputs.deployment_id }}
+          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          {
+            echo "## Zroky backend production deployment"
+            echo "- Revision: \`${DEPLOY_SHA}\`"
+            echo "- Railway deployment: \`${DEPLOYMENT_ID:-not-submitted}\`"
+            echo "- Production API: ${PRODUCTION_API_URL}"
+          } >> "${GITHUB_STEP_SUMMARY}"
