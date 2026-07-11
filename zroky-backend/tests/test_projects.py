@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
@@ -10,9 +11,40 @@ from app.db.base import Base
 from app.core.config import get_settings
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.api.routes.projects import _rotated_api_key_expiry
+from app.db.models import ApiKey
 
 
 TEST_JWT_SIGNING_KEY = "jwt-secret-for-tests-minimum-32-bytes-2026"
+
+
+def test_rotated_api_key_expiry_renews_original_ttl() -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    api_key = ApiKey(
+        project_id="proj_rotation_ttl",
+        name="runtime",
+        key_prefix="zk_live_example",
+        key_hash="hash",
+        scopes_json='["project:member"]',
+        created_at=created_at,
+        expires_at=created_at + timedelta(days=90),
+    )
+    rotated_at = datetime(2026, 3, 1, tzinfo=timezone.utc)
+
+    assert _rotated_api_key_expiry(api_key, now=rotated_at) == rotated_at + timedelta(days=90)
+
+
+def test_rotated_non_expiring_api_key_stays_non_expiring() -> None:
+    api_key = ApiKey(
+        project_id="proj_rotation_no_expiry",
+        name="runtime",
+        key_prefix="zk_live_example",
+        key_hash="hash",
+        scopes_json='["project:member"]',
+        expires_at=None,
+    )
+
+    assert _rotated_api_key_expiry(api_key, now=datetime.now(timezone.utc)) is None
 
 
 def _project_auth_headers(project_id: str, subject: str) -> dict[str, str]:
@@ -181,6 +213,14 @@ def test_api_key_expiry_scope_and_rotation_flow(client: TestClient) -> None:
     assert rotated_payload["api_key"].startswith("zk_live_")
     assert rotated_payload["rotated_from_key_id"] == key_payload["key_id"]
     assert rotated_payload["scopes"] == ["project:member"]
+    assert rotated_payload["name"] == "rotatable"
+
+    rotate_revoked_response = client.post(
+        f"/v1/projects/{project_id}/api-keys/{key_payload['key_id']}/rotate",
+        headers=auth_headers,
+    )
+    assert rotate_revoked_response.status_code == 409
+    assert rotate_revoked_response.json()["detail"] == "API key is already revoked"
 
     keys_response = client.get(f"/v1/projects/{project_id}/api-keys", headers=auth_headers)
     assert keys_response.status_code == 200
