@@ -90,6 +90,9 @@ function callIdForIntent(intent: ActionIntentResponse, decision: RuntimePolicyDe
 }
 
 function statusForIntent(intent: ActionIntentResponse): string {
+  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(intent.status)) {
+    return intent.status;
+  }
   if (intent.proof_status === "mismatched" || intent.proof_status === "not_verified") {
     return intent.proof_status;
   }
@@ -134,8 +137,12 @@ function isNeedsVerification(row: EvidenceLedgerRow): boolean {
   return ["missing", "not_started", "not_verified", "pending"].includes(row.status);
 }
 
+function isExpectedBlock(row: EvidenceLedgerRow): boolean {
+  return ["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status);
+}
+
 function isException(row: EvidenceLedgerRow): boolean {
-  return row.tone === "danger" || ["mismatched", "failed", "signature_invalid"].includes(row.status);
+  return !isExpectedBlock(row) && (row.tone === "danger" || ["mismatched", "failed", "signature_invalid"].includes(row.status));
 }
 
 function actionHref(actionId: string): string {
@@ -222,6 +229,7 @@ export function buildEvidenceLedger({
       outcomes: outcome ? [outcome] : [],
     });
     const status = statusForIntent(intent);
+    const expectedBlock = ["blocked", "denied", "rejected", "expired", "cancelled"].includes(status);
     rows.push({
       id: `action:${intent.action_id}`,
       kind: "action_receipt",
@@ -236,12 +244,16 @@ export function buildEvidenceLedger({
       ...rowStatus(status),
       digest: intent.intent_digest,
       systemRef: outcome?.system_ref ?? view.systemRef,
-      sourceLabel: "Action Receipt",
+      sourceLabel: expectedBlock ? "Blocked action audit" : "Action Receipt",
       checkedAt: outcome?.checked_at ?? intent.created_at,
       href: actionHref(intent.action_id),
       exportable: intent.receipt_status === "generated",
-      exportKind: "receipt",
-      detail: intent.receipt_status === "generated" ? "Signed receipt available" : "Receipt not generated yet",
+      exportKind: expectedBlock ? null : "receipt",
+      detail: expectedBlock
+        ? "Policy stopped execution; receipt and outcome proof are not expected."
+        : intent.receipt_status === "generated"
+          ? "Signed receipt available"
+          : "Receipt not generated yet",
     });
   }
 
