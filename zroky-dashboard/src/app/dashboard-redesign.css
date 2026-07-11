@@ -24422,8 +24422,21 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   white-space: nowrap !important;
 }
 
-.billing-settings-page .billing-usage-row .billing-meter-track {
+.billing-settings-page .billing-meter-progress {
   grid-column: 2 / -1 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+}
+
+.billing-settings-page .billing-meter-percent {
+  color: var(--text-secondary) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
 }
 
 .billing-settings-page .billing-meter-track {
