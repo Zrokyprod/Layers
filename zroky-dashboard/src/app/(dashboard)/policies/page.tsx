@@ -291,11 +291,15 @@ function policyReadiness(policy: PilotPolicyPayload | null): {
 function policyVerdict({
   activeGuardrails,
   blockedActions,
+  error,
+  loading,
   pendingApprovals,
   policy,
 }: {
   activeGuardrails: number;
   blockedActions: number;
+  error: unknown;
+  loading: boolean;
   pendingApprovals: number;
   policy: PilotPolicyPayload | null;
 }): {
@@ -304,7 +308,19 @@ function policyVerdict({
   title: string;
   tone: StatusTone;
 } {
-  if (!policy) {
+  if (error) {
+    const message = error instanceof Error ? error.message : "";
+    const planLimited = message.toLowerCase().includes("plan does not include");
+    return {
+      badge: planLimited ? "Plan limited" : "Unavailable",
+      copy: planLimited
+        ? "This plan cannot configure Runtime Action Control. Existing policy decisions remain visible in the audit trail."
+        : "The saved runtime policy could not be loaded, so the current action boundary cannot be confirmed.",
+      title: planLimited ? "Policy upgrade required" : "Policy status unavailable",
+      tone: "warning",
+    };
+  }
+  if (loading || !policy) {
     return {
       badge: "Loading",
       copy: "Loading the saved runtime policy and latest decisions before showing the current action boundary.",
@@ -618,6 +634,8 @@ export default function PoliciesPage() {
   const heroVerdict = policyVerdict({
     activeGuardrails,
     blockedActions,
+    error: policyQuery.error,
+    loading: policyQuery.isLoading,
     pendingApprovals,
     policy,
   });
@@ -626,17 +644,17 @@ export default function PoliciesPage() {
     {
       id: "readiness",
       label: "Runtime action control",
-      value: readiness.label,
-      helper: readiness.helper,
-      tone: readiness.tone,
+      value: policyQuery.isError ? "Unavailable" : readiness.label,
+      helper: policyQuery.isError ? "Current policy configuration could not be loaded." : readiness.helper,
+      tone: policyQuery.isError ? "warning" : readiness.tone,
       icon: <CheckCircle2 size={16} />,
     },
     {
       id: "gate",
       label: "Policy gate",
-      value: policy?.runtime_enabled ? "Enabled" : "Disabled",
+      value: policyQuery.isError ? "Unknown" : policy?.runtime_enabled ? "Enabled" : "Disabled",
       helper: "Applies limits before risky autonomous actions continue.",
-      tone: policy?.runtime_enabled ? "success" : "warning",
+      tone: policyQuery.isError ? "warning" : policy?.runtime_enabled ? "success" : "warning",
       icon: <SlidersHorizontal size={16} />,
     },
     {
