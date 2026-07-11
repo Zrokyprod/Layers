@@ -26,6 +26,10 @@ def test_backend_production_deploy_uses_scoped_config_and_strict_smoke() -> None
     assert "@railway/cli@4.33.0" in workflow
     assert "railway up" in workflow
     assert "--path-as-root" not in workflow
+    submit_block = workflow.split("- name: Submit backend deployment", 1)[1].split(
+        "- name: Wait for Railway deployment", 1
+    )[0]
+    assert "working-directory: zroky-backend" not in submit_block
     assert '"${CANDIDATE_ID}" != "${BEFORE_ID}"' in workflow
     assert "railway deployment list" in workflow
     assert "FAILED|CRASHED|REMOVED" in workflow

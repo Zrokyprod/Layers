@@ -81,7 +81,6 @@ jobs:
 
       - name: Submit backend deployment
         id: submit
-        working-directory: zroky-backend
         env:
           DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
         run: |
@@ -121,7 +120,6 @@ jobs:
           echo "deployment_id=${DEPLOYMENT_ID}" >> "${GITHUB_OUTPUT}"
 
       - name: Wait for Railway deployment
-        working-directory: zroky-backend
         env:
           DEPLOYMENT_ID: ${{ steps.submit.outputs.deployment_id }}
         run: |
