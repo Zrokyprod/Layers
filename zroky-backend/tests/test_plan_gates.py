@@ -125,6 +125,29 @@ class TestGate402Denial:
         assert "upgrade_hint_url" in detail
         assert "pilot.autopilot_enabled" in detail["upgrade_hint_url"]
 
+    def test_free_org_can_read_policy_but_cannot_update_it(
+        self, client: TestClient
+    ) -> None:
+        _seed_org(client, org_id="free-policy-org", plan_code="free")
+
+        read_response = client.get(
+            "/v1/pilot/policy",
+            headers={PROJECT_HEADER: "free-policy-org"},
+        )
+        assert read_response.status_code == 200
+        assert read_response.json()["project_id"] == "free-policy-org"
+
+        write_response = client.put(
+            "/v1/pilot/policy",
+            headers={PROJECT_HEADER: "free-policy-org"},
+            json=read_response.json()["policy"],
+        )
+        assert write_response.status_code == 402
+        assert (
+            write_response.json()["detail"]["required_entitlement"]
+            == "pilot.autopilot_enabled"
+        )
+
     def test_free_org_blocked_from_goldens(self, client: TestClient) -> None:
         _seed_org(client, org_id="free-org", plan_code="free")
         response = client.get(

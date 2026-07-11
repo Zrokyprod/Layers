@@ -52,9 +52,12 @@ from app.services.pilot_pr_dispatch import (
 
 router = APIRouter(
     prefix="/v1/pilot",
-    dependencies=[Depends(require_entitlement("pilot.autopilot_enabled"))],
 )
 logger = logging.getLogger(__name__)
+
+_AUTOPILOT_DEPENDENCIES = [
+    Depends(require_entitlement("pilot.autopilot_enabled")),
+]
 
 _DEFAULT_LIMIT = 20
 _MAX_LIMIT = 100
@@ -233,7 +236,11 @@ def _normalized_timestamp(value: datetime) -> datetime:
 # ── routes: actions ──────────────────────────────────────────────────────────
 
 
-@router.get("/actions", response_model=PilotActionListResponse)
+@router.get(
+    "/actions",
+    response_model=PilotActionListResponse,
+    dependencies=_AUTOPILOT_DEPENDENCIES,
+)
 @limiter.limit("60/minute")
 def list_actions(
     request: Request,
@@ -302,6 +309,7 @@ def list_actions(
 @router.post(
     "/actions/{action_id}/revert",
     response_model=PilotActionResponse,
+    dependencies=_AUTOPILOT_DEPENDENCIES,
 )
 @limiter.limit("30/minute")
 def revert_action(
@@ -339,6 +347,7 @@ def revert_action(
 @router.post(
     "/actions/{action_id}/cancel",
     response_model=PilotActionResponse,
+    dependencies=_AUTOPILOT_DEPENDENCIES,
 )
 @limiter.limit("30/minute")
 def cancel_action(
@@ -386,6 +395,7 @@ class PilotActionRetryResponse(PilotActionResponse):
 @router.post(
     "/actions/{action_id}/retry",
     response_model=PilotActionRetryResponse,
+    dependencies=_AUTOPILOT_DEPENDENCIES,
 )
 @limiter.limit("12/minute")
 def retry_action(
@@ -496,7 +506,11 @@ def get_policy(
     return _to_policy_response(policy)
 
 
-@router.put("/policy", response_model=PilotPolicyResponse)
+@router.put(
+    "/policy",
+    response_model=PilotPolicyResponse,
+    dependencies=_AUTOPILOT_DEPENDENCIES,
+)
 @limiter.limit("12/minute")
 def put_policy(
     request: Request,
