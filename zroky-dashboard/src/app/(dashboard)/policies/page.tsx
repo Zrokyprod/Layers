@@ -26,6 +26,7 @@ import {
 import { StatusPill } from "@/components/status-pill";
 import {
   getPilotPolicy,
+  getBillingMe,
   createRuntimePolicyRule,
   disableRuntimePolicyRule,
   dryRunRuntimePolicy,
@@ -45,6 +46,7 @@ import {
   type RuntimePolicyRuleResponse,
 } from "@/lib/api";
 import type { StatusTone } from "@/lib/action-status";
+import { hasFeatureAccess } from "@/components/feature-gate";
 import { formatDateTime } from "@/lib/format";
 import {
   POLICY_ACTION_OPTIONS,
@@ -482,6 +484,13 @@ export default function PoliciesPage() {
     retry: false,
   });
 
+  const billingQuery = useQuery({
+    queryKey: ["billing", "me"],
+    queryFn: ({ signal }) => getBillingMe(signal),
+    staleTime: 60_000,
+    retry: false,
+  });
+
   const approvalsQuery = useQuery({
     queryKey: ["runtime-policy", "approvals", "all"],
     queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
@@ -738,6 +747,11 @@ export default function PoliciesPage() {
   }
 
   const killSwitchActive = policy?.kill_switch === true;
+  const canConfigurePolicy = hasFeatureAccess(
+    billingQuery.data?.plan_template,
+    billingQuery.data?.plan_code,
+    "pilot.autopilot_enabled",
+  );
   const killSwitchConfirmationActive = killSwitchTarget !== null;
   const killSwitchActionLabel =
     killSwitchTarget === true
@@ -782,7 +796,7 @@ export default function PoliciesPage() {
       )}
       <DashboardButton
         icon={killSwitchActionIcon}
-        disabled={killSwitchMutation.isPending || !policy}
+        disabled={killSwitchMutation.isPending || !policy || !canConfigurePolicy}
         loading={killSwitchMutation.isPending}
         onClick={() => requestKillSwitchChange(killSwitchActive ? false : true)}
         variant={killSwitchActionVariant}
@@ -791,7 +805,7 @@ export default function PoliciesPage() {
       </DashboardButton>
       <DashboardButton
         icon={<Save size={16} />}
-        disabled={!policy}
+        disabled={!policy || !canConfigurePolicy}
         loading={savePolicyMutation.isPending}
         onClick={savePolicy}
         variant="primary"
@@ -827,7 +841,18 @@ export default function PoliciesPage() {
         </div>
       ) : null}
 
+      {policy && !canConfigurePolicy ? (
+        <div className="policies-read-only-banner" role="status">
+          <LockKeyhole size={16} aria-hidden="true" />
+          <span>Read-only policy view. Upgrade to change guardrails, scoped rules, kill switch, or run dry-runs.</span>
+          <DashboardButtonLink href="/settings/billing" size="sm" variant="soft">
+            Upgrade plan
+          </DashboardButtonLink>
+        </div>
+      ) : null}
+
       {policy ? (
+        <fieldset className="policies-configuration-scope" disabled={!canConfigurePolicy}>
         <DashboardWorkspace
           className="policies-workspace"
           left={
@@ -1439,6 +1464,7 @@ export default function PoliciesPage() {
             </>
           }
         />
+        </fieldset>
       ) : null}
     </div>
   );
