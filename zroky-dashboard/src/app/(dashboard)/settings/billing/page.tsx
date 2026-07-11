@@ -276,6 +276,13 @@ function meterPercent(meter: BillingUsageMeter | null | undefined): number {
   return Math.min(100, Math.max(0, (meter.used / meter.limit) * 100));
 }
 
+function meterPercentLabel(meter: BillingUsageMeter | null | undefined): string {
+  const percent = meterPercent(meter);
+  if (percent === 0) return "0% used";
+  if (percent < 1) return "<1% used";
+  return `${Number(percent.toFixed(1))}% used`;
+}
+
 function hasMeterLimit(meter: BillingUsageMeter | null | undefined): boolean {
   return Boolean(meter && !meter.unlimited && meter.limit != null && meter.limit > 0);
 }
@@ -566,7 +573,7 @@ function BillingSettingsContent() {
                   </div>
                   <span className="billing-usage-value">{formatUsageMeter(item.meter)}</span>
                   {hasMeterLimit(item.meter) ? (
-                    <div className="billing-meter-track" aria-label={`${Math.round(meterPercent(item.meter))}% used`}>
+                    <div className="billing-meter-track" aria-label={meterPercentLabel(item.meter)}>
                       <span style={{ width: `${meterPercent(item.meter)}%` }} />
                     </div>
                   ) : null}
