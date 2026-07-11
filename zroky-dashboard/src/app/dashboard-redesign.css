@@ -8,6 +8,464 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   background: #f6f7f9 !important;
 }
 
+/* Projects registry and lifecycle */
+.app-shell[data-dashboard-system="control-v1"] .projects-page {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-console {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-command,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-list-panel,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel {
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-command {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar h2,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel h3 {
+  margin: 0;
+  color: var(--text-primary);
+  letter-spacing: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar h2 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar p,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(161, 92, 7, 0.22);
+  border-radius: 7px;
+  background: #fff9ed;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > span {
+  color: #8a5008;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > strong {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > .btn {
+  min-height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel > label,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete > label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel input,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-primary);
+  padding: 0 11px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel input:disabled,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete input:disabled {
+  background: #f4f5f3;
+  color: var(--text-secondary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-list-panel {
+  overflow: hidden;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head span {
+  color: #2f5f66;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head strong {
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head small {
+  max-width: 48ch;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-head,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.8fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(150px, 0.8fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-head {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #f8f9f7;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+  position: relative;
+  min-height: 68px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-color 140ms ease;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row:last-child {
+  border-bottom: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row:hover {
+  background: #f8faf8;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row.is-selected {
+  background: #f2f8f4;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row.is-selected::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: #169b55;
+  content: "";
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-name-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-name-cell strong {
+  overflow: hidden;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-name-cell small,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row > span:not(.settings-project-name-cell) {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-state {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-state svg {
+  width: 15px;
+  height: 15px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-state.is-active {
+  color: #08783e;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-warning,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-empty {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-warning {
+  border: 1px solid rgba(161, 92, 7, 0.2);
+  border-radius: 7px;
+  background: #fff9ed;
+  color: #8a5008;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel > header > div > span {
+  color: #2f5f66;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel h3 {
+  margin-top: 4px;
+  font-size: 1.12rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #f8f9f7;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context span,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list dt {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context strong,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list dd {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list {
+  display: grid;
+  margin: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.45fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid rgba(180, 35, 24, 0.2);
+  border-radius: 7px;
+  background: #fff7f6;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete > div > strong {
+  color: #8f1d16;
+  font-size: 0.9rem;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete > small {
+  color: #8f1d16;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-active-button,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete > .btn {
+  width: fit-content;
+}
+
+@media (max-width: 860px) {
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > small {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > .btn {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-head,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+    grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 0.6fr) minmax(105px, 0.7fr);
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-head > span:last-child,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-row > span:last-child {
+    display: none;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-command,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel {
+    padding: 14px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-section-head,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-section-head small {
+    text-align: left;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip {
+    grid-template-columns: 1fr auto;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > strong {
+    text-align: right;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > small {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip > .btn {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-create-panel,
+  .app-shell[data-dashboard-system="control-v1"] .projects-create-panel > div,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-context {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-create-panel .btn {
+    width: 100%;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-head {
+    display: none;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 14px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-row > span:last-child {
+    display: block;
+    grid-column: 1 / -1;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-list > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 .app-shell[data-dashboard-system="control-v1"] {
   --dash-canvas: #f6f7f9;
   --dash-sidebar: #f1f3f6;
