@@ -501,25 +501,40 @@ function OutcomeInspector({
 
 function BypassStrip({
   bypassCount,
+  coverageAvailable,
   ledger,
 }: {
   bypassCount: number;
+  coverageAvailable: boolean;
   ledger: OutcomeLedger;
 }) {
   const hasBypass = bypassCount > 0;
+  const tone = hasBypass ? "danger" : coverageAvailable ? "success" : "warning";
   const previewRows = ledger.bypassRows.slice(0, 3);
 
   return (
-    <section className="outcomes-bypass-strip" data-tone={hasBypass ? "danger" : "success"} aria-label="Bypass check">
+    <section className="outcomes-bypass-strip" data-tone={tone} aria-label="Bypass check">
       <div className="outcomes-bypass-copy">
-        <StatusPill value={hasBypass ? "policy_bypass" : "clear"} />
+        <StatusPill
+          label={hasBypass ? undefined : coverageAvailable ? "clear" : "coverage unknown"}
+          tone={tone}
+          value={hasBypass ? "policy_bypass" : coverageAvailable ? "clear" : "not_verified"}
+        />
         <div>
           <span className="dashboard-eyebrow">Receipt coverage</span>
-          <h2>{hasBypass ? `${formatCount(bypassCount)} unreceipted system change${bypassCount === 1 ? "" : "s"}` : "No bypass risk detected"}</h2>
+          <h2>
+            {hasBypass
+              ? `${formatCount(bypassCount)} unreceipted system change${bypassCount === 1 ? "" : "s"}`
+              : coverageAvailable
+                ? "No bypass risk detected"
+                : "Mutation coverage unavailable"}
+          </h2>
           <p>
             {hasBypass
               ? "These source-system changes do not have a Zroky receipt yet. Review them before trusting the agent path."
-              : "Every observed protected mutation is linked to a receipt or an authorized path."}
+              : coverageAvailable
+                ? "Every observed protected mutation is linked to a receipt or an authorized path."
+                : "No source-system mutation feed has reported data yet, so bypass risk cannot be ruled out."}
           </p>
         </div>
       </div>
@@ -537,10 +552,17 @@ function BypassStrip({
             Investigate in Actions
           </DashboardButtonLink>
         </div>
-      ) : (
+      ) : coverageAvailable ? (
         <div className="outcomes-bypass-clear">
           <StatusPill value="clear" />
           <span>All observed protected mutations are receipted or authorized.</span>
+        </div>
+      ) : (
+        <div className="outcomes-bypass-clear">
+          <StatusPill value="not_verified" label="setup required" tone="warning" />
+          <DashboardButtonLink href="/integrations" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
+            Connect mutation feed
+          </DashboardButtonLink>
         </div>
       )}
     </section>
@@ -592,6 +614,10 @@ export default function OutcomesPage() {
   const summaryTotal = summaryQuery.data?.total ?? ledger.counts.total;
   const verifiedRate = summaryTotal > 0 ? Math.round((summaryMatched / summaryTotal) * 100) : 0;
   const bypassCount = sourceMutationSummaryQuery.data?.unreceipted ?? ledger.counts.bypass;
+  const mutationCoverageAvailable =
+    (sourceMutationSummaryQuery.data?.total ?? 0) > 0 ||
+    (sourceMutationSummaryQuery.data?.connected_feeds ?? 0) > 0 ||
+    (sourceMutationSummaryQuery.data?.successful_pollers ?? 0) > 0;
   const loading = checksQuery.isLoading || summaryQuery.isLoading;
   const fetching =
     checksQuery.isFetching ||
@@ -699,6 +725,7 @@ export default function OutcomesPage() {
 
       <BypassStrip
         bypassCount={bypassCount}
+        coverageAvailable={mutationCoverageAvailable}
         ledger={{ ...ledger, counts: { ...ledger.counts, bypass: bypassCount } }}
       />
 
