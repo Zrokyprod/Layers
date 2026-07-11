@@ -215,6 +215,40 @@ describe("buildEvidenceLedger", () => {
     expect(filterEvidenceLedger(rows, "exceptions").map((row) => row.actionId)).toEqual(["act_mismatch"]);
   });
 
+  it("keeps denied actions as audit evidence without creating false proof work", () => {
+    const rows = buildEvidenceLedger({
+      intents: [
+        intent({
+          action_id: "act_denied",
+          status: "denied",
+          proof_status: "not_started",
+          receipt_status: "missing",
+          idempotency_key: "idem_denied",
+          runtime_policy_decision_id: "decision_denied",
+        }),
+      ],
+      decisions: [decision({ id: "decision_denied", status: "blocked", decision: "block", allowed: false })],
+      outcomes: [],
+    });
+
+    expect(rows[0]).toMatchObject({
+      status: "denied",
+      statusLabel: "Denied",
+      sourceLabel: "Blocked action audit",
+      exportable: false,
+      exportKind: null,
+      detail: "Policy stopped execution; receipt and outcome proof are not expected.",
+    });
+    expect(evidenceLedgerCounts(rows)).toEqual({
+      exportReady: 0,
+      needsVerification: 0,
+      exceptions: 0,
+      total: 1,
+    });
+    expect(filterEvidenceLedger(rows, "needs_verification")).toEqual([]);
+    expect(filterEvidenceLedger(rows, "exceptions")).toEqual([]);
+  });
+
   it("resolves action, decision, trace, and call deep links to ledger rows", () => {
     const rows = buildEvidenceLedger({
       intents: [intent()],
