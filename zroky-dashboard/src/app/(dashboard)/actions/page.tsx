@@ -81,17 +81,27 @@ type HeroState = {
 function heroState({
   bypassRisk,
   error,
+  awaitingRunner,
+  executing,
+  guardOnly,
   held,
   loading,
   mismatched,
+  notVerified,
   protectedActions,
+  stalled,
 }: {
   bypassRisk: number;
   error: boolean;
+  awaitingRunner: number;
+  executing: number;
+  guardOnly: number;
   held: number;
   loading: boolean;
   mismatched: number;
+  notVerified: number;
   protectedActions: number;
+  stalled: number;
 }): HeroState {
   if (error) {
     return {
@@ -141,6 +151,47 @@ function heroState({
       tone: "warning",
       ctaHref: "/approvals",
       ctaLabel: "Review held actions",
+    };
+  }
+  if (awaitingRunner > 0 || stalled > 0) {
+    const runnerGap = awaitingRunner + stalled;
+    return {
+      title: "Actions awaiting runner",
+      copy: `${formatCount(runnerGap)} authorized action${runnerGap === 1 ? " has" : "s have"} no healthy protected runner attempt yet.`,
+      pill: `${formatCount(runnerGap)} awaiting runner`,
+      tone: "warning",
+      ctaHref: "/agents",
+      ctaLabel: "Restore runner",
+    };
+  }
+  if (executing > 0) {
+    return {
+      title: "Actions executing",
+      copy: `${formatCount(executing)} protected action${executing === 1 ? " is" : "s are"} still inside the runner lifecycle.`,
+      pill: `${formatCount(executing)} executing`,
+      tone: "neutral",
+      ctaHref: "/actions?filter=executing",
+      ctaLabel: "Review execution",
+    };
+  }
+  if (notVerified > 0) {
+    return {
+      title: "Actions need proof",
+      copy: `${formatCount(notVerified)} action path${notVerified === 1 ? " is" : "s are"} controlled but not verified against a source of record.`,
+      pill: `${formatCount(notVerified)} need proof`,
+      tone: "warning",
+      ctaHref: "/outcomes",
+      ctaLabel: "Connect proof",
+    };
+  }
+  if (guardOnly > 0) {
+    return {
+      title: "Unlinked policy decisions",
+      copy: `${formatCount(guardOnly)} policy decision${guardOnly === 1 ? " was" : "s were"} observed outside the Action Intent lifecycle.`,
+      pill: `${formatCount(guardOnly)} unlinked`,
+      tone: "warning",
+      ctaHref: "/agents",
+      ctaLabel: "Review routing",
     };
   }
   if (protectedActions > 0) {
@@ -202,6 +253,7 @@ export default function ActionsPage() {
     protectedActions: 0,
     guardOnly: 0,
     held: 0,
+    awaitingRunner: 0,
     executing: 0,
     stalled: 0,
     mismatched: 0,
@@ -255,12 +307,17 @@ export default function ActionsPage() {
   const mismatched = outcomeSummary?.mismatched ?? counts.mismatched;
   const notVerified = outcomeSummary?.not_verified ?? counts.notVerified;
   const hero = heroState({
+    awaitingRunner: counts.awaitingRunner,
     bypassRisk,
     error: hasError,
+    executing: counts.executing,
+    guardOnly: counts.guardOnly,
     held: counts.held,
     loading,
     mismatched,
+    notVerified,
     protectedActions: counts.protectedActions,
+    stalled: counts.stalled,
   });
   const lastUpdatedMs = Math.max(
     lifecycleQuery.dataUpdatedAt ?? 0,

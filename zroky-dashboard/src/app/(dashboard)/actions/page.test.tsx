@@ -566,6 +566,40 @@ describe("ActionsPage", () => {
     );
   });
 
+  it("does not call an authorized action controlled while it is awaiting a runner", async () => {
+    queryState.intents = [actionIntent({ proof_status: "not_started", receipt_status: "missing" })];
+    queryState.decisions = [];
+    queryState.outcomes = [];
+    queryState.outcomeSummary = {
+      window_days: 30,
+      total: 0,
+      matched: 0,
+      mismatched: 0,
+      not_verified: 0,
+      verified: 0,
+      pending: 0,
+      unverifiable: 0,
+      cancelled: 0,
+    };
+    queryState.sourceMutationSummary = {
+      total: 0,
+      matched_receipt: 0,
+      authorized_external: 0,
+      legacy_path: 0,
+      unmanaged_agent_action: 0,
+      policy_bypass: 0,
+      unknown_actor: 0,
+      unreceipted: 0,
+    };
+    queryState.unreceiptedMutations = [];
+
+    renderActionsPage();
+
+    expect(await screen.findByRole("heading", { name: "Actions awaiting runner" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Actions controlled" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Restore runner" }).getAttribute("href")).toBe("/agents");
+  });
+
   it("surfaces verification mismatches without opening raw JSON", async () => {
     queryState.intents = [
       actionIntent({
