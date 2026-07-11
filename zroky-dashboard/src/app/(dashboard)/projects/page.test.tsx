@@ -153,5 +153,6 @@ describe("ProjectsPage", () => {
     expect(await screen.findByText("2 / 2 projects used")).toBeInTheDocument();
     expect((screen.getByRole("button", { name: "Limit reached" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText("New project") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Upgrade plan" }).getAttribute("href")).toBe("/settings/billing");
   });
 });
