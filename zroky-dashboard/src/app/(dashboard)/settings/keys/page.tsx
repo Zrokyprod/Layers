@@ -79,6 +79,7 @@ function ApiKeysContent() {
 
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const [secretStored, setSecretStored] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [statusTone, setStatusTone] = useState<"success" | "danger" | null>(null);
   const [expiresInDays, setExpiresInDays] = useState("90");
@@ -100,6 +101,8 @@ function ApiKeysContent() {
     setStatusMsg("");
     setStatusTone(null);
     setNewKey(null);
+    setCopied(false);
+    setSecretStored(false);
     try {
       const expiryValue = expiresInDays.trim();
       let parsedExpiry: number | null = null;
@@ -144,6 +147,8 @@ function ApiKeysContent() {
     if (!projectId || !rotateTarget) return;
     try {
       const rotated = await rotateMutation.mutateAsync({ projectId, keyId: rotateTarget.key_id });
+      setCopied(false);
+      setSecretStored(false);
       setNewKey(rotated);
       setStatusMsg(`Key "${rotateTarget.name}" rotated. Copy the replacement key now.`);
       setStatusTone("success");
@@ -334,9 +339,29 @@ function ApiKeysContent() {
                 {copied ? "Copied" : "Copy"}
               </DashboardButton>
             </div>
+            <label className="keys-secret-confirm">
+              <input
+                type="checkbox"
+                checked={secretStored}
+                onChange={(event) => setSecretStored(event.target.checked)}
+              />
+              <span>
+                <strong>I stored this key securely</strong>
+                <small>After closing this panel, the full secret cannot be recovered.</small>
+              </span>
+            </label>
             <div className="keys-copy-actions">
-              <DashboardButton type="button" variant="soft" onClick={() => setNewKey(null)}>
-                Done
+              <DashboardButton
+                type="button"
+                variant="soft"
+                disabled={!secretStored}
+                onClick={() => {
+                  setNewKey(null);
+                  setCopied(false);
+                  setSecretStored(false);
+                }}
+              >
+                Finish
               </DashboardButton>
             </div>
           </section>

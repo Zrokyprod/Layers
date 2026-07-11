@@ -159,8 +159,16 @@ describe("ApiKeysPage", () => {
     expect(screen.queryByText((content) => content.includes("ZROKY_INGEST_URL"))).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
 
+    const finishButton = screen.getByRole("button", { name: "Finish" }) as HTMLButtonElement;
+    expect(finishButton.disabled).toBe(true);
+
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(finishButton.disabled).toBe(false);
+    fireEvent.click(finishButton);
+    expect(screen.queryByRole("heading", { name: "Key created" })).not.toBeInTheDocument();
   });
 
   it("blocks invalid expiry values before creating a key", async () => {
