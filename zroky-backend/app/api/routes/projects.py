@@ -46,6 +46,13 @@ def _api_key_scopes(api_key: ApiKey) -> list[str]:
     return scopes or ["project:member"]
 
 
+def _rotated_api_key_expiry(api_key: ApiKey, *, now: datetime) -> datetime | None:
+    if api_key.expires_at is None:
+        return None
+    original_ttl = api_key.expires_at - api_key.created_at
+    return now + original_ttl
+
+
 def _project_to_response(project: Project) -> ProjectResponse:
     return ProjectResponse(
         project_id=project.id,
@@ -344,17 +351,23 @@ def rotate_api_key(
     if old_key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
 
+    now = datetime.now(timezone.utc)
+    if old_key.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="API key is already revoked")
+    if old_key.expires_at is not None and old_key.expires_at <= now:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="API key is expired")
+
     raw_api_key, key_prefix, key_hash = generate_api_key_material()
     new_key = ApiKey(
         project_id=project_id,
-        name=f"{old_key.name} rotated",
+        name=old_key.name,
         key_prefix=key_prefix,
         key_hash=key_hash,
         scopes_json=json.dumps(_api_key_scopes(old_key), separators=(",", ":")),
-        expires_at=old_key.expires_at,
+        expires_at=_rotated_api_key_expiry(old_key, now=now),
         rotated_from_key_id=old_key.id,
     )
-    old_key.revoked_at = old_key.revoked_at or datetime.now(timezone.utc)
+    old_key.revoked_at = now
     db.add(new_key)
     db.commit()
     db.refresh(new_key)
