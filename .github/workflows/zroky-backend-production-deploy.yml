@@ -93,8 +93,7 @@ jobs:
             --json)"
           BEFORE_ID="$(jq -r '.[0].id // empty' <<<"${BEFORE_JSON}")"
 
-          railway up . \
-            --path-as-root \
+          railway up \
             --project "${RAILWAY_PROJECT_ID}" \
             --environment "${RAILWAY_ENVIRONMENT_ID}" \
             --service "${RAILWAY_SERVICE_ID}" \

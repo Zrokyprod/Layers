@@ -24,7 +24,8 @@ def test_backend_production_deploy_uses_scoped_config_and_strict_smoke() -> None
     assert "RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}" in workflow
     assert "RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_BACKEND_SERVICE_ID }}" in workflow
     assert "@railway/cli@4.33.0" in workflow
-    assert "--path-as-root" in workflow
+    assert "railway up" in workflow
+    assert "--path-as-root" not in workflow
     assert '"${CANDIDATE_ID}" != "${BEFORE_ID}"' in workflow
     assert "railway deployment list" in workflow
     assert "FAILED|CRASHED|REMOVED" in workflow
