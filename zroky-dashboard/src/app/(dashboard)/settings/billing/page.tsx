@@ -569,7 +569,12 @@ function BillingSettingsContent() {
                   <span className="billing-usage-icon">{item.icon}</span>
                   <div>
                     <strong>{item.label}</strong>
-                    <small>{usageDetail(item.detailLabel, item.meter)}</small>
+                    <small>
+                      {usageDetail(item.detailLabel, item.meter)}
+                      {hasMeterLimit(item.meter) ? (
+                        <span className="billing-meter-percent"> · {meterPercentLabel(item.meter)}</span>
+                      ) : null}
+                    </small>
                   </div>
                   <span className="billing-usage-value">{formatUsageMeter(item.meter)}</span>
                   {hasMeterLimit(item.meter) ? (
@@ -577,7 +582,6 @@ function BillingSettingsContent() {
                       <div className="billing-meter-track" aria-hidden="true">
                         <span style={{ width: `${meterPercent(item.meter)}%` }} />
                       </div>
-                      <small className="billing-meter-percent">{meterPercentLabel(item.meter)}</small>
                     </div>
                   ) : null}
                 </div>
