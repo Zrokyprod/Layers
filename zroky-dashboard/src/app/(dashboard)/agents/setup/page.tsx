@@ -47,6 +47,7 @@ import {
   updateAgentProfile,
   type ActionPackResponse,
   type AgentProfileResponse,
+  type AgentRiskActionType,
 } from "@/lib/api";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 import {
@@ -253,6 +254,23 @@ function installedActionPackId(profile: AgentProfileResponse | null): string | n
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function riskActionTypesForTools(toolNames: string[]): AgentRiskActionType[] {
+  const mapped = toolNames.map((toolName): AgentRiskActionType => {
+    if (toolName.startsWith("customer.refund.")) return "refund";
+    if (toolName.startsWith("support.ticket.")) return "ticket_close";
+    if (
+      toolName === "customer.record.update" ||
+      toolName === "customer_record_update" ||
+      toolName === "customer.account.status.change"
+    ) {
+      return "customer_record_update";
+    }
+    if (toolName === "customer.message.send") return "email_send";
+    return "custom";
+  });
+  return Array.from(new Set(mapped));
+}
+
 export default function ProtectedAgentSetupPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -350,7 +368,10 @@ export default function ProtectedAgentSetupPage() {
   const installedPackToolNames = effectiveInstalledPack?.contract_templates.map((item) => item.action_type) ?? [];
   const policyActivationNeeded = Boolean(
     connectedProfile &&
-    installedPackToolNames.some((toolName) => !(connectedProfile.tool_names ?? []).includes(toolName)),
+    (
+      installedPackToolNames.some((toolName) => !(connectedProfile.tool_names ?? []).includes(toolName)) ||
+      (connectedProfile.allowed_action_types ?? []).length === 0
+    ),
   );
 
   const createKeyMutation = useMutation({
@@ -456,6 +477,10 @@ export default function ProtectedAgentSetupPage() {
           ...(connectedProfile.tool_names ?? []),
           ...installedToolNames,
         ])),
+        allowed_action_types: Array.from(new Set([
+          ...(connectedProfile.allowed_action_types ?? []),
+          ...riskActionTypesForTools(installedToolNames),
+        ])),
         metadata: {
           ...(connectedProfile.metadata ?? {}),
           setup_source: "agent_control_setup_wizard",
@@ -489,6 +514,10 @@ export default function ProtectedAgentSetupPage() {
         tool_names: Array.from(new Set([
           ...(connectedProfile.tool_names ?? []),
           ...installedPackToolNames,
+        ])),
+        allowed_action_types: Array.from(new Set([
+          ...(connectedProfile.allowed_action_types ?? []),
+          ...riskActionTypesForTools(installedPackToolNames),
         ])),
       });
       return enforceAgentProfile(updatedProfile.id);

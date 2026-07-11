@@ -454,6 +454,7 @@ describe("Protected agent setup (minimal)", () => {
     await waitFor(() => expect(api.installActionPack).toHaveBeenCalledWith("support-ops-v1"));
     await waitFor(() => expect(api.updateAgentProfile).toHaveBeenCalledWith("agent_1", expect.objectContaining({
       tool_names: ["customer.record.update"],
+      allowed_action_types: ["customer_record_update"],
       metadata: expect.objectContaining({
         setup_action_pack_id: "support-ops-v1",
         setup_action_contract_versions: ["customer.record.update/1.0"],
@@ -499,6 +500,7 @@ describe("Protected agent setup (minimal)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Activate policy" }));
     await waitFor(() => expect(api.updateAgentProfile).toHaveBeenCalledWith("agent_1", expect.objectContaining({
       tool_names: expect.arrayContaining(["customer.access.grant", "support.ticket.close"]),
+      allowed_action_types: expect.arrayContaining(["custom", "ticket_close", "customer_record_update"]),
     })));
     await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(screen.getByText("python agent.py")).toBeInTheDocument();
