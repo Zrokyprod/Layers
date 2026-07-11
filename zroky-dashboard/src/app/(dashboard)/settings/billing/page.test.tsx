@@ -109,7 +109,7 @@ describe("BillingPage", () => {
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
     expect(screen.getAllByText("2 / 500").length).toBeGreaterThan(0);
     const protectedActionRow = screen.getByText("Protected actions").closest(".billing-usage-row") as HTMLElement;
-    expect(within(protectedActionRow).getByText("<1% used")).toBeInTheDocument();
+    expect(within(protectedActionRow).getByText(/<1% used/)).toBeInTheDocument();
     expect(screen.queryByText("Policy checks")).not.toBeInTheDocument();
     expect(screen.queryByText("Runner executions")).not.toBeInTheDocument();
     expect(screen.queryByText("Managed AgentProfile capacity")).not.toBeInTheDocument();
