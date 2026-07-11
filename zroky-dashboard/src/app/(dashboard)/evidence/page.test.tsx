@@ -480,6 +480,26 @@ describe("EvidencePage", () => {
     expect(await screen.findByText("Not linked / not exportable")).toBeInTheDocument();
   });
 
+  it("explains that denied actions do not require receipt proof", async () => {
+    api.listActionIntents.mockResolvedValue({
+      total_in_page: 1,
+      limit: 100,
+      offset: 0,
+      items: [actionIntent({ status: "denied", proof_status: "not_started", receipt_status: "missing" })],
+    });
+    api.listRuntimePolicyApprovals.mockResolvedValue({
+      total_in_page: 1,
+      items: [runtimeDecision({ status: "blocked", decision: "block", allowed: false })],
+    });
+    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 0, items: [] });
+
+    renderEvidencePage();
+
+    expect(await screen.findByText("Receipt not expected")).toBeInTheDocument();
+    expect(screen.getByText("Policy stopped execution; receipt and outcome proof are not expected.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review 1 pending" })).not.toBeInTheDocument();
+  });
+
   it("resolves action deep links to the matching ledger row", async () => {
     window.history.pushState({}, "", "/evidence?action_id=act_1");
 

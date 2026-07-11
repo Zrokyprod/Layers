@@ -81,9 +81,15 @@ function unavailableCopy(row: EvidenceLedgerRow | null): string {
     return "Select a ledger row to inspect the signed receipt or Evidence Pack.";
   }
   if (!row.exportable) {
-    return "This record is visible for honesty, but it is not linked to an exportable receipt or Evidence Pack.";
+    return row.detail || "This record is visible for honesty, but it is not linked to an exportable receipt or Evidence Pack.";
   }
   return "The selected proof could not be loaded. Keep the row status visible and retry from the source record.";
+}
+
+function unavailableTitle(row: EvidenceLedgerRow): string {
+  return ["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)
+    ? "Receipt not expected"
+    : "Not linked / not exportable";
 }
 
 function verificationSummary({
@@ -385,7 +391,7 @@ export function FocusedProofPanel({
           <div className="ev-empty-state">{unavailableCopy(row)}</div>
         ) : !row.exportable ? (
           <div className="ev-empty-state">
-            <strong>Not linked / not exportable</strong>
+            <strong>{unavailableTitle(row)}</strong>
             <span>{unavailableCopy(row)}</span>
           </div>
         ) : isLoading ? (
