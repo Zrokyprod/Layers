@@ -856,7 +856,7 @@ function inventoryVerdict(counts: ConnectorInventoryCounts, partialFailure: bool
       copy: "Configure a REST, SQL, or webhook verifier for action types that would otherwise resolve not_verified.",
       pill: "Coverage gap",
       ctaLabel: "Review coverage",
-      ctaHref: "/integrations",
+      ctaHref: "/integrations#verification-coverage",
     };
   }
   if (counts.healthyVerifiers > 0 && counts.notTested > 0) {
