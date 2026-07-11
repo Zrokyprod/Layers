@@ -55,36 +55,50 @@ function runtimePolicyMandateEnforced(profile: AgentProfileResponse | null): boo
 
 function productContextComplete(profile: AgentProfileResponse | null): boolean {
   const context = asRecord(profile?.metadata?.product_context);
-  return hasNonEmptyString(context, "product_name") &&
+  const richContextComplete = hasNonEmptyString(context, "product_name") &&
     hasNonEmptyString(context, "business_goal") &&
     hasNonEmptyArray(context, "critical_objects") &&
     hasNonEmptyArray(context, "source_systems");
+  return richContextComplete || (
+    Boolean(profile && hasWizardMetadata(profile)) &&
+    typeof profile?.metadata?.setup_action_pack_id === "string" &&
+    profile.metadata.setup_action_pack_id.trim().length > 0
+  );
 }
 
 function workflowComplete(profile: AgentProfileResponse | null): boolean {
   const workflow = asRecord(profile?.metadata?.workflow_manifest);
-  return hasNonEmptyString(workflow, "workflow_id") &&
+  const richWorkflowComplete = hasNonEmptyString(workflow, "workflow_id") &&
     hasNonEmptyString(workflow, "owner_team") &&
     hasNonEmptyArray(workflow, "protected_actions");
+  return richWorkflowComplete || Boolean(
+    profile &&
+    hasWizardMetadata(profile) &&
+    (profile.tool_names ?? []).length > 0,
+  );
 }
 
 function actionContractsComplete(profile: AgentProfileResponse | null): boolean {
   const contracts = profile?.metadata?.action_contracts;
-  if (!Array.isArray(contracts) || contracts.length === 0) return false;
-  return contracts.some((contract) => {
+  const richContractsComplete = Array.isArray(contracts) && contracts.some((contract) => {
     const value = asRecord(contract);
     return hasNonEmptyString(value, "id") &&
       hasNonEmptyString(value, "verb") &&
       hasNonEmptyString(value, "risk_class");
   });
+  const installedContracts = profile?.metadata?.setup_action_contract_versions;
+  return richContractsComplete || (
+    Array.isArray(installedContracts) &&
+    installedContracts.some((value) => typeof value === "string" && value.trim().length > 0)
+  );
 }
 
 function policyComplete(profile: AgentProfileResponse | null): boolean {
   const policy = asRecord(profile?.metadata?.policy_preview);
-  return policy != null &&
+  return runtimePolicyMandateEnforced(profile) || (policy != null &&
     typeof policy.approval_required_above_usd === "number" &&
     typeof policy.deny_above_usd === "number" &&
-    policy.unknown_contract_decision === "deny";
+    policy.unknown_contract_decision === "deny");
 }
 
 function runnerVerifierComplete(profile: AgentProfileResponse | null): boolean {
