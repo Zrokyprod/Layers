@@ -239,7 +239,16 @@ export default function ProjectsPage() {
             <div className="projects-limit-strip">
               <span>{state.billing?.plan_code ? `${state.billing.plan_code} plan` : "Current plan"}</span>
               <strong>{projectLimitLabel(rows.length, maxProjects)}</strong>
-              {projectLimitReached ? <small>Upgrade before adding another project.</small> : <small>New projects are created with you as owner.</small>}
+              {projectLimitReached ? (
+                <>
+                  <small>Upgrade before adding another project.</small>
+                  <Link href="/settings/billing" className="btn btn-soft">
+                    Upgrade plan
+                  </Link>
+                </>
+              ) : (
+                <small>New projects are created with you as owner.</small>
+              )}
             </div>
 
             <div className="projects-create-panel" aria-label="Create project">
