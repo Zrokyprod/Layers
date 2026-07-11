@@ -369,7 +369,8 @@ export default function TeamPage() {
                     aria-label={`Change role for ${m.email ?? m.subject}`}
                     value={m.role}
                     onChange={(e) => requestRoleChange(m, e.target.value)}
-                    disabled={!canManageAccess || busyMemberId === m.membership_id}
+                    disabled={!canManageAccess || busyMemberId === m.membership_id || isLastActiveOwner(m)}
+                    title={isLastActiveOwner(m) ? "Add another owner before changing this role." : undefined}
                   >
                     {ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>{roleLabel(role)}</option>
@@ -381,8 +382,8 @@ export default function TeamPage() {
                       type="button"
                       variant="soft"
                       onClick={() => requestMemberActive(m, false)}
-                      disabled={!canManageAccess || busyMemberId === m.membership_id}
-                      title="Remove member"
+                      disabled={!canManageAccess || busyMemberId === m.membership_id || isLastActiveOwner(m)}
+                      title={isLastActiveOwner(m) ? "Add another owner before removing this member." : "Remove member"}
                     >
                       Remove
                     </DashboardButton>
@@ -396,6 +397,9 @@ export default function TeamPage() {
                       Reactivate
                     </DashboardButton>
                   )}
+                  {isLastActiveOwner(m) ? (
+                    <small className="provider-meta">Last active owner cannot be demoted or removed.</small>
+                  ) : null}
                 </div>
               </div>
             ))}

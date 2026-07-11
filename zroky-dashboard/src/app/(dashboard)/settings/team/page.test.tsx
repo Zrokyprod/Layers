@@ -123,6 +123,18 @@ describe("TeamPage", () => {
     expect(api.listProjectMembers).toHaveBeenCalledWith("proj_1");
   });
 
+  it("prevents the last active owner from being demoted or removed", async () => {
+    renderTeamPage();
+
+    expect(await screen.findByText("owner@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Change role for owner@example.com" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Remove" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("Last active owner cannot be demoted or removed.")).toBeInTheDocument();
+  });
+
   it("can change a member role through the project member API", async () => {
     api.listProjectMembers.mockResolvedValue([
       {
