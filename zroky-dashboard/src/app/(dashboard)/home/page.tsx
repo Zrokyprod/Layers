@@ -186,10 +186,10 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
   const summary = data.homeSummary;
   if (!availability.homeSummary || !summary) {
     return [
-      unavailableProofMetric("controlled-actions", "Controlled actions", "Home summary unavailable", "/actions"),
+      unavailableProofMetric("protected-actions", "Protected actions", "Home summary unavailable", "/actions"),
       unavailableProofMetric("pending-approvals", "Pending approvals", "Home summary unavailable", "/approvals"),
-      unavailableProofMetric("verified-outcomes", "Verified outcomes", "Home summary unavailable", "/outcomes"),
-      unavailableProofMetric("bypass-risk", "Bypass risk", "Home summary unavailable", "/outcomes"),
+      unavailableProofMetric("verified-outcomes", "System-of-record health", "Home summary unavailable", "/outcomes"),
+      unavailableProofMetric("evidence-pack", "Evidence Pack", "Home summary unavailable", "/evidence"),
     ];
   }
   const totalChecks = summary?.metrics.outcome_checks ?? 0;
@@ -200,8 +200,8 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
 
   return [
     {
-      id: "controlled-actions",
-      label: "Controlled actions",
+      id: "protected-actions",
+      label: "Protected actions",
       value: formatCount(summary.metrics.controlled_actions),
       detail: windowLabel,
       href: "/actions",
@@ -217,18 +217,18 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
     },
     {
       id: "verified-outcomes",
-      label: "Verified outcomes",
+      label: "System-of-record health",
       value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
       detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks, ${windowLabel.toLowerCase()}`,
       href: "/outcomes",
       tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
     },
     {
-      id: "bypass-risk",
-      label: "Bypass risk",
+      id: "evidence-pack",
+      label: "Evidence Pack",
       value: formatCount(bypassRisk),
-      detail: `Unreceipted mutations, ${windowLabel.toLowerCase()}`,
-      href: "/outcomes",
+      detail: `Actions without signed proof, ${windowLabel.toLowerCase()}`,
+      href: "/evidence",
       tone: bypassRisk > 0 ? "danger" : "success",
     },
   ];

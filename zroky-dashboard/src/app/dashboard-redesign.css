@@ -21018,13 +21018,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mission-control-page {
   width: 100%;
   min-height: 100%;
-  background: var(--mc-canvas);
+  background: transparent;
   color: var(--mc-text);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-shell {
   display: grid;
-  gap: 24px;
+  gap: 14px;
   width: 100%;
   max-width: none;
   margin: 0;
@@ -21037,31 +21037,31 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-rail,
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run,
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
-  background: var(--mc-card);
   border: 1px solid var(--mc-border);
   border-radius: 8px;
+  background: var(--mc-card);
   box-shadow: var(--mc-shadow-rest);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-control-health {
-  padding: 20px;
-  background: var(--mc-card);
+  padding: 16px;
   border: 1px solid var(--mc-border);
   border-radius: 8px;
+  background: var(--mc-card);
   box-shadow: var(--mc-shadow-rest);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-control-health h2 {
   margin: 0;
   color: var(--mc-text);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 720;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-control-health-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
-  gap: 20px;
+  gap: 16px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-readiness-list {
@@ -21117,11 +21117,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-health {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-content: start;
-  padding: 14px;
-  background: var(--mc-soft);
+  padding: 12px;
+  border: 1px solid var(--mc-border);
   border-radius: 8px;
+  background: var(--mc-soft);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-state-grid {
@@ -21174,8 +21175,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 24px;
+  gap: 18px;
+  padding: 22px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-hero-main,
@@ -21199,10 +21200,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--mc-border);
   border-radius: 8px;
-  background: var(--mc-accent-soft);
+  background: var(--mc-soft);
   color: var(--mc-accent);
 }
 
@@ -21219,21 +21221,23 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-hero h1 {
-  font-size: 30px;
+  font-size: 28px;
+  font-weight: 720;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-section-head h2,
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-rail h2,
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run h2,
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel h2 {
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 720;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-eyebrow {
   margin: 0 0 6px;
   color: var(--mc-text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 0.68rem;
+  font-weight: 820;
   line-height: 1.2;
   text-transform: uppercase;
 }
@@ -21293,14 +21297,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 10px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-card {
   display: grid;
-  gap: 10px;
-  min-height: 128px;
-  padding: 18px;
+  gap: 8px;
+  min-height: 112px;
+  padding: 13px;
   color: inherit;
   text-decoration: none;
 }
@@ -21320,8 +21324,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-card strong {
   color: var(--mc-text);
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 720;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
@@ -21329,13 +21333,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-fleet-line {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--mc-border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--mc-card);
-  box-shadow: var(--mc-shadow);
+  box-shadow: var(--mc-shadow-rest);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-fleet-link {
@@ -21385,21 +21389,21 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: 16px;
   align-items: start;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-queue-panel,
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-rail,
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run {
-  padding: 20px;
+  padding: 16px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-section-head {
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-section-head-rail {
@@ -21412,14 +21416,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-filter-chip {
-  min-height: 30px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 9px;
   border: 1px solid var(--mc-border);
   border-radius: 8px;
   background: var(--mc-card);
   color: var(--mc-text-secondary);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 0.74rem;
+  font-weight: 720;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-filter-chip.is-active {
@@ -21437,11 +21441,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  min-height: 72px;
+  min-height: 70px;
   padding: 12px;
   border: 1px solid var(--mc-border);
+  border-left: 3px solid var(--mc-border-strong);
   border-radius: 8px;
   background: var(--mc-card);
   color: var(--mc-text);
@@ -21520,14 +21525,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-facts {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin: 0;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-facts div {
   display: grid;
   gap: 4px;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--mc-border);
 }
 
@@ -21551,10 +21556,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-json pre {
-  max-height: 220px;
+  max-height: 200px;
   margin: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 10px;
   border-radius: 8px;
   background: var(--mc-soft);
   color: var(--mc-text-secondary);
@@ -21572,10 +21577,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-locked-home {
   display: grid;
   justify-items: center;
-  padding: 24px;
+  padding: 16px;
   border: 1px solid var(--mc-border);
-  border-radius: 10px;
-  background: var(--mc-canvas);
+  border-radius: 8px;
+  background: var(--mc-card);
+  box-shadow: var(--mc-shadow-rest);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-locked-home > .mc-first-run {
@@ -21584,16 +21590,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run {
   display: grid;
-  gap: 17px;
-  width: min(1080px, calc(100% - 32px));
-  max-width: 1080px;
-  padding: 19px;
-  border: 1px solid rgba(47, 95, 102, 0.16);
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 251, 248, 0.96)),
-    #ffffff;
-  box-shadow: 0 20px 56px rgba(28, 38, 34, 0.12);
+  gap: 14px;
+  width: 100%;
+  max-width: none;
+  padding: 16px;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: var(--mc-card);
+  box-shadow: none;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-copy {
@@ -21628,7 +21632,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -21643,15 +21647,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card {
   display: grid;
   align-content: start;
-  gap: 12px;
-  min-height: 172px;
+  gap: 9px;
+  min-height: 156px;
   height: 100%;
-  padding: 14px;
-  border: 1px solid rgba(47, 95, 102, 0.14);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 11px;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: var(--mc-soft);
   color: inherit;
-  box-shadow: 0 10px 28px rgba(24, 35, 31, 0.06);
+  box-shadow: none;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="done"] {
@@ -21661,10 +21665,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] {
   border-color: rgba(47, 95, 102, 0.34);
-  background:
-    linear-gradient(180deg, rgba(47, 95, 102, 0.1), rgba(47, 95, 102, 0.035)),
-    #fbfdfc;
-  box-shadow: 0 18px 42px rgba(47, 95, 102, 0.14);
+  background: var(--mc-accent-soft);
+  box-shadow: inset 3px 0 0 var(--mc-accent);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="locked"] {
@@ -21875,7 +21877,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-diagram {
   display: grid;
   grid-template-columns: repeat(7, minmax(118px, 1fr));
-  gap: 10px;
+  gap: 8px;
   align-items: stretch;
 }
 
@@ -21887,11 +21889,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-node {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
-  gap: 9px;
+  gap: 8px;
   height: 100%;
-  min-height: 128px;
-  padding: 11px;
-  border: 1px solid rgba(47, 95, 102, 0.18);
+  min-height: 112px;
+  padding: 10px;
+  border: 1px solid var(--mc-border);
+  border-left: 3px solid var(--mc-border-strong);
   border-radius: 8px;
   background: var(--mc-soft);
   color: var(--mc-text);
@@ -21901,7 +21904,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-node:hover,
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-node:focus-visible {
-  border-color: rgba(47, 95, 102, 0.38);
+  border-color: var(--mc-border-strong);
   background: #ffffff;
   box-shadow: var(--mc-shadow-rest);
   outline: 0;
@@ -21913,7 +21916,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(47, 95, 102, 0.18);
+  border: 1px solid var(--mc-border);
   border-radius: 8px;
   background: #ffffff;
   color: var(--mc-accent);
@@ -21978,12 +21981,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-nav a {
-  min-height: 30px;
+  min-height: 28px;
   padding: 7px 10px;
   border-radius: 8px;
   color: var(--mc-text-secondary);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 0.74rem;
+  font-weight: 720;
   text-decoration: none;
 }
 
@@ -21997,9 +22000,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-risk-card {
   align-content: start;
   padding: 14px;
-  border: 1px solid rgba(183, 121, 31, 0.24);
+  border: 1px solid var(--mc-border);
+  border-left: 3px solid var(--mc-warning);
   border-radius: 8px;
-  background: #fffaf0;
+  background: var(--mc-warning-soft);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-risk-badge {
@@ -22034,7 +22038,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   align-items: center;
   gap: 8px;
   padding: 10px;
-  border: 1px solid rgba(183, 121, 31, 0.18);
+  border: 1px solid var(--mc-border);
   border-radius: 8px;
   background: #ffffff;
   color: var(--mc-text-tertiary);
@@ -22070,9 +22074,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-risk-stats a {
   display: grid;
   gap: 4px;
-  min-height: 72px;
+  min-height: 68px;
   padding: 10px;
-  border: 1px solid rgba(183, 121, 31, 0.18);
+  border: 1px solid var(--mc-border);
   border-radius: 8px;
   background: #ffffff;
   color: inherit;

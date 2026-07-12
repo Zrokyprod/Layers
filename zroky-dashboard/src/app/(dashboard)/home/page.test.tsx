@@ -504,7 +504,9 @@ describe("Mission Control Home", () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Action mismatch" })).toBeInTheDocument();
-    expect(screen.getByText("Controlled actions")).toBeInTheDocument();
+    expect(screen.getByText("Protected actions")).toBeInTheDocument();
+    expect(screen.getByText("System-of-record health")).toBeInTheDocument();
+    expect(screen.getByText("Evidence Pack")).toBeInTheDocument();
     expect(screen.getByText("66.67% matched")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Propose to evidence, with policy in the middle" })).toBeInTheDocument();
     expect(screen.getByText("Verified action loop")).toBeInTheDocument();
