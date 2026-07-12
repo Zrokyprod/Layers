@@ -64,6 +64,9 @@ type MissionSource =
 
 type MissionAvailability = Record<MissionSource, boolean>;
 
+const DEFAULT_HOME_WINDOW_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
 const EMPTY_DATA: MissionData = {
   intents: [],
   approvals: [],
@@ -182,6 +185,18 @@ function unavailableProofMetric(id: string, label: string, detail: string, href:
   };
 }
 
+function homeWindowDays(dateRange: { from: Date | null; to: Date | null }): number {
+  if (!dateRange.from || !dateRange.to) {
+    return DEFAULT_HOME_WINDOW_DAYS;
+  }
+  const fromMs = new Date(dateRange.from).getTime();
+  const toMs = new Date(dateRange.to).getTime();
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+    return DEFAULT_HOME_WINDOW_DAYS;
+  }
+  return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
+}
+
 function proofMetrics(data: MissionData, availability: MissionAvailability): ProofMetric[] {
   const summary = data.homeSummary;
   if (!availability.homeSummary || !summary) {
@@ -195,7 +210,7 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
   const totalChecks = summary?.metrics.outcome_checks ?? 0;
   const matchedChecks = summary?.metrics.verified_outcomes ?? 0;
   const matchedRate = totalChecks > 0 ? (matchedChecks / totalChecks) * 100 : null;
-  const bypassRisk = summary?.metrics.unreceipted_mutations ?? 0;
+  const receiptsGenerated = summary?.metrics.receipts_generated ?? 0;
   const windowLabel = summary ? `Last ${summary.window_days} days` : "Summary unavailable";
 
   return [
@@ -226,10 +241,10 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
     {
       id: "evidence-pack",
       label: "Evidence Pack",
-      value: formatCount(bypassRisk),
-      detail: `Actions without signed proof, ${windowLabel.toLowerCase()}`,
+      value: formatCount(receiptsGenerated),
+      detail: `Signed receipts generated, ${windowLabel.toLowerCase()}`,
       href: "/evidence",
-      tone: bypassRisk > 0 ? "danger" : "success",
+      tone: receiptsGenerated > 0 ? "success" : "neutral",
     },
   ];
 }
@@ -304,6 +319,8 @@ function unavailableSourceCount(availability: MissionAvailability): number {
 
 export default function HomePage() {
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const summaryDays = useMemo(() => homeWindowDays(dateRange), [dateRange]);
   const [data, setData] = useState<MissionData>(EMPTY_DATA);
   const [availability, setAvailability] = useState<MissionAvailability>(NO_SOURCES_AVAILABLE);
   const [isLoading, setIsLoading] = useState(true);
@@ -315,7 +332,7 @@ export default function HomePage() {
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
     try {
-      const summary = await getHomeSummary(30, signal);
+      const summary = await getHomeSummary(summaryDays, signal);
       if (signal?.aborted) {
         return;
       }
@@ -337,7 +354,7 @@ export default function HomePage() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [summaryDays]);
 
   useEffect(() => {
     const controller = new AbortController();
