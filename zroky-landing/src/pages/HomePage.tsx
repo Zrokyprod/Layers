@@ -114,113 +114,202 @@ function wait(ms: number) {
 }
 
 function ControlFlowSection() {
-  const reduce = useReducedMotion();
+  const reduce = Boolean(useReducedMotion());
+  const [activeStep, setActiveStep] = useState(0);
   const steps = [
     {
       icon: Bot,
-      label: 'Agent request',
-      title: 'refund.customer_balance',
-      meta: 'intent captured',
+      label: 'Protected action',
+      title: 'refund.create',
+      meta: 'contract · finance.refund.v4',
     },
     {
       icon: ShieldCheck,
-      label: 'Policy check',
-      title: 'finance.refund <= $500',
-      meta: 'rule matched',
+      label: 'Policy decision',
+      title: 'ALLOW · HOLD · DENY',
+      meta: 'evaluated before execution',
     },
     {
       icon: LockKeyhole,
-      label: 'Approval rule',
-      title: 'manager review required',
-      meta: 'held until approved',
+      label: 'Controlled execution',
+      title: 'MCP upstream or runner',
+      meta: 'execution state recorded',
     },
     {
       icon: DatabaseZap,
-      label: 'Scoped execution',
-      title: 'temporary permission',
-      meta: 'least privilege',
+      label: 'Outcome verification',
+      title: 'System of record',
+      meta: 'matched · mismatched · pending',
     },
     {
       icon: ReceiptText,
-      label: 'Signed receipt',
-      title: 'proof generated',
-      meta: 'audit trail saved',
+      label: 'Signed evidence',
+      title: 'Ed25519 receipt',
+      meta: 'audit trail preserved',
     },
   ];
+  const activeStates = [
+    'INTENT CAPTURED',
+    'POLICY · ALLOW',
+    'EXECUTION RECORDED',
+    'SOR · MATCHED',
+    'RECEIPT SIGNED',
+  ];
+  const visibleStep = reduce ? steps.length - 1 : activeStep;
+  const progress = (visibleStep / (steps.length - 1)) * 100;
+
+  useEffect(() => {
+    if (reduce) return undefined;
+    const id = window.setInterval(() => {
+      setActiveStep((current) => (current + 1) % steps.length);
+    }, 1700);
+    return () => window.clearInterval(id);
+  }, [reduce, steps.length]);
+
+  const stageState = (index: number) => {
+    if (visibleStep === index) return 'active';
+    if (visibleStep > index) return 'complete';
+    return 'pending';
+  };
 
   return (
     <Section id="control-flow" className="bg-[#fbfaf6] py-16 md:py-20">
       <SectionHeader
         eyebrow="Control flow"
-        title="From agent intent to verified action."
-        copy="Zroky turns every agent request into a governed path: validate intent, enforce policy, require approval when needed, limit execution scope, and preserve proof."
+        title="From protected action to verified outcome."
+        copy="Zroky binds each protected action to a versioned contract, applies policy before execution, verifies the result in the system of record, and records the evidence in a signed receipt."
         align="center"
       />
 
-      <Reveal delay={0.08} className="mx-auto mt-10 max-w-6xl">
-        <div className="relative overflow-hidden border border-[#ded9cf] bg-[#fffefa]/86 px-4 py-5 shadow-[0_28px_80px_-64px_rgba(23,25,22,0.52)] backdrop-blur sm:px-5 md:px-6">
-          <span className="absolute -left-1.5 -top-1.5 h-3 w-3 border-l border-t border-[#cfc9bd]" />
-          <span className="absolute -right-1.5 -top-1.5 h-3 w-3 border-r border-t border-[#cfc9bd]" />
-          <span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 border-b border-l border-[#cfc9bd]" />
-          <span className="absolute -bottom-1.5 -right-1.5 h-3 w-3 border-b border-r border-[#cfc9bd]" />
+      <Reveal delay={0.08} className="mx-auto mt-10 max-w-[1180px]">
+        <div className="relative overflow-hidden rounded-[6px] border border-[#d8d4c9] bg-[#fffefa]/92 shadow-[0_34px_90px_-70px_rgba(23,25,22,0.62)] backdrop-blur">
+          <div className="flex min-h-12 flex-col gap-2 border-b border-[#ded9cf] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+                {!reduce ? <span className="absolute h-2.5 w-2.5 rounded-full bg-[#3a747c]/20 motion-safe:animate-ping" /> : null}
+                <span className="relative h-1.5 w-1.5 rounded-full bg-[#3a747c]" />
+              </span>
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Control path</span>
+              <span className="h-4 w-px bg-[#d8d4c9]" />
+              <span className="min-w-0 truncate font-mono text-[10.5px] text-[#777266]">finance.refund.v4</span>
+            </div>
+            <motion.span
+              key={activeStates[visibleStep]}
+              aria-live="polite"
+              className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#2f5f66]"
+              initial={reduce ? false : { opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              {activeStates[visibleStep]}
+            </motion.span>
+          </div>
 
-          <div className="relative hidden min-h-[255px] md:block">
-            <div className="absolute left-0 right-0 top-[62px] h-px bg-[#d9d4c8]" />
+          <div className="relative hidden xl:block">
+            <div aria-hidden className="absolute left-[10%] right-[10%] top-[66px] h-px bg-[#d8d4c9]" />
             <motion.div
               aria-hidden
-              className="absolute left-[2%] top-[58px] h-[9px] w-20 rounded-full bg-[linear-gradient(90deg,rgba(58,116,124,0),rgba(58,116,124,0.86),rgba(58,116,124,0))]"
+              className="absolute left-[10%] top-[66px] h-px bg-[#3a747c]"
               initial={false}
-              animate={reduce ? { x: 0, opacity: 0.35 } : { x: ['0%', '980%'], opacity: [0, 1, 0] }}
-              transition={{ duration: 6.5, repeat: reduce ? 0 : Infinity, ease: 'linear' }}
+              animate={{ width: `${progress * 0.8}%` }}
+              transition={{ duration: 0.55, ease }}
             />
 
-            <div className="grid grid-cols-5 gap-3">
+            <ol aria-label="Zroky protected action control flow" className="grid grid-cols-5">
               {steps.map((step, index) => {
                 const Icon = step.icon;
+                const state = stageState(index);
+                const active = state === 'active';
+                const complete = state === 'complete';
                 return (
-                  <div key={step.label} className="relative min-w-0 pt-3">
-                    <div className="mx-auto flex h-[208px] max-w-[205px] flex-col border border-[#e1ddd3] bg-[#fbfaf6] p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
-                          <Icon size={17} />
-                        </span>
-                        <span className="font-mono text-[10px] font-semibold text-[#9b9588]">0{index + 1}</span>
-                      </div>
-                      <div className="mt-7">
-                        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">{step.label}</p>
-                        <h3 className="mt-2 min-h-[2.5rem] text-[0.95rem] font-semibold leading-snug text-[#171a15]">{step.title}</h3>
-                        <p className="mt-3 font-mono text-[10.5px] text-[#777266]">{step.meta}</p>
-                      </div>
+                  <li key={step.label} className={`relative min-w-0 px-5 pb-7 pt-7 ${index > 0 ? 'border-l border-[#e6e2d8]/80' : ''}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <motion.span
+                        className={`relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-[5px] border transition-colors duration-300 ${
+                          active
+                            ? 'border-[#7ca5aa] bg-[#2f5f66] text-white shadow-[0_10px_24px_-14px_rgba(47,95,102,0.8)]'
+                            : complete
+                              ? 'border-[#bdd2cf] bg-[#eaf1ef] text-[#2f5f66]'
+                              : 'border-[#d9d5ca] bg-[#fbfaf6] text-[#969084]'
+                        }`}
+                        animate={active && !reduce ? { y: [0, -2, 0] } : { y: 0 }}
+                        transition={{ duration: 1.7, repeat: active && !reduce ? Infinity : 0, ease: 'easeInOut' }}
+                      >
+                        {complete ? <Check size={17} strokeWidth={2.2} /> : <Icon size={18} strokeWidth={1.8} />}
+                      </motion.span>
+                      <span className="font-mono text-[10px] font-semibold text-[#9b9588]">0{index + 1}</span>
                     </div>
-                    <span className="absolute left-1/2 top-[54px] grid h-4 w-4 -translate-x-1/2 place-items-center border border-[#d9d4c8] bg-[#fffefa]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#3a747c]" />
-                    </span>
-                  </div>
+
+                    <div className="mt-7 min-w-0">
+                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">{step.label}</p>
+                      <h3 className="mt-2 min-h-[2.75rem] [overflow-wrap:anywhere] text-[0.96rem] font-semibold leading-[1.38] text-[#171a15]">{step.title}</h3>
+                      <p className="mt-3 [overflow-wrap:anywhere] font-mono text-[10.5px] leading-[1.55] text-[#777266]">{step.meta}</p>
+                    </div>
+
+                    {index === 1 ? (
+                      <div className={`mt-5 border-l-2 pl-3 transition-colors duration-300 ${active ? 'border-[#3a747c]' : 'border-[#d8d4c9]'}`}>
+                        <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-[#9a9488]">Conditional</p>
+                        <p className="mt-1 text-[0.78rem] font-medium text-[#51564f]">HOLD → human approval</p>
+                      </div>
+                    ) : null}
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
 
-          <div className="grid gap-2 md:hidden">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <div key={step.label} className="grid grid-cols-[2.5rem_1fr] gap-3 border border-[#e1ddd3] bg-[#fbfaf6] p-3">
-                  <span className="grid h-10 w-10 place-items-center border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
-                    <Icon size={17} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">
-                      0{index + 1} / {step.label}
-                    </p>
-                    <h3 className="mt-1 text-sm font-semibold text-[#171a15]">{step.title}</h3>
-                    <p className="mt-1 font-mono text-[10.5px] text-[#777266]">{step.meta}</p>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="relative px-4 py-1 xl:hidden">
+            <div aria-hidden className="absolute bottom-8 left-[38px] top-8 w-px bg-[#d8d4c9]" />
+            <motion.div
+              aria-hidden
+              className="absolute left-[38px] top-8 w-px bg-[#3a747c]"
+              initial={false}
+              animate={{ height: `calc((100% - 4rem) * ${progress / 100})` }}
+              transition={{ duration: 0.55, ease }}
+            />
+            <ol aria-label="Zroky protected action control flow" className="relative">
+              {steps.map((step, index) => {
+                const Icon = step.icon;
+                const state = stageState(index);
+                const active = state === 'active';
+                const complete = state === 'complete';
+                return (
+                  <li key={step.label} className={`grid grid-cols-[2.9rem_1fr] gap-3 py-5 ${index < steps.length - 1 ? 'border-b border-[#e6e2d8]/80' : ''}`}>
+                    <span
+                      className={`relative z-10 grid h-11 w-11 place-items-center rounded-[5px] border transition-colors duration-300 ${
+                        active
+                          ? 'border-[#7ca5aa] bg-[#2f5f66] text-white shadow-[0_10px_24px_-14px_rgba(47,95,102,0.8)]'
+                          : complete
+                            ? 'border-[#bdd2cf] bg-[#eaf1ef] text-[#2f5f66]'
+                            : 'border-[#d9d5ca] bg-[#fbfaf6] text-[#969084]'
+                      }`}
+                    >
+                      {complete ? <Check size={17} strokeWidth={2.2} /> : <Icon size={18} strokeWidth={1.8} />}
+                    </span>
+                    <div className="min-w-0 pt-0.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.13em] text-[#2f5f66]">{step.label}</p>
+                        <span className="font-mono text-[9.5px] font-semibold text-[#9b9588]">0{index + 1}</span>
+                      </div>
+                      <h3 className="mt-1.5 [overflow-wrap:anywhere] text-[0.92rem] font-semibold leading-snug text-[#171a15]">{step.title}</h3>
+                      <p className="mt-1.5 [overflow-wrap:anywhere] font-mono text-[10.5px] leading-relaxed text-[#777266]">{step.meta}</p>
+                      {index === 1 ? (
+                        <div className={`mt-3 border-l-2 pl-3 transition-colors duration-300 ${active ? 'border-[#3a747c]' : 'border-[#d8d4c9]'}`}>
+                          <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-[#9a9488]">Conditional</p>
+                          <p className="mt-1 text-xs font-medium text-[#51564f]">HOLD → human approval</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
 
+          <div className="flex flex-col gap-1.5 border-t border-[#ded9cf] bg-[#f8f7f2]/72 px-4 py-3 font-mono text-[9.5px] text-[#777266] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <span>Decision is durable before execution.</span>
+            <span>Verification and receipt run after execution.</span>
+          </div>
         </div>
       </Reveal>
     </Section>
