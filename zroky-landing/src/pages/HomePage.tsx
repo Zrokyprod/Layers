@@ -20,19 +20,12 @@ import {
 import type { IconType } from 'react-icons';
 import {
   SiCrewai,
-  SiFresh,
   SiHubspot,
-  SiIntercom,
-  SiJira,
   SiLangchain,
-  SiLinear,
   SiPostgresql,
-  SiQuickbooks,
-  SiRazorpay,
   SiShopify,
   SiStripe,
   SiZendesk,
-  SiZoho,
 } from 'react-icons/si';
 import Hero from '../components/hero/Hero';
 import { DEMO_URL, SIGN_UP_URL } from '../lib/links';
@@ -317,58 +310,47 @@ function ControlFlowSection() {
 }
 
 function ConnectorWall() {
-  type LogoWallItem = {
+  type IntegrationItem = {
     name: string;
     icon?: IconType | LucideIcon;
     mark?: string;
     color: string;
   };
-  const connectors: LogoWallItem[] = [
+  const systems: IntegrationItem[] = [
     { name: 'PostgreSQL', icon: SiPostgresql, color: '#4169e1' },
     { name: 'HubSpot', icon: SiHubspot, color: '#ff5c35' },
     { name: 'Salesforce', icon: Cloud, color: '#1798c1' },
-    { name: 'Zendesk', icon: SiZendesk, color: '#03363d' },
-    { name: 'Intercom', icon: SiIntercom, color: '#0a7cff' },
-    { name: 'Freshdesk', icon: SiFresh, color: '#14a46f' },
-    { name: 'Jira', icon: SiJira, color: '#0052cc' },
-    { name: 'Linear', icon: SiLinear, color: '#5e6ad2' },
     { name: 'Stripe', icon: SiStripe, color: '#635bff' },
-    { name: 'Razorpay', icon: SiRazorpay, color: '#0b72e7' },
     { name: 'Shopify', icon: SiShopify, color: '#7ab55c' },
     { name: 'NetSuite', mark: 'NS', color: '#315b62' },
-    { name: 'QuickBooks', icon: SiQuickbooks, color: '#2ca01c' },
-    { name: 'Zoho', icon: SiZoho, color: '#d9232e' },
+    { name: 'Zendesk', icon: SiZendesk, color: '#03363d' },
+    { name: 'Private systems', icon: LockKeyhole, color: '#2f5f66' },
   ];
-  const frameworks: LogoWallItem[] = [
+  const frameworks: IntegrationItem[] = [
     { name: 'OpenAI Agents SDK', icon: Bot, color: '#171a15' },
     { name: 'LangGraph', icon: SiLangchain, color: '#1c7c54' },
     { name: 'CrewAI', icon: SiCrewai, color: '#171a15' },
     { name: 'AutoGen', icon: GitBranch, color: '#2f5f66' },
   ];
-  const tileBackground = {
-    backgroundImage:
-      'repeating-linear-gradient(-45deg, rgba(32,35,31,0.026) 0, rgba(32,35,31,0.026) 1px, transparent 1px, transparent 7px)',
-  };
-  const LogoTile = ({ item, framework = false }: { item: LogoWallItem; framework?: boolean }) => {
+  const controlSteps = [
+    { label: 'Intercept', detail: 'SDK / MCP', icon: GitBranch },
+    { label: 'Bind', detail: 'Versioned contract', icon: LockKeyhole },
+    { label: 'Decide', detail: 'Policy / approval', icon: ShieldCheck },
+    { label: 'Prove', detail: 'SOR / receipt', icon: ReceiptText },
+  ];
+  const IntegrationRow = ({ item }: { item: IntegrationItem }) => {
     const Icon = item.icon;
     return (
       <div
-        className="group relative -ml-px -mt-px flex min-h-[80px] items-center justify-center border border-[#ded9cf] bg-[#fffefa]/78 px-4 transition duration-200 hover:bg-[#fffdfa]"
-        style={tileBackground}
+        className="group flex min-w-0 items-center gap-3 border-b border-[#e6e1d8] px-4 py-3.5 last:border-b-0 sm:px-5"
         title={item.name}
-        aria-label={item.name}
       >
-        <div className="flex max-w-full items-center gap-2.5 text-[#60645d] opacity-[0.82] grayscale transition duration-200 group-hover:text-[#20241e] group-hover:opacity-100">
-          {Icon ? (
-            <Icon size={framework ? 19 : 20} className="shrink-0" style={{ color: 'currentColor' }} />
-          ) : (
-            <span className="shrink-0 font-mono text-[13px] font-semibold tracking-[0.08em] text-current">
-              {item.mark}
-            </span>
-          )}
-          <span className="truncate text-[0.88rem] font-semibold leading-none tracking-normal text-current">
-            {item.name}
-          </span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#ded9cf] bg-[#fffefa] text-[#3f4540] transition-colors duration-200 group-hover:border-[#b9cfca] group-hover:text-[#2f5f66]">
+          {Icon ? <Icon size={16} style={{ color: item.color }} /> : <span className="font-mono text-[10px] font-bold">{item.mark}</span>}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[0.82rem] font-semibold text-[#272b26]">{item.name}</p>
+          <p className="mt-0.5 font-mono text-[8.5px] uppercase tracking-[0.13em] text-[#918c81]">{item.name === 'Private systems' ? 'Outbound runner' : 'Integration endpoint'}</p>
         </div>
       </div>
     );
@@ -377,41 +359,106 @@ function ConnectorWall() {
   return (
     <Section id="connectors" className="bg-[#fbfcfa] py-14 md:py-20">
       <SectionHeader
-        eyebrow="Connectors + agents"
-        title="Connect every agent to governed proof."
-        copy="Zroky wraps agent frameworks and verifies outcomes against the systems they touch, so enterprises can scale autonomous work without losing policy, approval, or evidence control."
+        eyebrow="Integration fabric"
+        title="Connect agent frameworks to systems of record through one governed control rail."
+        copy="Use SDK or MCP to intercept protected actions, bind them to contracts, and verify outcomes through configured connectors and private enterprise systems."
         align="center"
       />
 
       <Reveal delay={0.08} className="mx-auto mt-10 max-w-6xl">
-        <div className="relative overflow-hidden border border-[#ded9cf] bg-[#fffefa]/72 shadow-[0_28px_80px_-64px_rgba(23,25,22,0.52)] backdrop-blur">
+        <div className="relative overflow-hidden border border-[#d8d4cb] bg-[#fffefa] shadow-[0_34px_90px_-62px_rgba(23,25,22,0.48)]">
           <span className="absolute -left-1.5 -top-1.5 h-3 w-3 border-l border-t border-[#cfc9bd]" />
           <span className="absolute -right-1.5 -top-1.5 h-3 w-3 border-r border-t border-[#cfc9bd]" />
           <span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 border-b border-l border-[#cfc9bd]" />
           <span className="absolute -bottom-1.5 -right-1.5 h-3 w-3 border-b border-r border-[#cfc9bd]" />
 
-          <div className="relative z-10">
-            <div className="flex items-center justify-between border-b border-[#ded9cf] px-4 py-3 sm:px-5">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Connectors</span>
-              <span className="hidden font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8a867a] sm:inline">Systems of record</span>
+          <div className="flex items-center justify-between border-b border-[#ded9cf] bg-[#f7f7f3]/82 px-4 py-3 sm:px-5">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#159447] shadow-[0_0_0_4px_rgba(21,148,71,0.1)]" />
+              <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-[#4e554e]">Governed integration path</span>
+            </div>
+            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a867a]">Project scoped</span>
+          </div>
+
+          <div className="relative grid lg:grid-cols-[0.82fr_1.36fr_0.92fr]">
+            <div className="border-b border-[#ded9cf] bg-[#faf9f5] lg:border-b-0 lg:border-r">
+              <div className="border-b border-[#ded9cf] px-4 py-4 sm:px-5">
+                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#827d72]">01 / Action sources</p>
+                <h3 className="mt-1.5 text-[1.05rem] font-semibold text-[#20241e]">Agent frameworks</h3>
+              </div>
+              <div>
+                {frameworks.map((item) => <IntegrationRow key={item.name} item={item} />)}
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
-              {connectors.map((item) => (
-                <LogoTile key={item.name} item={item} />
-              ))}
+            <div className="relative border-b border-[#ded9cf] bg-[#f1f7f5] lg:border-b-0 lg:border-r">
+              <div className="pointer-events-none absolute inset-0 opacity-[0.32]" style={{ backgroundImage: 'linear-gradient(rgba(47,95,102,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(47,95,102,0.08) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+              <div className="relative px-5 py-5 sm:px-7 sm:py-6">
+                <div className="flex items-start justify-between gap-4 border-b border-[#cfe0dc] pb-5">
+                  <div>
+                    <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#2f5f66]">Zroky control rail</p>
+                    <h3 className="mt-2 max-w-[18rem] text-[1.45rem] font-semibold leading-[1.12] text-[#17221f]">Control before execution. Proof after.</h3>
+                  </div>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#b9d1cc] bg-[#fffefa] text-[#2f5f66] shadow-sm"><ShieldCheck size={20} /></span>
+                </div>
+
+                <ol className="relative mt-5 space-y-2.5">
+                  <span className="absolute bottom-5 left-[17px] top-5 w-px bg-[#bad1cc]" aria-hidden="true" />
+                  {controlSteps.map((step, index) => {
+                    const Icon = step.icon;
+                    return (
+                      <motion.li
+                        key={step.label}
+                        className="relative grid grid-cols-[36px_1fr_auto] items-center gap-3 border border-[#cadbd7] bg-[#fffefa]/95 px-3 py-3 shadow-[0_8px_20px_-18px_rgba(23,25,22,0.8)]"
+                        initial={{ opacity: 0, x: -8 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.4, delay: 0.12 + index * 0.07, ease }}
+                      >
+                        <span className="relative z-10 flex h-8 w-8 items-center justify-center border border-[#bad1cc] bg-[#edf5f2] text-[#2f5f66]"><Icon size={15} /></span>
+                        <span className="min-w-0">
+                          <span className="block text-[0.82rem] font-semibold text-[#202821]">{step.label}</span>
+                          <span className="block truncate font-mono text-[8.5px] uppercase tracking-[0.1em] text-[#777d76]">{step.detail}</span>
+                        </span>
+                        <Check size={14} className="text-[#159447]" />
+                      </motion.li>
+                    );
+                  })}
+                </ol>
+
+                <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#cfe0dc] pt-4 font-mono text-[8.5px] uppercase tracking-[0.12em] text-[#66716b]">
+                  <span>ALLOW / HOLD / DENY</span>
+                  <ArrowRight size={14} className="text-[#2f5f66]" />
+                  <span>Matched / mismatch</span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between border-y border-[#ded9cf] px-4 py-3 sm:px-5">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Agent frameworks</span>
-              <span className="hidden font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8a867a] sm:inline">Existing execution path</span>
+            <div className="bg-[#faf9f5]">
+              <div className="border-b border-[#ded9cf] px-4 py-4 sm:px-5">
+                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#827d72]">02 / Evidence sources</p>
+                <h3 className="mt-1.5 text-[1.05rem] font-semibold text-[#20241e]">Systems of record</h3>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-1">
+                {systems.map((item) => <IntegrationRow key={item.name} item={item} />)}
+              </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              {frameworks.map((item) => (
-                <LogoTile key={item.name} item={item} framework />
-              ))}
-            </div>
+          <div className="grid border-t border-[#ded9cf] bg-[#f7f7f3] sm:grid-cols-3">
+            {[
+              ['Certified connectors', 'Zroky maintained'],
+              ['Declarative manifests', 'Customer configured'],
+              ['Private runner', 'Inside your network'],
+            ].map(([title, detail], index) => (
+              <div key={title} className={`flex items-center gap-3 px-4 py-3.5 sm:px-5 ${index < 2 ? 'border-b border-[#ded9cf] sm:border-b-0 sm:border-r' : ''}`}>
+                <span className="font-mono text-[9px] font-semibold text-[#2f5f66]">0{index + 1}</span>
+                <span>
+                  <span className="block text-[0.76rem] font-semibold text-[#2a2e29]">{title}</span>
+                  <span className="block text-[0.7rem] text-[#858074]">{detail}</span>
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </Reveal>
