@@ -49,7 +49,7 @@ export function VerdictHero({
           <IconForTone tone={verdict.tone} />
         </div>
         <div>
-          <p className="mc-eyebrow">Mission control</p>
+          <p className="mc-eyebrow">Agent action accountability</p>
           <h1>{verdict.title}</h1>
           <p className="mc-hero-detail">{verdict.detail}</p>
           <div className="mc-hero-badges" aria-label="Operational notices">
