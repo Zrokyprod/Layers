@@ -26,6 +26,7 @@ import {
   fetchOwnerStats,
   fetchOwnerSupportTickets,
   fetchOwnerSupportTicket,
+  fetchOwnerToolRegistry,
   fetchOwnerUser,
   fetchOwnerUsers,
   fetchProjectRateLimit,
@@ -87,6 +88,13 @@ export function useOwnerProductionReadiness() {
   return useQuery({
     queryKey: ["owner", "production-readiness"],
     queryFn: ({ signal }) => fetchOwnerProductionReadiness(signal),
+  });
+}
+
+export function useOwnerToolRegistry() {
+  return useQuery({
+    queryKey: ["owner", "tool-registry"],
+    queryFn: ({ signal }) => fetchOwnerToolRegistry(signal),
   });
 }
 

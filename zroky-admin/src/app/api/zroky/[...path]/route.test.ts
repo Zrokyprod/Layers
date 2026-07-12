@@ -115,6 +115,45 @@ describe("/api/zroky owner proxy route", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://backend.test/v1/admin/feature-interest");
   });
 
+  it("allows the live tool registry through the owner proxy allowlist", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        schema_version: "zroky.agent_tool_control.v1",
+        project_id: "proj_owner",
+        agent_id: null,
+        action_type: null,
+        runtime_paths: [],
+        verification_connectors: [],
+        native_tool_families: [],
+        recommended: {
+          action_types: [],
+          runtime_path_ids: [],
+          verification_connector_ids: [],
+          native_tool_family_ids: [],
+          next_steps: [],
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/tools/registry", {
+      headers: {
+        cookie: "zroky_owner_token=cookie-owner-token",
+      },
+    });
+    const response = await GET(request, context(["v1", "tools", "registry"]));
+
+    expect(response.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://backend.test/v1/tools/registry");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const headers = init.headers as Headers;
+    expect(headers.get("x-zroky-admin-token")).toBe("cookie-owner-token");
+  });
+
   it("does not use public API URL variables for the owner backend proxy", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://backend.test");
