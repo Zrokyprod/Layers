@@ -35,6 +35,7 @@ const api = vi.hoisted(() => ({
 const storeState = vi.hoisted(() => ({
   selectedProject: "proj_1",
   realTimeEnabled: false,
+  dateRange: { from: null, to: null },
 }));
 
 vi.mock("next/link", () => ({
@@ -55,7 +56,11 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/lib/store", () => ({
   useDashboardStore: <T,>(
-    selector: (state: { selectedProject: string; realTimeEnabled: boolean }) => T,
+    selector: (state: {
+      selectedProject: string;
+      realTimeEnabled: boolean;
+      dateRange: { from: Date | null; to: Date | null };
+    }) => T,
   ) => selector(storeState),
 }));
 
@@ -346,8 +351,8 @@ function homeSummary(
 ): HomeSummaryResponse {
   return {
     project_id: "proj_1",
-    window_days: 30,
-    window_start: "2026-04-29T10:00:00.000Z",
+    window_days: 7,
+    window_start: "2026-05-22T10:00:00.000Z",
     generated_at: now,
     metrics: {
       controlled_actions: 0,
@@ -482,6 +487,7 @@ describe("Mission Control Home", () => {
     vi.clearAllMocks();
     storeState.selectedProject = "proj_1";
     storeState.realTimeEnabled = false;
+    storeState.dateRange = { from: null, to: null };
   });
 
   it("renders kernel verdict, proof strip, and prioritized queue rows", async () => {
@@ -507,6 +513,7 @@ describe("Mission Control Home", () => {
     expect(screen.getByText("Protected actions")).toBeInTheDocument();
     expect(screen.getByText("System-of-record health")).toBeInTheDocument();
     expect(screen.getByText("Evidence Pack")).toBeInTheDocument();
+    expect(screen.getByText("Signed receipts generated, last 7 days")).toBeInTheDocument();
     expect(screen.getByText("66.67% matched")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Propose to evidence, with policy in the middle" })).toBeInTheDocument();
     expect(screen.getByText("Verified action loop")).toBeInTheDocument();
@@ -701,7 +708,7 @@ describe("Mission Control Home", () => {
     expect((await screen.findAllByText(/No runner claimed execution/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/Attempt 1 planned/i)).toBeInTheDocument();
     await waitFor(() => {
-      expect(api.getHomeSummary).toHaveBeenCalledWith(30, expect.any(AbortSignal));
+      expect(api.getHomeSummary).toHaveBeenCalledWith(7, expect.any(AbortSignal));
       expect(api.listProjectActionExecutionAttempts).not.toHaveBeenCalled();
     });
   });
