@@ -20731,153 +20731,123 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-panel {
   display: grid;
-  grid-template-columns: minmax(230px, 0.95fr) minmax(420px, 1.6fr) minmax(220px, 0.85fr);
-  grid-template-areas:
-    "copy chart score"
-    "copy chart breakdown";
   gap: 14px;
-  align-items: stretch;
   min-width: 0;
   padding: 16px;
   border-color: rgba(47, 95, 102, 0.16);
-  background:
-    linear-gradient(135deg, rgba(47, 95, 102, 0.05), rgba(255, 255, 255, 0) 42%),
-    #ffffff;
+  background: #ffffff;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-loading {
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 180px;
+  min-height: 260px;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-copy {
-  grid-area: copy;
-  display: grid;
-  align-content: start;
-  gap: 12px;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   min-width: 0;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-copy p:last-child {
-  max-width: 320px;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-pills {
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-pills span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 28px;
-  padding: 5px 9px;
-  border: 1px solid rgba(47, 95, 102, 0.16);
-  border-radius: 999px;
-  background: rgba(47, 95, 102, 0.06);
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7a817e;
+  box-shadow: 0 0 0 4px rgba(122, 129, 126, 0.12);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status[data-tone="success"] .mc-agent-chart-status-dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status[data-tone="warning"] .mc-agent-chart-status-dot {
+  background: #b7791f;
+  box-shadow: 0 0 0 4px rgba(183, 121, 31, 0.13);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status strong {
+  color: var(--mc-text);
+  font-size: 15px;
+  font-weight: 740;
+  line-height: 1.2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-status div > span {
   color: var(--mc-text-secondary);
   font-size: 12px;
-  font-weight: 680;
-  line-height: 1;
+  line-height: 1.3;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-pills span[data-trend="up"] {
-  border-color: rgba(22, 163, 74, 0.24);
-  background: rgba(22, 163, 74, 0.08);
-  color: #137540;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 16px;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-pills span[data-trend="down"] {
-  border-color: rgba(209, 67, 67, 0.22);
-  background: rgba(209, 67, 67, 0.08);
-  color: #9f3333;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mc-text-secondary);
+  font-size: 12px;
+  font-weight: 620;
+  white-space: nowrap;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score {
-  grid-area: score;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 8px;
-  align-content: start;
-  min-height: 112px;
-  padding: 14px;
-  border: 1px solid rgba(47, 95, 102, 0.16);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 249, 248, 0.9)),
-    var(--mc-soft);
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend i {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2f5f66;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score svg {
-  color: var(--mc-accent);
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend span[data-series="completed"] i {
+  background: #16a34a;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score span {
-  color: var(--mc-text-tertiary);
-  font-size: 11px;
-  font-weight: 720;
-  line-height: 1.2;
-  text-transform: uppercase;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend span[data-series="attention"] i {
+  height: 0;
+  border-top: 2px dashed #b7791f;
+  background: transparent;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score strong {
-  grid-column: 1 / -1;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend strong {
   color: var(--mc-text);
-  font-size: 30px;
-  font-weight: 760;
-  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score em {
-  grid-column: 1 / -1;
-  align-self: end;
-  color: var(--mc-text-secondary);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 720;
-  line-height: 1.2;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score[data-tone="success"] {
-  border-color: rgba(22, 163, 74, 0.28);
-  background:
-    linear-gradient(180deg, rgba(22, 163, 74, 0.1), rgba(22, 163, 74, 0.03)),
-    #ffffff;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score[data-tone="warning"] {
-  border-color: rgba(183, 121, 31, 0.28);
-  background:
-    linear-gradient(180deg, rgba(183, 121, 31, 0.1), rgba(183, 121, 31, 0.03)),
-    #ffffff;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-score[data-tone="danger"] {
-  border-color: rgba(209, 67, 67, 0.28);
-  background:
-    linear-gradient(180deg, rgba(209, 67, 67, 0.1), rgba(209, 67, 67, 0.03)),
-    #ffffff;
-}
-
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-chart {
-  grid-area: chart;
+  position: relative;
   min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(47, 95, 102, 0.14);
   border-radius: 8px;
-  background:
-    radial-gradient(circle at 16% 18%, rgba(22, 163, 74, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(47, 95, 102, 0.04), rgba(255, 255, 255, 0)),
-    #ffffff;
+  background: linear-gradient(180deg, rgba(47, 95, 102, 0.035), rgba(255, 255, 255, 0) 48%), #ffffff;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-chart svg {
   display: block;
   width: 100%;
   height: auto;
+  min-height: 230px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-health-grid-line {
@@ -20888,7 +20858,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-health-axis {
   fill: var(--mc-text-tertiary);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -20897,99 +20867,128 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   text-anchor: middle;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-health-volume-bar {
-  fill: rgba(47, 95, 102, 0.12);
+.app-shell[data-dashboard-system="control-v1"] .mc-health-y-axis {
+  text-anchor: end;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-health-score-line {
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-actions-area {
+  fill: url("#agent-actions-area");
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-line {
   fill: none;
-  stroke: url("#agent-health-line");
+  stroke: #2f5f66;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 3.5;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-health-score-dot {
-  fill: #ffffff;
-  stroke: #2f5f66;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-line[data-series="completed"] {
+  stroke: #16a34a;
   stroke-width: 2.5;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-health-risk-dot {
-  fill: rgba(183, 121, 31, 0.92);
-  stroke: #ffffff;
-  stroke-width: 2;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-line[data-series="attention"] {
+  stroke: #b7791f;
+  stroke-width: 2.25;
+  stroke-dasharray: 7 6;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-chart-footer {
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-dot {
+  fill: #ffffff;
+  stroke: #2f5f66;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-dot[data-series="completed"] {
+  stroke: #16a34a;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-dot[data-series="attention"] {
+  stroke: #b7791f;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-hitbox {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip > line {
+  stroke: rgba(47, 95, 102, 0.32);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip rect {
+  fill: #ffffff;
+  stroke: rgba(47, 95, 102, 0.22);
+  stroke-width: 1;
+  filter: drop-shadow(0 7px 12px rgba(24, 33, 31, 0.12));
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip text {
+  fill: var(--mc-text-secondary);
+  font-size: 11px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip text[data-row="title"] {
+  fill: var(--mc-text);
+  font-weight: 740;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px 12px;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 0 2px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--mc-text-tertiary);
   font-size: 11px;
-  font-weight: 720;
-  letter-spacing: 0;
-  line-height: 1;
-  text-transform: uppercase;
+  font-weight: 620;
+  white-space: nowrap;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown {
-  grid-area: breakdown;
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 3px 8px;
-  align-items: center;
-  min-height: 48px;
-  padding: 9px 10px;
-  border: 1px solid var(--mc-border);
-  border-radius: 8px;
-  background: var(--mc-soft);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown div[data-tone="success"] {
-  border-color: rgba(22, 163, 74, 0.22);
-  background: rgba(22, 163, 74, 0.07);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown div[data-tone="warning"] {
-  border-color: rgba(183, 121, 31, 0.24);
-  background: rgba(183, 121, 31, 0.08);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown svg {
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta svg {
   color: var(--mc-accent);
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown span {
-  color: var(--mc-text-tertiary);
-  font-size: 11px;
-  font-weight: 720;
-  line-height: 1.2;
-  text-transform: uppercase;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta span[data-tone="warning"] svg {
+  color: #b7791f;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown strong {
-  grid-column: 2;
-  overflow-wrap: anywhere;
-  color: var(--mc-text);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.25;
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta span[data-tone="success"] svg {
+  color: #16a34a;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta strong {
+  color: var(--mc-text-secondary);
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-empty {
-  grid-column: 1 / -1;
-  padding: 10px 12px;
-  border: 1px dashed var(--mc-border-strong);
-  border-radius: 8px;
-  background: var(--mc-soft);
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: min(320px, calc(100% - 48px));
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--mc-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--mc-text-secondary);
+  font-size: 12px;
+  font-weight: 620;
+  text-align: center;
+  transform: translate(-50%, -50%);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-activity-grid {
@@ -21622,6 +21621,355 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: #15803d;
 }
 
+.mc-first-run-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  background: rgba(18, 23, 22, 0.46);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: mc-setup-overlay-in 160ms ease-out;
+}
+
+.mc-first-run-dialog {
+  --mc-card: #ffffff;
+  --mc-soft: #efeee7;
+  --mc-border: #e4e0d6;
+  --mc-border-strong: #d2ccbc;
+  --mc-text: #1a1a17;
+  --mc-text-secondary: #57564e;
+  --mc-text-tertiary: #8a867a;
+  --mc-accent: #2f5f66;
+  --mc-accent-hover: #244d53;
+  --mc-accent-soft: rgba(47, 95, 102, 0.08);
+  --mc-radius-control: 8px;
+  position: fixed;
+  z-index: 1001;
+  inset: 50% auto auto 50%;
+  display: grid;
+  gap: 16px;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: var(--mc-card);
+  color: var(--mc-text);
+  box-shadow: 0 28px 72px rgba(18, 23, 22, 0.26);
+  transform: translate(-50%, -50%);
+  animation: mc-setup-dialog-in 180ms ease-out;
+}
+
+.mc-first-run-dialog:focus {
+  outline: none;
+}
+
+.mc-first-run-dialog .mc-first-run-copy {
+  display: grid;
+  gap: 10px;
+  padding-right: 44px;
+}
+
+.mc-first-run-dialog .mc-first-run-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(47, 95, 102, 0.18);
+  border-radius: 999px;
+  background: var(--mc-accent-soft);
+  color: var(--mc-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mc-first-run-dialog .mc-eyebrow {
+  margin: 0 0 5px;
+  color: var(--mc-text-tertiary);
+  font-size: 11px;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.mc-first-run-dialog h2 {
+  margin: 0;
+  color: var(--mc-text);
+  font-size: 20px;
+  font-weight: 740;
+  line-height: 1.2;
+}
+
+.mc-first-run-dialog .mc-first-run-description {
+  margin: 6px 0 0;
+  color: var(--mc-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mc-first-run-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: var(--mc-soft);
+  color: var(--mc-text-secondary);
+  cursor: pointer;
+}
+
+.mc-first-run-close:hover {
+  border-color: var(--mc-border-strong);
+  color: var(--mc-text);
+}
+
+.mc-first-run-close:focus-visible,
+.mc-first-run-later:focus-visible,
+.mc-first-run-dialog .dashboard-button:focus-visible,
+.mc-first-run-dialog .mc-step-text-link:focus-visible {
+  outline: 2px solid rgba(47, 95, 102, 0.52);
+  outline-offset: 2px;
+}
+
+.mc-first-run-dialog .mc-first-run-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mc-first-run-dialog .mc-first-run-step-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px 11px;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: #fafaf8;
+}
+
+.mc-first-run-dialog .mc-first-run-step-card[data-state="done"] {
+  border-color: rgba(22, 163, 74, 0.2);
+  background: rgba(247, 252, 247, 0.96);
+}
+
+.mc-first-run-dialog .mc-first-run-step-card[data-state="current"] {
+  border-color: rgba(47, 95, 102, 0.34);
+  background: var(--mc-accent-soft);
+  box-shadow: inset 3px 0 0 var(--mc-accent);
+}
+
+.mc-first-run-dialog .mc-first-run-step-card[data-state="locked"] {
+  color: var(--mc-text-tertiary);
+  opacity: 0.72;
+}
+
+.mc-first-run-dialog .mc-step-head {
+  display: grid;
+  grid-template-columns: 24px 34px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+.mc-first-run-dialog .mc-step-index,
+.mc-first-run-dialog .mc-step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.mc-first-run-dialog .mc-step-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--mc-accent);
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.mc-first-run-dialog .mc-step-icon {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(47, 95, 102, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--mc-accent);
+}
+
+.mc-first-run-dialog .mc-first-run-step-card[data-state="done"] .mc-step-index {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.mc-first-run-dialog .mc-first-run-step-card[data-state="current"] .mc-step-index {
+  background: var(--mc-accent);
+  color: #ffffff;
+}
+
+.mc-first-run-dialog .mc-step-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mc-first-run-dialog .mc-step-copy strong {
+  color: var(--mc-text);
+  font-size: 13px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.mc-first-run-dialog .mc-step-copy span {
+  color: var(--mc-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.mc-first-run-dialog .mc-step-state {
+  min-width: 48px;
+  padding: 3px 7px;
+  border: 1px solid var(--mc-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--mc-text-secondary);
+  font-size: 10px;
+  font-weight: 740;
+  text-align: center;
+}
+
+.mc-first-run-dialog .mc-step-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-left: 76px;
+}
+
+.mc-first-run-dialog .mc-step-hint {
+  color: var(--mc-text-tertiary);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.mc-first-run-dialog .mc-step-text-link {
+  color: var(--mc-accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.mc-first-run-dialog .dashboard-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-accent) !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+}
+
+.mc-first-run-dialog .dashboard-button:hover {
+  background: var(--mc-accent-hover) !important;
+}
+
+.mc-first-run-dialog .dashboard-button-label,
+.mc-first-run-dialog .dashboard-button-glyph {
+  color: #ffffff !important;
+}
+
+.mc-first-run-dialog .dashboard-button-glyph {
+  display: inline-flex;
+}
+
+.mc-first-run-dialog .dashboard-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mc-first-run-dialog .mc-first-run-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 2px;
+}
+
+.mc-first-run-dialog .mc-first-run-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mc-first-run-dialog .mc-first-run-progress span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--mc-border);
+  border-radius: 50%;
+  color: var(--mc-text-tertiary);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.mc-first-run-dialog .mc-first-run-progress span.is-current {
+  border-color: var(--mc-accent);
+  background: var(--mc-accent);
+  color: #ffffff;
+}
+
+.mc-first-run-dialog .mc-first-run-progress span.is-done {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+
+.mc-first-run-later {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--mc-text-secondary);
+  font-size: 12px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.mc-first-run-later:hover {
+  color: var(--mc-text);
+  text-decoration: underline;
+}
+
+@keyframes mc-setup-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mc-setup-dialog-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
@@ -21922,18 +22270,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1320px) {
-  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-panel {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 0.44fr);
-    grid-template-areas:
-      "copy score"
-      "chart chart"
-      "breakdown breakdown";
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .app-shell[data-dashboard-system="control-v1"] .mc-activity-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -21966,21 +22302,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-panel {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "copy"
-      "score"
-      "chart"
-      "breakdown";
+  .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
-  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-copy p:last-child {
-    max-width: none;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend {
+    justify-content: flex-start;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-activity-grid {
@@ -22013,6 +22341,36 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 640px) {
+  .mc-first-run-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    padding: 16px;
+  }
+
+  .mc-first-run-dialog .mc-first-run-copy {
+    padding-right: 38px;
+  }
+
+  .mc-first-run-dialog .mc-step-head {
+    grid-template-columns: 24px 32px minmax(0, 1fr) auto;
+    gap: 7px;
+  }
+
+  .mc-first-run-dialog .mc-step-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .mc-first-run-dialog .mc-step-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-left: 70px;
+  }
+
+  .mc-first-run-dialog .mc-first-run-footer {
+    align-items: flex-start;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .mc-shell {
     padding: 0;
   }
@@ -22025,12 +22383,23 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     padding: 12px;
   }
 
-  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-breakdown {
-    grid-template-columns: 1fr;
+  .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-chart svg {
-    min-width: 0;
+    min-width: 620px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-chart {
+    overflow-x: auto;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel,
