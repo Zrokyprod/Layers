@@ -10,18 +10,22 @@ import type {
   AgentProfileResponse,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
-  ToolRegistryResponse,
 } from "@/lib/api";
 import AgentDetailPage from "./page";
 
 const api = vi.hoisted(() => ({
+  getActionsLifecycleSummary: vi.fn(),
   getAgentProfile: vi.fn(),
-  getToolRegistry: vi.fn(),
-  listActionIntents: vi.fn(),
   listActionRunners: vi.fn(),
-  listOutcomeReconciliations: vi.fn(),
-  listProjectActionExecutionAttempts: vi.fn(),
-  listRuntimePolicyApprovals: vi.fn(),
+}));
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: { dateRange: { from: Date; to: Date } }) => T) => selector({
+    dateRange: {
+      from: new Date("2026-06-21T00:00:00Z"),
+      to: new Date("2026-06-28T00:00:00Z"),
+    },
+  }),
 }));
 
 vi.mock("next/link", () => ({
@@ -133,6 +137,14 @@ function intent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResp
   return {
     action_id: "act_inventory",
     project_id: "proj_1",
+    agent_id: "agent_profile_inventory",
+    agent_profile: {
+      id: "agent_profile_inventory",
+      display_name: "Inventory Agent",
+      slug: "inventory-agent",
+      runtime_path: "sdk",
+      environment: "production",
+    },
     contract_version: "inventory.item.delete/1.0",
     action_type: "inventory.item.delete",
     operation_kind: "DELETE",
@@ -230,81 +242,61 @@ function attempt(overrides: Partial<ActionExecutionAttemptResponse> = {}): Actio
   };
 }
 
-function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryResponse {
-  return {
-    schema_version: "zroky.agent_tool_control.v1",
-    project_id: "proj_1",
-    agent_id: "agent_profile_inventory",
-    action_type: "custom",
-    runtime_paths: [
-      {
-        id: "sdk",
-        kind: "runtime_path",
-        label: "SDK",
-        description: "Thin SDK wrapper.",
-        category: "runtime",
-        phase: "phase1",
-        implementation_status: "available",
-        launch_tier: "p0",
-        supported_action_types: ["custom"],
-        recommended_for_action_types: ["custom"],
-        requires_customer_credentials: false,
-        dashboard_href: "/agents/setup",
-        backend_capability: "agent_profile.runtime_path",
-        availability_notes: null,
-      },
-    ],
-    verification_connectors: [
-      {
-        id: "generic_rest",
-        kind: "verification_connector",
-        label: "Generic REST",
-        description: "Read source-of-record state over REST.",
-        category: "verification",
-        phase: "phase1",
-        implementation_status: "template",
-        launch_tier: "p0",
-        supported_action_types: ["custom"],
-        recommended_for_action_types: ["custom"],
-        requires_customer_credentials: true,
-        dashboard_href: "/integrations",
-        backend_capability: "verification.generic_rest",
-        availability_notes: null,
-      },
-    ],
-    native_tool_families: [],
-    recommended: {
-      action_types: ["custom"],
-      runtime_path_ids: ["sdk"],
-      verification_connector_ids: ["generic_rest"],
-      native_tool_family_ids: [],
-      next_steps: ["Connect a generic REST verifier."],
-    },
-    ...overrides,
-  };
-}
-
 function mockDetail() {
   api.getAgentProfile.mockResolvedValue(profile());
-  api.listActionIntents.mockResolvedValue({
-    items: [intent()],
-    total_in_page: 1,
-    limit: 200,
-    offset: 0,
-  });
-  api.listRuntimePolicyApprovals.mockResolvedValue({
-    items: [decision()],
-    total_in_page: 1,
-  });
-  api.listOutcomeReconciliations.mockResolvedValue({
-    items: [outcome()],
-    total_in_page: 1,
+  api.getActionsLifecycleSummary.mockResolvedValue({
+    project_id: "proj_1",
+    window_days: 7,
+    window_start: "2026-06-21T00:00:00Z",
+    generated_at: now,
+    row_limit: 200,
+    source_totals: { intents: 1, approvals: 1, outcomes: 1, mutations: 0, attempts: 1, stale_attempts: 0 },
+    truncated: false,
+    truncated_sources: [],
+    metrics: {
+      controlled_actions: 1,
+      held_actions: 0,
+      matched_outcomes: 1,
+      mismatched_outcomes: 0,
+      not_verified_outcomes: 0,
+      bypass_risk: 0,
+    },
+    sources: {
+      lifecycle_summary: true,
+      intents: true,
+      approvals: true,
+      outcomes: true,
+      outcome_summary: true,
+      source_summary: true,
+      mutations: true,
+      attempts: true,
+      stale_attempts: true,
+      billing_usage: true,
+    },
+    data: {
+      intents: [intent()],
+      approvals: [decision()],
+      outcomes: [outcome()],
+      outcome_summary: null,
+      source_summary: {
+        total: 0,
+        matched_receipt: 0,
+        authorized_external: 0,
+        legacy_path: 0,
+        unmanaged_agent_action: 0,
+        policy_bypass: 0,
+        unknown_actor: 0,
+        unreceipted: 0,
+        connected_feeds: 1,
+        successful_pollers: 1,
+      },
+      mutations: [],
+      attempts: [attempt()],
+      stale_attempts: [],
+      billing_usage: null,
+    },
   });
   api.listActionRunners.mockResolvedValue({ items: [runner()] });
-  api.listProjectActionExecutionAttempts.mockImplementation((query: { stale?: boolean }) => Promise.resolve({
-    items: query?.stale ? [] : [attempt()],
-  }));
-  api.getToolRegistry.mockResolvedValue(registry());
 }
 
 describe("AgentDetailPage", () => {
@@ -312,14 +304,14 @@ describe("AgentDetailPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders read-only config summary, latest proof chain, runners, and tool plan", async () => {
+  it("renders time-windowed config, proof, and compatible runner context", async () => {
     mockDetail();
 
     renderDetailPage();
 
     expect(await screen.findByRole("heading", { name: "Inventory Agent", level: 1 })).toBeInTheDocument();
-    expect(api.listActionIntents).toHaveBeenCalledWith(
-      { agent_id: "agent_profile_inventory", limit: 200 },
+    expect(api.getActionsLifecycleSummary).toHaveBeenCalledWith(
+      { days: 7, limit: 200 },
       expect.any(AbortSignal),
     );
     const config = screen.getByLabelText("Agent control configuration summary");
@@ -334,14 +326,8 @@ describe("AgentDetailPage", () => {
     expect(within(proof).getByLabelText("Proof chain")).toBeInTheDocument();
     expect(within(proof).getByText("Archive inventory item")).toBeInTheDocument();
 
-    const runners = screen.getByLabelText("Agent observed runners and attempts");
+    const runners = screen.getByLabelText("Agent compatible runners and attempts");
     expect(within(runners).getByText("Inventory runner")).toBeInTheDocument();
-
-    const toolPlan = screen.getByLabelText("Agent tool plan");
-    expect(await within(toolPlan).findByText("Generic REST")).toBeInTheDocument();
-    expect(within(toolPlan).getByText("Connect a generic REST verifier.")).toBeInTheDocument();
-    expect(within(toolPlan).getByRole("link", { name: "Open setup" }).getAttribute("href")).toBe(
-      "/agents/setup?agentId=agent_profile_inventory",
-    );
+    expect(screen.queryByLabelText("Agent tool plan")).toBeNull();
   });
 });

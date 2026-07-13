@@ -5,16 +5,15 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 
 import { DashboardButtonLink } from "@/components/dashboard-button";
-import { getCaptureHealth, listAgentProfiles, listUnreceiptedSourceMutations } from "@/lib/api";
+import { getCaptureHealth, listAgentProfiles } from "@/lib/api";
 import type { AgentProfileResponse } from "@/lib/api";
+import { loadActionsLifecycleFeed } from "@/lib/actions-lifecycle-feed";
 import {
-  useActionIntents,
   useActionRunners,
-  useOutcomeReconciliations,
-  useProjectActionExecutionAttempts,
-  useRuntimePolicyApprovals,
 } from "@/lib/hooks";
 import { buildFleetView } from "@/lib/agent-fleet";
+import { dashboardWindowDays } from "@/lib/dashboard-window";
+import { useDashboardStore } from "@/lib/store";
 import {
   getAgentControlSetupStatus,
   type AgentControlSetupStatus,
@@ -92,7 +91,7 @@ function AgentsSetupActivationBanner({
               {status.ctaLabel}
             </DashboardButtonLink>
             <DashboardButtonLink href={runnerNeedsRecovery ? setupHref : "/integrations"} variant="soft">
-              {runnerNeedsRecovery ? "Restore runner" : "Check connectors"}
+              {runnerNeedsRecovery ? "Open runner setup" : "Check connectors"}
             </DashboardButtonLink>
           </div>
         </div>
@@ -138,29 +137,21 @@ function setupHrefForAgent(agentName?: string) {
 }
 
 export default function AgentsPage() {
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const windowDays = useMemo(() => dashboardWindowDays(dateRange), [dateRange]);
   const profilesQuery = useQuery({
     queryKey: ["agents", "profiles"],
     queryFn: ({ signal }) => listAgentProfiles({ limit: 200 }, signal),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
-  const intentsQuery = useActionIntents({ limit: 100 });
-  const approvalsQuery = useRuntimePolicyApprovals("all");
-  const outcomesQuery = useOutcomeReconciliations("all", 100);
-  const runnersQuery = useActionRunners();
-  const attemptsQuery = useProjectActionExecutionAttempts({ limit: 100 });
-  const sourceMutationsQuery = useQuery({
-    queryKey: ["agents", "source-mutations", "unreceipted"],
-    queryFn: ({ signal }) => listUnreceiptedSourceMutations(200, signal),
+  const lifecycleQuery = useQuery({
+    queryKey: ["agents", "lifecycle-summary", windowDays, 200],
+    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: windowDays, limit: 200 }, signal),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
-  const staleAttemptsQuery = useProjectActionExecutionAttempts({
-    status: ["planned", "claimed", "dispatched", "running"],
-    stale: true,
-    stale_after_seconds: 600,
-    limit: 100,
-  });
+  const runnersQuery = useActionRunners();
   const captureHealthQuery = useQuery({
     queryKey: ["agents", "capture-health"],
     queryFn: ({ signal }) => getCaptureHealth(signal),
@@ -169,45 +160,51 @@ export default function AgentsPage() {
   });
 
   const profiles = useMemo(() => profilesQuery.data?.items ?? [], [profilesQuery.data?.items]);
-  const attempts = useMemo(() => attemptsQuery.data?.items ?? [], [attemptsQuery.data?.items]);
-  const sourceMutations = useMemo(
-    () => sourceMutationsQuery.data?.items ?? [],
-    [sourceMutationsQuery.data?.items],
+  const lifecycleSummary = lifecycleQuery.data?.summary ?? null;
+  const lifecycleData = lifecycleSummary?.data;
+  const attempts = useMemo(
+    () => lifecycleData?.attempts ?? lifecycleData?.stale_attempts ?? [],
+    [lifecycleData?.attempts, lifecycleData?.stale_attempts],
   );
   const staleAttemptIds = useMemo(
-    () => (staleAttemptsQuery.data?.items ?? []).map((attempt) => attempt.attempt_id),
-    [staleAttemptsQuery.data?.items],
+    () => (lifecycleData?.stale_attempts ?? []).map((attempt) => attempt.attempt_id),
+    [lifecycleData?.stale_attempts],
+  );
+  const sourceSummary = lifecycleData?.source_summary;
+  const bypassCoverageAvailable = Boolean(
+    (sourceSummary?.connected_feeds ?? 0) > 0 || (sourceSummary?.successful_pollers ?? 0) > 0,
   );
   const fleet = useMemo(() => buildFleetView({
     profiles,
     profileMeta: profilesQuery.data ?? null,
-    intents: intentsQuery.data?.items ?? [],
-    decisions: approvalsQuery.data?.items ?? [],
-    outcomes: outcomesQuery.data?.items ?? [],
+    intents: lifecycleData?.intents ?? [],
+    decisions: lifecycleData?.approvals ?? [],
+    outcomes: lifecycleData?.outcomes ?? [],
     runners: runnersQuery.data?.items ?? [],
     attempts,
     staleAttemptIds,
-    mutations: sourceMutations,
+    mutations: lifecycleData?.mutations ?? [],
+    bypassCoverageAvailable,
   }), [
     profiles,
     profilesQuery.data,
-    intentsQuery.data?.items,
-    approvalsQuery.data?.items,
-    outcomesQuery.data?.items,
+    lifecycleData?.intents,
+    lifecycleData?.approvals,
+    lifecycleData?.outcomes,
     runnersQuery.data?.items,
     attempts,
     staleAttemptIds,
-    sourceMutations,
+    lifecycleData?.mutations,
+    bypassCoverageAvailable,
   ]);
 
   const loading = profilesQuery.isLoading;
   const error = Boolean(profilesQuery.error);
   const degradedFeeds = [
-    outcomesQuery.error && "Proof feed",
+    lifecycleQuery.error && "Action lifecycle",
+    lifecycleSummary?.sources.outcomes === false && "Proof feed",
+    lifecycleSummary?.sources.source_summary === false && "Bypass feed",
     runnersQuery.error && "Runner feed",
-    attemptsQuery.error && "Attempt feed",
-    sourceMutationsQuery.error && "Bypass feed",
-    (intentsQuery.error || approvalsQuery.error) && "Action feed",
     captureHealthQuery.error && "Capture health",
   ].filter(Boolean) as string[];
   const setupStatus = getAgentControlSetupStatus(
@@ -219,13 +216,8 @@ export default function AgentsPage() {
 
   function refresh() {
     profilesQuery.refetch();
-    intentsQuery.refetch();
-    approvalsQuery.refetch();
-    outcomesQuery.refetch();
+    lifecycleQuery.refetch();
     runnersQuery.refetch();
-    attemptsQuery.refetch();
-    sourceMutationsQuery.refetch();
-    staleAttemptsQuery.refetch();
     captureHealthQuery.refetch();
   }
 
@@ -237,6 +229,7 @@ export default function AgentsPage() {
         error={error}
         degradedFeeds={degradedFeeds}
         setupIncomplete={setupPrimaryActive}
+        windowDays={windowDays}
         onRefresh={refresh}
       />
 

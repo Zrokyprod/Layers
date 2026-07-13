@@ -17,6 +17,7 @@ type AgentsFleetHeroProps = {
   error: boolean;
   degradedFeeds?: string[];
   setupIncomplete?: boolean;
+  windowDays: number;
   onRefresh: () => void;
 };
 
@@ -51,7 +52,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean, setupIncomplete: boolea
       title: "Agent proof mismatch",
       body: `${formatCount(fleet.totals.mismatched)} managed action path has source-of-record proof that does not match.`,
       cta: "Review exceptions",
-      ctaHref: "/actions?filter=mismatched",
+      ctaHref: "/actions?filter=needs_action",
     };
   }
   if (fleet.totals.held > 0) {
@@ -61,6 +62,15 @@ function heroCopy(fleet: AgentFleetView, error: boolean, setupIncomplete: boolea
       body: `${formatCount(fleet.totals.held)} action is held before execution. Review approvals before letting the fleet continue.`,
       cta: "Review holds",
       ctaHref: "/approvals",
+    };
+  }
+  if (fleet.totals.awaitingRunner > 0) {
+    return {
+      tone: "warning",
+      title: "Agents waiting for runner",
+      body: `${formatCount(fleet.totals.awaitingRunner)} authorized action${fleet.totals.awaitingRunner === 1 ? " has" : "s have"} no healthy protected runner attempt yet.`,
+      cta: "Restore runner",
+      ctaHref: "/actions?filter=awaiting_runner",
     };
   }
   if (fleet.totals.sequenceRisk > 0) {
@@ -78,7 +88,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean, setupIncomplete: boolea
       title: "Agents need proof",
       body: `${formatCount(fleet.totals.notVerified)} action path is controlled but not verified yet.`,
       cta: "Review proof",
-      ctaHref: "/actions?filter=not_verified",
+      ctaHref: "/actions?filter=needs_action",
     };
   }
   if (setupIncomplete) {
@@ -115,6 +125,7 @@ export function AgentsFleetHero({
   loading,
   onRefresh,
   setupIncomplete = false,
+  windowDays,
 }: AgentsFleetHeroProps) {
   const copy = heroCopy(fleet, error, setupIncomplete);
   const capLabel = fleet.meter.cap === -1
@@ -128,11 +139,23 @@ export function AgentsFleetHero({
       ? "Plan cap reached."
       : "Managed AgentProfile capacity.";
   const addDisabled = fleet.meter.reached || loading;
-  const showPrimaryAction = !setupIncomplete;
+  const showPrimaryAction = !setupIncomplete || [
+    fleet.totals.bypassed,
+    fleet.totals.mismatched,
+    fleet.totals.held,
+    fleet.totals.awaitingRunner,
+    fleet.totals.sequenceRisk,
+    fleet.totals.notVerified,
+  ].some((count) => count > 0);
   const coverageLabel = fleet.totals.coveragePercent == null
-    ? "No coverage"
+    ? fleet.totals.coverageAvailable ? "No activity" : "Not covered"
     : `${fleet.totals.coveragePercent}%`;
   const riskSignalCount = fleet.totals.bypassed + fleet.totals.sequenceRisk;
+  const riskSignalLabel = riskSignalCount > 0
+    ? formatCount(riskSignalCount)
+    : fleet.totals.coverageAvailable
+      ? "0"
+      : "Not covered";
 
   return (
     <>
@@ -183,16 +206,30 @@ export function AgentsFleetHero({
             value: capLabel,
           },
           {
-            helper: "Observed high-risk paths protected by Zroky versus connected bypass feeds.",
+            helper: fleet.totals.coverageAvailable
+              ? `Protected versus bypassed actions in the selected ${windowDays}-day window.`
+              : "No source mutation feed is connected; protected-action observations alone do not prove coverage.",
             label: "Coverage",
-            tone: fleet.totals.bypassed > 0 ? "danger" : fleet.totals.coveragePercent === 100 ? "success" : "warning",
+            tone: !fleet.totals.coverageAvailable
+              ? "warning"
+              : fleet.totals.bypassed > 0
+                ? "danger"
+                : fleet.totals.coveragePercent === 100
+                  ? "success"
+                  : "warning",
             value: coverageLabel,
           },
           {
-            helper: `${formatCount(fleet.totals.bypassed)} bypass / ${formatCount(fleet.totals.sequenceRisk)} sequence-risk.`,
+            helper: fleet.totals.coverageAvailable
+              ? `${formatCount(fleet.totals.bypassed)} bypass / ${formatCount(fleet.totals.sequenceRisk)} sequence-risk in ${windowDays} days.`
+              : "Sequence checks are visible; bypass detection needs a connected source mutation feed.",
             label: "Risk signals",
-            tone: fleet.totals.bypassed > 0 ? "danger" : fleet.totals.sequenceRisk > 0 ? "warning" : "success",
-            value: formatCount(riskSignalCount),
+            tone: fleet.totals.bypassed > 0
+              ? "danger"
+              : fleet.totals.sequenceRisk > 0 || !fleet.totals.coverageAvailable
+                ? "warning"
+                : "success",
+            value: riskSignalLabel,
           },
           {
             helper: "Protected runners with active heartbeat.",

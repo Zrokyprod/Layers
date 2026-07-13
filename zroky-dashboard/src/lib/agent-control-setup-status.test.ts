@@ -174,9 +174,10 @@ describe("getAgentControlSetupStatus", () => {
     );
 
     expect(status.state).toBe("incomplete");
-    expect(status.completedCount).toBe(5);
-    expect(status.progressPct).toBe(83);
-    expect(status.checks.find((check) => check.id === "runner_verifier")?.done).toBe(false);
+    expect(status.completedCount).toBe(6);
+    expect(status.progressPct).toBe(86);
+    expect(status.checks.find((check) => check.id === "runner")?.done).toBe(true);
+    expect(status.checks.find((check) => check.id === "verifier")?.done).toBe(false);
   });
 
   it("marks setup live when saved setup, enforced mandate, and live capture are present", () => {
