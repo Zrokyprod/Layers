@@ -101,10 +101,14 @@ function policyComplete(profile: AgentProfileResponse | null): boolean {
     policy.unknown_contract_decision === "deny");
 }
 
-function runnerVerifierComplete(profile: AgentProfileResponse | null): boolean {
+function runnerComplete(profile: AgentProfileResponse | null): boolean {
   const runner = asRecord(profile?.metadata?.runner_verification);
-  return hasNonEmptyString(runner, "credential_ref") &&
-    hasNonEmptyString(runner, "verifier_connector") &&
+  return hasNonEmptyString(runner, "credential_ref");
+}
+
+function verifierComplete(profile: AgentProfileResponse | null): boolean {
+  const runner = asRecord(profile?.metadata?.runner_verification);
+  return hasNonEmptyString(runner, "verifier_connector") &&
     hasNonEmptyString(runner, "source_of_record");
 }
 
@@ -195,10 +199,16 @@ export function getAgentControlSetupStatus(
       detail: "Unknown contracts must deny and risky actions must hold or deny.",
     },
     {
-      id: "runner_verifier",
-      label: "Select runner and verifier",
-      done: runnerVerifierComplete(primary),
-      detail: "Protected credentials and source-of-record verification must be configured.",
+      id: "runner",
+      label: "Connect protected runner",
+      done: runnerComplete(primary),
+      detail: "Select a protected credential reference for customer-hosted execution.",
+    },
+    {
+      id: "verifier",
+      label: "Connect source verification",
+      done: verifierComplete(primary),
+      detail: "Select the source of record and verifier connector for independent proof.",
     },
   ];
   const completedCount = checks.filter((check) => check.done).length;

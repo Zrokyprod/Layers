@@ -19,11 +19,10 @@ import {
 } from "@/lib/action-lifecycle";
 import type { StatusTone } from "@/lib/action-status";
 import { loadActionsLifecycleFeed } from "@/lib/actions-lifecycle-feed";
+import { dashboardWindowDays } from "@/lib/dashboard-window";
 import { formatCount, timeSince } from "@/lib/format";
 import { useDashboardStore } from "@/lib/store";
 
-const DEFAULT_ACTION_WINDOW_DAYS = 7;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const ACTION_FILTERS = new Set<ActionLifecycleFilter>([
   "all",
   "needs_action",
@@ -33,16 +32,6 @@ const ACTION_FILTERS = new Set<ActionLifecycleFilter>([
   "stopped",
   "bypassed",
 ]);
-
-function actionsWindowDays(dateRange: { from: Date | null; to: Date | null }): number {
-  if (!dateRange.from || !dateRange.to) return DEFAULT_ACTION_WINDOW_DAYS;
-  const fromMs = new Date(dateRange.from).getTime();
-  const toMs = new Date(dateRange.to).getTime();
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
-    return DEFAULT_ACTION_WINDOW_DAYS;
-  }
-  return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
-}
 
 function initialFilter(search: URLSearchParams): ActionLifecycleFilter {
   const requested = search.get("filter") as ActionLifecycleFilter | null;
@@ -215,7 +204,7 @@ export default function ActionsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const dateRange = useDashboardStore((state) => state.dateRange);
-  const windowDays = useMemo(() => actionsWindowDays(dateRange), [dateRange]);
+  const windowDays = useMemo(() => dashboardWindowDays(dateRange), [dateRange]);
 
   const lifecycleQuery = useQuery({
     queryKey: ["actions", "lifecycle-summary", windowDays, 200],

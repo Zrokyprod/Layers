@@ -257,6 +257,55 @@ describe("agent fleet foundation", () => {
     expect(view.totals).toMatchObject({ mismatched: 1, receiptReady: 2 });
   });
 
+  it("does not calculate bypass coverage without a connected source feed", () => {
+    const unavailable = buildFleetView({
+      profiles: [profile()],
+      intents: [intent()],
+      decisions: [decision()],
+      outcomes: [outcome()],
+      bypassCoverageAvailable: false,
+    });
+    expect(unavailable.totals).toMatchObject({
+      coverageAvailable: false,
+      coveragePercent: null,
+    });
+    expect(unavailable.rows[0].coverage).toMatchObject({
+      available: false,
+      label: "Not covered",
+      tone: "warning",
+    });
+    expect(unavailable.rows[0].riskSignals.label).toBe("Bypass feed not connected");
+
+    const covered = buildFleetView({
+      profiles: [profile()],
+      intents: [intent()],
+      decisions: [decision()],
+      outcomes: [outcome()],
+      bypassCoverageAvailable: true,
+    });
+    expect(covered.totals).toMatchObject({
+      coverageAvailable: true,
+      coveragePercent: 100,
+    });
+  });
+
+  it("prioritizes an authorized action waiting for a runner", () => {
+    const view = buildFleetView({
+      profiles: [profile()],
+      intents: [intent({ proof_status: "not_started", receipt_status: "missing" })],
+      decisions: [decision()],
+      outcomes: [],
+      bypassCoverageAvailable: true,
+    });
+
+    expect(view.rows[0]).toMatchObject({
+      status: "awaiting_runner",
+      statusLabel: "Runner unavailable",
+      actionRollup: { awaitingRunner: 1 },
+    });
+    expect(view.totals.awaitingRunner).toBe(1);
+  });
+
   it("does not attach name-matched telemetry to managed profiles without an agent id", () => {
     const view = buildFleetView({
       profiles: [profile()],
@@ -381,6 +430,7 @@ describe("agent fleet foundation", () => {
 
     const inventoryRow = view.rows.find((row) => row.profile?.slug === "inventory-agent");
     expect(inventoryRow?.runnerCount).toBe(2);
+    expect(inventoryRow?.onlineRunnerCount).toBe(1);
     expect(inventoryRow?.attemptSummary).toMatchObject({
       total: 2,
       claimable: 1,

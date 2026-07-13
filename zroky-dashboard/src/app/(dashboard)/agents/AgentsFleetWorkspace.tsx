@@ -30,7 +30,8 @@ function runtimeLabel(row: AgentFleetRow): string {
 }
 
 function coverageValue(row: AgentFleetRow): string {
-  return row.coverage.percent == null ? "No signal" : `${row.coverage.percent}%`;
+  if (!row.coverage.available) return "Not covered";
+  return row.coverage.percent == null ? "No activity" : `${row.coverage.percent}%`;
 }
 
 function reviewCount(row: AgentFleetRow): number {
@@ -38,6 +39,7 @@ function reviewCount(row: AgentFleetRow): number {
     + row.riskSignals.sequenceRisk
     + row.actionRollup.mismatched
     + row.actionRollup.held
+    + row.actionRollup.awaitingRunner
     + row.actionRollup.notVerified
     + row.actionRollup.stalled;
 }
@@ -53,7 +55,8 @@ function AgentFleetList({
 }) {
   const managedCount = rows.filter((row) => row.kind === "profile").length;
   const unmanagedCount = rows.length - managedCount;
-  const needsReview = rows.reduce((sum, row) => sum + reviewCount(row), 0);
+  const needsReview = rows.filter((row) => reviewCount(row) > 0).length;
+  const protectedActions = rows.reduce((sum, row) => sum + row.actionRollup.protectedActions, 0);
 
   return (
     <article className="agents-table-panel agents-fleet-panel" aria-label="Agent fleet">
@@ -67,16 +70,16 @@ function AgentFleetList({
 
       <div className="agents-fleet-summary" aria-label="Agent fleet counters">
         <div>
-          <strong>{formatCount(managedCount)}</strong>
-          <span>Managed</span>
+          <strong>{formatCount(needsReview)}</strong>
+          <span>Need attention</span>
         </div>
         <div>
           <strong>{formatCount(unmanagedCount)}</strong>
           <span>Unmanaged</span>
         </div>
-        <div data-tone={needsReview > 0 ? "warning" : "success"}>
-          <strong>{formatCount(needsReview)}</strong>
-          <span>Needs review</span>
+        <div>
+          <strong>{formatCount(protectedActions)}</strong>
+          <span>Actions in window</span>
         </div>
       </div>
 
@@ -115,8 +118,8 @@ function AgentFleetList({
                 <small>{formatCount(row.riskSignals.bypassed)} bypass / {formatCount(row.riskSignals.sequenceRisk)} sequence</small>
               </span>
               <span>
-                <strong>{formatCount(row.runnerCount)}</strong>
-                <small>observed compatible</small>
+                <strong>{formatCount(row.onlineRunnerCount)} / {formatCount(row.runnerCount)}</strong>
+                <small>online / compatible</small>
               </span>
             </span>
           </button>
@@ -154,8 +157,8 @@ function AgentInspector({
               {row.kind === "telemetry"
                 ? "Promote this observed identity before trusting its production actions."
                 : row.runnerCount > 0
-                  ? `${formatCount(row.runnerCount)} compatible runner${row.runnerCount === 1 ? "" : "s"} observed.`
-                  : "No runner execution has been observed yet."}
+                  ? `${formatCount(row.onlineRunnerCount)} of ${formatCount(row.runnerCount)} compatible runner${row.runnerCount === 1 ? " is" : "s are"} online.`
+                  : "No compatible runner is available for observed actions."}
             </small>
           </div>
 
@@ -197,7 +200,7 @@ function AgentInspector({
                   <strong>{action.title}</strong>
                   <small>{formatDateTime(action.updatedAt ?? action.createdAt)}</small>
                 </div>
-                <StatusPill value={action.status} label={action.statusLabel} tone={action.statusTone} />
+                <StatusPill value={action.stage.id} label={action.stage.label} tone={action.stage.tone} />
               </div>
               <ProofChainStepper steps={action.proofChain} variant="compact" />
               <div className="agents-inspector-control-grid">

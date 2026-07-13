@@ -16,14 +16,19 @@ import type { CaptureHealthResponse } from "@/lib/types";
 import AgentsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  getActionsLifecycleSummary: vi.fn(),
   getCaptureHealth: vi.fn(),
-  listActionIntents: vi.fn(),
   listActionRunners: vi.fn(),
   listAgentProfiles: vi.fn(),
-  listOutcomeReconciliations: vi.fn(),
-  listProjectActionExecutionAttempts: vi.fn(),
-  listRuntimePolicyApprovals: vi.fn(),
-  listUnreceiptedSourceMutations: vi.fn(),
+}));
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: { dateRange: { from: Date; to: Date } }) => T) => selector({
+    dateRange: {
+      from: new Date("2026-06-21T00:00:00Z"),
+      to: new Date("2026-06-28T00:00:00Z"),
+    },
+  }),
 }));
 
 vi.mock("next/link", () => ({
@@ -349,6 +354,7 @@ function mockAgents({
   attempts = [attempt()],
   staleAttempts = [] as ActionExecutionAttemptResponse[],
   mutations = [] as SourceMutationView[],
+  connectedFeeds = 1,
 }: {
   profiles?: AgentProfileResponse[];
   activeCount?: number;
@@ -361,6 +367,7 @@ function mockAgents({
   attempts?: ActionExecutionAttemptResponse[];
   staleAttempts?: ActionExecutionAttemptResponse[];
   mutations?: SourceMutationView[];
+  connectedFeeds?: number;
 } = {}) {
   api.getCaptureHealth.mockResolvedValue(captureHealth());
   api.listAgentProfiles.mockResolvedValue({
@@ -372,28 +379,66 @@ function mockAgents({
     max_active_agents: cap,
     limit_reached: limitReached,
   });
-  api.listActionIntents.mockResolvedValue({
-    items: intents,
-    total_in_page: intents.length,
-    limit: 200,
-    offset: 0,
-  });
-  api.listRuntimePolicyApprovals.mockResolvedValue({
-    items: decisions,
-    total_in_page: decisions.length,
-  });
-  api.listOutcomeReconciliations.mockResolvedValue({
-    items: outcomes,
-    total_in_page: outcomes.length,
+  api.getActionsLifecycleSummary.mockResolvedValue({
+    project_id: "proj_1",
+    window_days: 7,
+    window_start: "2026-06-21T00:00:00Z",
+    generated_at: now,
+    row_limit: 200,
+    source_totals: {
+      intents: intents.length,
+      approvals: decisions.length,
+      outcomes: outcomes.length,
+      mutations: mutations.length,
+      attempts: attempts.length,
+      stale_attempts: staleAttempts.length,
+    },
+    truncated: false,
+    truncated_sources: [],
+    metrics: {
+      controlled_actions: intents.length,
+      held_actions: decisions.filter((item) => item.status === "pending_approval").length,
+      matched_outcomes: outcomes.filter((item) => item.verdict === "matched").length,
+      mismatched_outcomes: outcomes.filter((item) => item.verdict === "mismatched").length,
+      not_verified_outcomes: outcomes.filter((item) => item.verdict === "not_verified").length,
+      bypass_risk: mutations.length,
+    },
+    sources: {
+      lifecycle_summary: true,
+      intents: true,
+      approvals: true,
+      outcomes: true,
+      outcome_summary: true,
+      source_summary: true,
+      mutations: true,
+      attempts: true,
+      stale_attempts: true,
+      billing_usage: true,
+    },
+    data: {
+      intents,
+      approvals: decisions,
+      outcomes,
+      outcome_summary: null,
+      source_summary: {
+        total: mutations.length,
+        matched_receipt: 0,
+        authorized_external: 0,
+        legacy_path: 0,
+        unmanaged_agent_action: 0,
+        policy_bypass: mutations.filter((item) => item.classification === "policy_bypass").length,
+        unknown_actor: 0,
+        unreceipted: mutations.length,
+        connected_feeds: connectedFeeds,
+        successful_pollers: connectedFeeds,
+      },
+      mutations,
+      attempts,
+      stale_attempts: staleAttempts,
+      billing_usage: null,
+    },
   });
   api.listActionRunners.mockResolvedValue({ items: runners });
-  api.listUnreceiptedSourceMutations.mockResolvedValue({
-    items: mutations,
-    total_in_page: mutations.length,
-  });
-  api.listProjectActionExecutionAttempts.mockImplementation((query: { stale?: boolean }) => Promise.resolve({
-    items: query?.stale ? staleAttempts : attempts,
-  }));
 }
 
 describe("AgentsPage", () => {
@@ -411,12 +456,12 @@ describe("AgentsPage", () => {
     expect(screen.getAllByText("Coverage").length).toBeGreaterThan(0);
     expect(screen.getByText("Runners online")).toBeInTheDocument();
 
-    const fleet = screen.getByLabelText("Agent fleet");
+    const fleet = await screen.findByLabelText("Agent fleet");
     expect(within(fleet).getByText("Inventory Agent")).toBeInTheDocument();
     expect(within(fleet).getByText("Matched")).toBeInTheDocument();
     expect(within(fleet).getByText("100% covered")).toBeInTheDocument();
     expect(within(fleet).getByText("No risky drift")).toBeInTheDocument();
-    expect(within(fleet).getByText("observed compatible")).toBeInTheDocument();
+    expect(within(fleet).getByText("online / compatible")).toBeInTheDocument();
 
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getByText("Managed profile")).toBeInTheDocument();
@@ -424,17 +469,9 @@ describe("AgentsPage", () => {
     expect(within(inspector).getByLabelText("Proof chain")).toBeInTheDocument();
     expect(within(inspector).getByText("Archive inventory item")).toBeInTheDocument();
     expect(within(inspector).getByRole("link", { name: "Open evidence" }).getAttribute("href")).toBe("/evidence?action_id=act_inventory");
-    expect(api.listActionIntents).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
-      expect.anything(),
-    );
-    expect(api.listOutcomeReconciliations).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
-      expect.anything(),
-    );
-    expect(api.listProjectActionExecutionAttempts).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
-      expect.anything(),
+    expect(api.getActionsLifecycleSummary).toHaveBeenCalledWith(
+      { days: 7, limit: 200 },
+      expect.any(AbortSignal),
     );
   });
 
@@ -462,13 +499,48 @@ describe("AgentsPage", () => {
 
   it("keeps the hero live when secondary feeds degrade", async () => {
     mockAgents();
-    api.listOutcomeReconciliations.mockRejectedValue(new Error("outcomes unavailable"));
+    api.getActionsLifecycleSummary.mockRejectedValue(new Error("lifecycle unavailable"));
 
     renderAgentsPage();
 
     expect(await screen.findByRole("heading", { name: "Agent control incomplete", level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Agent visibility unavailable", level: 1 })).toBeNull();
-    expect(await screen.findByText(/Proof feed degraded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Action lifecycle degraded/i)).toBeInTheDocument();
+  });
+
+  it("does not claim coverage or zero bypass risk without a connected source feed", async () => {
+    mockAgents({ connectedFeeds: 0 });
+
+    renderAgentsPage();
+
+    const metrics = await screen.findByRole("region", { name: "Agent fleet summary" });
+    expect(within(metrics).getAllByText("Not covered")).toHaveLength(2);
+    expect(within(metrics).getByText(/protected-action observations alone do not prove coverage/i)).toBeInTheDocument();
+
+    const fleet = await screen.findByLabelText("Agent fleet");
+    expect(within(fleet).getAllByText("Not covered").length).toBeGreaterThan(0);
+    expect(within(fleet).getByText("Bypass feed not connected")).toBeInTheDocument();
+  });
+
+  it("makes runner unavailability the primary state for authorized actions", async () => {
+    mockAgents({
+      intents: [intent({ proof_status: "not_started", receipt_status: "missing" })],
+      outcomes: [],
+      attempts: [],
+      runners: [runner({ status: "offline" })],
+    });
+
+    renderAgentsPage();
+
+    expect(await screen.findByRole("heading", { name: "Agents waiting for runner", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Restore runner" }).getAttribute("href")).toBe(
+      "/actions?filter=awaiting_runner",
+    );
+    const fleet = screen.getByLabelText("Agent fleet");
+    expect(within(fleet).getByText("Runner unavailable")).toBeInTheDocument();
+    expect(within(fleet).getByText("0 / 1")).toBeInTheDocument();
+    const inspector = screen.getByLabelText("Selected agent control");
+    expect(within(inspector).getAllByText("Awaiting runner").length).toBeGreaterThan(0);
   });
 
   it("shows unavailable only when the core profile feed fails", async () => {

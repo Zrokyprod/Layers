@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Bot,
   Cpu,
-  ExternalLink,
   RefreshCw,
   Settings,
 } from "lucide-react";
@@ -20,35 +19,28 @@ import {
 } from "@/components/dashboard-scaffold";
 import { ProofChainStepper } from "@/components/proof-chain-stepper";
 import { StatusPill } from "@/components/status-pill";
-import {
-  getToolRegistry,
-  type AgentProfileResponse,
-} from "@/lib/api";
+import { loadActionsLifecycleFeed } from "@/lib/actions-lifecycle-feed";
 import { buildAgentDetail, type AgentDetailView } from "@/lib/agent-detail";
+import { dashboardWindowDays } from "@/lib/dashboard-window";
 import { formatCount, formatDateTime, humanize, timeSince } from "@/lib/format";
 import {
-  useActionIntents,
   useActionRunners,
   useAgentProfile,
-  useOutcomeReconciliations,
-  useProjectActionExecutionAttempts,
-  useRuntimePolicyApprovals,
 } from "@/lib/hooks";
-
-function toolActionType(profile: AgentProfileResponse | null, detail: AgentDetailView | null): string | null {
-  return profile?.allowed_action_types[0] ?? detail?.latestAction?.actionType ?? null;
-}
+import { useDashboardStore } from "@/lib/store";
 
 function AgentDetailHero({
   detail,
   error,
   loading,
   onRefresh,
+  windowDays,
 }: {
   detail: AgentDetailView | null;
   error: boolean;
   loading: boolean;
   onRefresh: () => void;
+  windowDays: number;
 }) {
   const title = error
     ? "Agent detail unavailable"
@@ -58,10 +50,10 @@ function AgentDetailHero({
         ? "Loading agent"
         : "Agent not found";
   const body = detail
-    ? `${detail.config.runtimePath} / ${detail.config.environment || "environment unknown"} / ${formatCount(detail.row.actionRollup.total)} protected actions observed.`
+    ? `${detail.config.runtimePath} / ${detail.config.environment || "environment unknown"} / ${formatCount(detail.row.actionRollup.total)} protected actions in the selected ${windowDays}-day window.`
     : error
       ? "One or more agent detail feeds did not refresh cleanly."
-      : "Fetching managed profile, proof state, runners, and setup tools.";
+      : "Fetching managed profile, proof state, and runner context.";
 
   return (
     <>
@@ -104,10 +96,10 @@ function AgentDetailHero({
               value: formatCount(detail.row.actionRollup.mismatched),
             },
             {
-              helper: "Runners observed for compatible actions.",
-              label: "Observed runners",
-              tone: detail.runners.length > 0 ? "success" : "neutral",
-              value: formatCount(detail.runners.length),
+              helper: "Online runners among registered runners compatible with this agent's observed operations.",
+              label: "Compatible runners",
+              tone: detail.row.onlineRunnerCount > 0 ? "success" : detail.runners.length > 0 ? "warning" : "neutral",
+              value: `${formatCount(detail.row.onlineRunnerCount)} / ${formatCount(detail.runners.length)}`,
             },
             {
               helper: "Signed receipts generated for this managed agent.",
@@ -288,11 +280,11 @@ function ActionHistoryPanel({ detail }: { detail: AgentDetailView }) {
 
 function RunnerPanel({ detail }: { detail: AgentDetailView }) {
   return (
-    <article className="agents-table-panel" aria-label="Agent observed runners and attempts">
+    <article className="agents-table-panel" aria-label="Agent compatible runners and attempts">
       <div className="agents-panel-head">
         <div>
-          <span>Observed runners</span>
-          <strong>{formatCount(detail.runners.length)} compatible from executions</strong>
+          <span>Compatible runners</span>
+          <strong>{formatCount(detail.row.onlineRunnerCount)} online / {formatCount(detail.runners.length)} compatible</strong>
         </div>
       </div>
       <div className="agents-card-list">
@@ -309,8 +301,8 @@ function RunnerPanel({ detail }: { detail: AgentDetailView }) {
           </div>
         )) : (
           <div className="agents-empty-filter">
-            <strong>No observed runner yet</strong>
-            <span>This panel only shows runners tied to this agent action history.</span>
+            <strong>No compatible runner yet</strong>
+            <span>No registered runner matches this agent&apos;s observed environment and operation kinds.</span>
           </div>
         )}
         {detail.attempts.slice(0, 5).map((attempt) => {
@@ -331,178 +323,86 @@ function RunnerPanel({ detail }: { detail: AgentDetailView }) {
   );
 }
 
-function ToolPlanPanel({ detail }: { detail: AgentDetailView }) {
-  const plan = detail.toolPlan;
-  const setupHref = `/agents/setup?agentId=${encodeURIComponent(detail.profile.id)}`;
-  return (
-    <article className="agents-table-panel" aria-label="Agent tool plan">
-      <div className="agents-panel-head">
-        <div>
-          <span>Tool plan</span>
-          <strong>Runtime and verifier setup</strong>
-        </div>
-        <DashboardButtonLink href={setupHref} variant="soft">
-          Open setup
-        </DashboardButtonLink>
-      </div>
-      {plan ? (
-        <>
-          <div className="agents-tool-status-grid">
-            <div data-tone="success">
-              <span>Available</span>
-              <strong>{formatCount(plan.summary.available)}</strong>
-            </div>
-            <div data-tone="warning">
-              <span>Templates</span>
-              <strong>{formatCount(plan.summary.template)}</strong>
-            </div>
-            <div data-tone="neutral">
-              <span>Planned</span>
-              <strong>{formatCount(plan.summary.planned)}</strong>
-            </div>
-          </div>
-          <div className="agents-tool-row-list">
-            {plan.groups.map((group) => (
-              <details key={group.id} className="agents-tool-plan" open={group.id !== "native_tool_families"}>
-                <summary className="agents-tool-plan-head">
-                  <div>
-                    <span>{group.label}</span>
-                    <strong>{formatCount(group.items.length)} options</strong>
-                  </div>
-                </summary>
-                <div className="agents-tool-plan-body">
-                  {group.items.map((item) => {
-                    const content = (
-                      <>
-                        <div className="agents-tool-row-head">
-                          <strong>{item.label}</strong>
-                          <span className="agents-tool-status" data-tone={item.status === "available" ? "success" : item.status === "template" ? "warning" : "neutral"}>
-                            {item.recommended ? "Recommended" : item.status}
-                          </span>
-                        </div>
-                        <p>{item.description}</p>
-                        <div className="agents-tool-row-meta">
-                          <span>{item.requiresCredentials ? "credential required" : "no customer credential"}</span>
-                          <span>{item.capability ?? "capability pending"}</span>
-                        </div>
-                      </>
-                    );
-                    return item.href ? (
-                      <Link key={item.id} href={item.href} className="agents-tool-row">
-                        {content}
-                        <ExternalLink aria-hidden="true" />
-                      </Link>
-                    ) : (
-                      <div key={item.id} className="agents-tool-row is-muted">
-                        {content}
-                      </div>
-                    );
-                  })}
-                </div>
-              </details>
-            ))}
-          </div>
-          {plan.nextSteps.length > 0 ? (
-            <ul className="agents-tool-next-steps">
-              {plan.nextSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ul>
-          ) : null}
-        </>
-      ) : (
-        <div className="agents-empty-filter">
-          <strong>Tool registry unavailable</strong>
-          <span>Refresh after selecting an allowed action type to get runtime and verifier recommendations.</span>
-        </div>
-      )}
-    </article>
-  );
-}
-
 export default function AgentDetailPage() {
   const params = useParams<{ agentId?: string }>();
   const agentId = typeof params.agentId === "string" ? params.agentId : null;
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const windowDays = useMemo(() => dashboardWindowDays(dateRange), [dateRange]);
   const profileQuery = useAgentProfile(agentId);
-  const intentsQuery = useActionIntents({ agent_id: agentId, limit: 200 }, { enabled: Boolean(agentId) });
-  const approvalsQuery = useRuntimePolicyApprovals("all", { enabled: Boolean(agentId) });
-  const outcomesQuery = useOutcomeReconciliations("all", 200, { enabled: Boolean(agentId) });
+  const lifecycleQuery = useQuery({
+    queryKey: ["agents", "detail", agentId, "lifecycle-summary", windowDays, 200],
+    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: windowDays, limit: 200 }, signal),
+    enabled: Boolean(agentId),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
   const runnersQuery = useActionRunners({ enabled: Boolean(agentId) });
-  const attemptsQuery = useProjectActionExecutionAttempts({ limit: 200 }, { enabled: Boolean(agentId) });
-  const staleAttemptsQuery = useProjectActionExecutionAttempts({
-    status: ["planned", "claimed", "dispatched", "running"],
-    stale: true,
-    stale_after_seconds: 600,
-    limit: 200,
-  }, { enabled: Boolean(agentId) });
 
-  const attempts = useMemo(() => attemptsQuery.data?.items ?? [], [attemptsQuery.data?.items]);
+  const lifecycleData = lifecycleQuery.data?.summary.data;
+  const attempts = useMemo(
+    () => lifecycleData?.attempts ?? lifecycleData?.stale_attempts ?? [],
+    [lifecycleData?.attempts, lifecycleData?.stale_attempts],
+  );
   const staleAttemptIds = useMemo(
-    () => (staleAttemptsQuery.data?.items ?? []).map((attempt) => attempt.attempt_id),
-    [staleAttemptsQuery.data?.items],
+    () => (lifecycleData?.stale_attempts ?? []).map((attempt) => attempt.attempt_id),
+    [lifecycleData?.stale_attempts],
   );
   const profile = profileQuery.data ?? null;
-
-  const registryActionType = toolActionType(profile, null);
-  const toolRegistryQuery = useQuery({
-    queryKey: ["agents", "tool-registry", agentId, registryActionType],
-    queryFn: ({ signal }) => getToolRegistry({ agentId, actionType: registryActionType }, signal),
-    enabled: Boolean(agentId && profile),
-    staleTime: 60_000,
-  });
+  const sourceSummary = lifecycleData?.source_summary;
+  const bypassCoverageAvailable = Boolean(
+    (sourceSummary?.connected_feeds ?? 0) > 0 || (sourceSummary?.successful_pollers ?? 0) > 0,
+  );
 
   const detail = useMemo(() => (
     profile ? buildAgentDetail({
       profile,
-      intents: intentsQuery.data?.items ?? [],
-      decisions: approvalsQuery.data?.items ?? [],
-      outcomes: outcomesQuery.data?.items ?? [],
+      intents: lifecycleData?.intents ?? [],
+      decisions: lifecycleData?.approvals ?? [],
+      outcomes: lifecycleData?.outcomes ?? [],
       runners: runnersQuery.data?.items ?? [],
       attempts,
       staleAttemptIds,
-      toolRegistry: toolRegistryQuery.data ?? null,
+      bypassCoverageAvailable,
     }) : null
   ), [
     profile,
-    intentsQuery.data?.items,
-    approvalsQuery.data?.items,
-    outcomesQuery.data?.items,
+    lifecycleData?.intents,
+    lifecycleData?.approvals,
+    lifecycleData?.outcomes,
     runnersQuery.data?.items,
     attempts,
     staleAttemptIds,
-    toolRegistryQuery.data,
+    bypassCoverageAvailable,
   ]);
 
   const loading = profileQuery.isLoading;
   const error = Boolean(
     profileQuery.error ||
-    intentsQuery.error ||
-    approvalsQuery.error ||
-    outcomesQuery.error ||
-    runnersQuery.error ||
-    attemptsQuery.error,
+    lifecycleQuery.error ||
+    runnersQuery.error,
   );
 
   function refresh() {
     profileQuery.refetch();
-    intentsQuery.refetch();
-    approvalsQuery.refetch();
-    outcomesQuery.refetch();
+    lifecycleQuery.refetch();
     runnersQuery.refetch();
-    attemptsQuery.refetch();
-    staleAttemptsQuery.refetch();
-    toolRegistryQuery.refetch();
   }
 
   return (
     <main className="agents-screen agent-detail-screen" aria-label="Agent detail control">
-      <AgentDetailHero detail={detail} error={error} loading={loading} onRefresh={refresh} />
+      <AgentDetailHero
+        detail={detail}
+        error={error}
+        loading={loading}
+        windowDays={windowDays}
+        onRefresh={refresh}
+      />
 
       {loading ? (
         <section className="agents-empty-card">
           <div className="agents-eyebrow">Loading</div>
           <h2>Fetching managed profile.</h2>
-          <p>Profile config, proof state, runner attempts, and tool recommendations are loading.</p>
+          <p>Profile config, proof state, and runner attempts are loading.</p>
         </section>
       ) : null}
 
@@ -526,7 +426,6 @@ export default function AgentDetailPage() {
           <div className="agent-detail-side">
             <ProofPanel detail={detail} />
             <RunnerPanel detail={detail} />
-            <ToolPlanPanel detail={detail} />
           </div>
         </section>
       ) : null}

@@ -45,6 +45,7 @@ export type AgentActionRollup = {
   protectedActions: number;
   bypassed: number;
   held: number;
+  awaitingRunner: number;
   executing: number;
   stalled: number;
   matched: number;
@@ -55,6 +56,7 @@ export type AgentActionRollup = {
 };
 
 export type AgentCoverageSummary = {
+  available: boolean;
   configured: number;
   protectedObserved: number;
   bypassedObserved: number;
@@ -66,6 +68,7 @@ export type AgentCoverageSummary = {
 };
 
 export type AgentRiskSignalSummary = {
+  coverageAvailable: boolean;
   bypassed: number;
   sequenceRisk: number;
   mismatched: number;
@@ -87,6 +90,7 @@ export type AgentFleetRowStatus =
   | "watching"
   | "matched"
   | "approval_pending"
+  | "awaiting_runner"
   | "not_verified"
   | "execution_stalled"
   | "mismatched"
@@ -107,6 +111,7 @@ export type AgentFleetRow = {
   riskSignals: AgentRiskSignalSummary;
   mandate: AgentMandateSummary;
   runnerCount: number;
+  onlineRunnerCount: number;
   runners: ActionRunnerResponse[];
   attemptSummary: AgentFleetAttemptSummary;
   latestActivityAt: string | null;
@@ -118,9 +123,11 @@ export type AgentFleetTotals = {
   managedProfiles: number;
   telemetryOnly: number;
   held: number;
+  awaitingRunner: number;
   mismatched: number;
   notVerified: number;
   receiptReady: number;
+  coverageAvailable: boolean;
   coveragePercent: number | null;
   bypassed: number;
   sequenceRisk: number;
@@ -148,6 +155,7 @@ export type BuildAgentFleetInput = {
   attempts?: ActionExecutionAttemptResponse[];
   staleAttemptIds?: string[];
   mutations?: SourceMutationView[];
+  bypassCoverageAvailable?: boolean;
 };
 
 type MutableFleetRow = Omit<
@@ -160,6 +168,7 @@ type MutableFleetRow = Omit<
   | "riskSignals"
   | "mandate"
   | "runnerCount"
+  | "onlineRunnerCount"
   | "runners"
   | "attemptSummary"
   | "latestActivityAt"
@@ -279,6 +288,7 @@ function actionRollup(rows: ActionLifecycleRow[]): AgentActionRollup {
     protectedActions: 0,
     bypassed: 0,
     held: 0,
+    awaitingRunner: 0,
     executing: 0,
     stalled: 0,
     matched: 0,
@@ -292,7 +302,8 @@ function actionRollup(rows: ActionLifecycleRow[]): AgentActionRollup {
     if (row.kind === "bypass_mutation") rollup.bypassed += 1;
     else rollup.protectedActions += 1;
     if (row.stage.id === "approval" || row.status === "approval_pending") rollup.held += 1;
-    if (["authorized", "execution", "no_runner", "execution_stalled"].includes(row.stage.id)) {
+    if (["awaiting_runner", "no_runner"].includes(row.stage.id)) rollup.awaitingRunner += 1;
+    if (["authorized", "execution", "execution_stalled"].includes(row.stage.id)) {
       rollup.executing += 1;
     }
     if (["no_runner", "execution_stalled"].includes(row.stage.id)) rollup.stalled += 1;
@@ -324,6 +335,9 @@ function rowStatus(rollup: AgentActionRollup, profile: AgentProfileResponse | nu
   if (rollup.held > 0) {
     return { status: "approval_pending", statusLabel: statusLabel("approval_pending"), tone: "warning" };
   }
+  if (rollup.awaitingRunner > 0) {
+    return { status: "awaiting_runner", statusLabel: "Runner unavailable", tone: "warning" };
+  }
   if (rollup.notVerified > 0) {
     return { status: "not_verified", statusLabel: statusLabel("not_verified"), tone: "warning" };
   }
@@ -347,13 +361,16 @@ function hasSequenceRiskSignal(row: ActionLifecycleRow): boolean {
 function coverageSummary(
   rollup: AgentActionRollup,
   profile: AgentProfileResponse | null,
+  coverageAvailable: boolean,
 ): AgentCoverageSummary {
   const configured = profile?.allowed_action_types.length ?? 0;
   const observed = rollup.protectedActions + rollup.bypassed;
-  const percent = observed > 0
+  const percent = coverageAvailable && observed > 0
     ? Math.round((rollup.protectedActions / observed) * 100)
     : null;
-  const tone: StatusTone = rollup.bypassed > 0
+  const tone: StatusTone = !coverageAvailable
+    ? "warning"
+    : rollup.bypassed > 0
     ? "danger"
     : percent === 100
       ? "success"
@@ -362,18 +379,23 @@ function coverageSummary(
         : configured > 0
           ? "neutral"
           : "warning";
-  const label = observed > 0 && percent != null
+  const label = !coverageAvailable
+    ? "Not covered"
+    : observed > 0 && percent != null
     ? `${percent}% covered`
     : configured > 0
       ? `${configured} mandated`
       : "No coverage yet";
-  const detail = observed > 0
+  const detail = !coverageAvailable
+    ? "Connect a source mutation feed to measure actions that bypass Zroky."
+    : observed > 0
     ? `${rollup.protectedActions} protected / ${rollup.bypassed} bypassed observed`
     : configured > 0
       ? `${configured} protected action ${configured === 1 ? "type" : "types"} configured`
       : "No protected action mandate configured";
 
   return {
+    available: coverageAvailable,
     configured,
     protectedObserved: rollup.protectedActions,
     bypassedObserved: rollup.bypassed,
@@ -385,19 +407,30 @@ function coverageSummary(
   };
 }
 
-function riskSignalSummary(rollup: AgentActionRollup, rows: ActionLifecycleRow[]): AgentRiskSignalSummary {
+function riskSignalSummary(
+  rollup: AgentActionRollup,
+  rows: ActionLifecycleRow[],
+  coverageAvailable: boolean,
+): AgentRiskSignalSummary {
   const sequenceRisk = rows.filter(hasSequenceRiskSignal).length;
   const total = rollup.bypassed + sequenceRisk + rollup.mismatched;
   const tone: StatusTone = rollup.bypassed > 0 || rollup.mismatched > 0
     ? "danger"
     : sequenceRisk > 0
       ? "warning"
-      : "success";
+      : coverageAvailable
+        ? "success"
+        : "warning";
   return {
+    coverageAvailable,
     bypassed: rollup.bypassed,
     sequenceRisk,
     mismatched: rollup.mismatched,
-    label: total > 0 ? `${total} signal${total === 1 ? "" : "s"}` : "No risky drift",
+    label: total > 0
+      ? `${total} signal${total === 1 ? "" : "s"}`
+      : coverageAvailable
+        ? "No risky drift"
+        : "Bypass feed not connected",
     tone,
   };
 }
@@ -477,12 +510,13 @@ function finalizeRow(
   runners: ActionRunnerResponse[],
   attempts: ActionExecutionAttemptResponse[],
   staleAttemptIds: Set<string>,
+  bypassCoverageAvailable: boolean,
 ): AgentFleetRow {
   const actionRows = sortActionRows(row.actionRows);
   const rollup = actionRollup(actionRows);
   const status = rowStatus(rollup, row.profile);
-  const coverage = coverageSummary(rollup, row.profile);
-  const riskSignals = riskSignalSummary(rollup, actionRows);
+  const coverage = coverageSummary(rollup, row.profile, bypassCoverageAvailable);
+  const riskSignals = riskSignalSummary(rollup, actionRows, bypassCoverageAvailable);
   const mandate = mandateSummary(row.profile);
   const actionIds = new Set(actionRows.map((actionRow) => actionRow.actionId).filter(Boolean));
   const linkedAttempts = attempts.filter((attempt) => actionIds.has(attempt.action_id));
@@ -501,6 +535,7 @@ function finalizeRow(
     riskSignals,
     mandate,
     runnerCount: linkedRunners.length,
+    onlineRunnerCount: linkedRunners.filter((runner) => normalizeAgentToken(runner.status) === "online").length,
     runners: linkedRunners,
     attemptSummary: attemptSummary(linkedAttempts, staleAttemptIds),
     latestActivityAt: latestTime([
@@ -537,6 +572,7 @@ export function buildFleetView({
   attempts = [],
   staleAttemptIds = [],
   mutations = [],
+  bypassCoverageAvailable = false,
 }: BuildAgentFleetInput): AgentFleetView {
   const activeProfiles = profiles.filter((profile) => profile.is_active);
   const activeCount = profileMeta?.active_count ?? activeProfiles.length;
@@ -595,7 +631,13 @@ export function buildFleetView({
   }
 
   const rows = sortFleetRows(
-    [...rowsById.values()].map((row) => finalizeRow(row, runners, attempts, staleIds)),
+    [...rowsById.values()].map((row) => finalizeRow(
+      row,
+      runners,
+      attempts,
+      staleIds,
+      bypassCoverageAvailable,
+    )),
   );
   const totalObservedCoverage = rows.reduce((sum, row) => sum + row.coverage.observed, 0);
   const totalProtectedObserved = rows.reduce((sum, row) => sum + row.coverage.protectedObserved, 0);
@@ -614,10 +656,12 @@ export function buildFleetView({
       managedProfiles: activeCount,
       telemetryOnly: rows.filter((row) => row.kind === "telemetry").length,
       held: rows.reduce((sum, row) => sum + row.actionRollup.held, 0),
+      awaitingRunner: rows.reduce((sum, row) => sum + row.actionRollup.awaitingRunner, 0),
       mismatched: rows.reduce((sum, row) => sum + row.actionRollup.mismatched, 0),
       notVerified: rows.reduce((sum, row) => sum + row.actionRollup.notVerified, 0),
       receiptReady: rows.reduce((sum, row) => sum + row.actionRollup.receiptsGenerated, 0),
-      coveragePercent: totalObservedCoverage > 0
+      coverageAvailable: bypassCoverageAvailable,
+      coveragePercent: bypassCoverageAvailable && totalObservedCoverage > 0
         ? Math.round((totalProtectedObserved / totalObservedCoverage) * 100)
         : null,
       bypassed: rows.reduce((sum, row) => sum + row.riskSignals.bypassed, 0),
