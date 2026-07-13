@@ -7,6 +7,7 @@ describe("connector setup profiles", () => {
     expect(connectorSetupProfile("github").oneClick).toBe(true);
     expect(connectorSetupProfile("slack").oneClick).toBe(true);
     expect(connectorSetupProfile("zoho_crm").oneClick).toBe(true);
+    expect(connectorSetupProfile("jira_issue").oneClick).toBe(true);
     expect(connectorSetupProfile("stripe_refund").oneClick).toBe(false);
   });
 
@@ -22,7 +23,6 @@ describe("connector setup profiles", () => {
   it("describes the actual credential required by manual native connectors", () => {
     expect(connectorSetupProfile("stripe_refund").requirement).toMatch(/restricted Stripe secret key/i);
     expect(connectorSetupProfile("razorpay_refund").requirement).toMatch(/key ID and key secret/i);
-    expect(connectorSetupProfile("jira_issue").requirement).toMatch(/account email, and API token/i);
     expect(connectorSetupProfile("postgres_read").requirement).toMatch(/read-only database URL/i);
   });
 });

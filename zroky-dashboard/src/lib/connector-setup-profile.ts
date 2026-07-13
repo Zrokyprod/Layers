@@ -113,12 +113,12 @@ const PROFILES: Record<ConnectorInventoryId, ConnectorSetupProfile> = {
     configurable: true,
   },
   jira_issue: {
-    kind: "credential",
-    methodLabel: "API credential",
-    cardLabel: "Email + API token",
-    requirement: "Atlassian site, account email, and API token",
-    detail: "Use an Atlassian API token with read access to Jira or JSM issues.",
-    oneClick: false,
+    kind: "oauth",
+    methodLabel: "One-click OAuth",
+    cardLabel: "One-click OAuth",
+    requirement: "No token to paste",
+    detail: "Authorize read-only Jira access. Atlassian site, email, and API token remain available as a fallback.",
+    oneClick: true,
     configurable: true,
   },
   netsuite_finance: {

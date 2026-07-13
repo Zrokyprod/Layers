@@ -58,6 +58,7 @@ const api = vi.hoisted(() => ({
   saveStripeRefundConnectorConfig: vi.fn(),
   saveZendeskTicketConnectorConfig: vi.fn(),
   saveZohoCrmConnectorConfig: vi.fn(),
+  startJiraIssueOAuth: vi.fn(),
   startZohoCrmOAuth: vi.fn(),
   startSlackInstall: vi.fn(),
   testGenericRestConnector: vi.fn(),
@@ -131,6 +132,7 @@ vi.mock("@/lib/api", async () => {
     saveStripeRefundConnectorConfig: api.saveStripeRefundConnectorConfig,
     saveZendeskTicketConnectorConfig: api.saveZendeskTicketConnectorConfig,
     saveZohoCrmConnectorConfig: api.saveZohoCrmConnectorConfig,
+    startJiraIssueOAuth: api.startJiraIssueOAuth,
     startZohoCrmOAuth: api.startZohoCrmOAuth,
     startSlackInstall: api.startSlackInstall,
     testGenericRestConnector: api.testGenericRestConnector,
@@ -771,6 +773,9 @@ describe("IntegrationsPage", () => {
     api.startZohoCrmOAuth.mockResolvedValue({
       authorization_url: "https://accounts.zoho.com/oauth/v2/auth?state=test",
     });
+    api.startJiraIssueOAuth.mockResolvedValue({
+      authorization_url: "https://auth.atlassian.com/authorize?state=test",
+    });
     api.startSlackInstall.mockResolvedValue({
       authorization_url: "https://slack.com/oauth/v2/authorize?state=test",
     });
@@ -1287,6 +1292,7 @@ describe("IntegrationsPage", () => {
     expect(screen.getByRole("button", { name: /GitHub.*One-click OAuth/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Slack.*One-click OAuth/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Zoho CRM.*OAuth/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Jira.*One-click OAuth/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Stripe.*Restricted key/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
@@ -1669,7 +1675,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("jira_issue");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Jira / JSM access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use manual access" }));
     fireEvent.change(screen.getByLabelText("Atlassian email"), {
       target: { value: "agent@example.com" },
     });
@@ -1793,6 +1799,21 @@ describe("IntegrationsPage", () => {
       expect(assignSpy).toHaveBeenCalledWith(
         "https://accounts.zoho.com/oauth/v2/auth?state=test",
       );
+    } finally {
+      assignSpy.mockRestore();
+    }
+  });
+
+  it("starts Jira OAuth directly from the connector inspector", async () => {
+    const assignSpy = vi.spyOn(externalNavigator, "assign").mockImplementation(() => undefined);
+    try {
+      renderWithConnector("jira_issue");
+
+      await screen.findByRole("heading", { name: "Jira / JSM" });
+      fireEvent.click(screen.getByRole("button", { name: "Connect Jira / JSM" }));
+
+      await waitFor(() => expect(api.startJiraIssueOAuth).toHaveBeenCalledTimes(1));
+      expect(assignSpy).toHaveBeenCalledWith("https://auth.atlassian.com/authorize?state=test");
     } finally {
       assignSpy.mockRestore();
     }

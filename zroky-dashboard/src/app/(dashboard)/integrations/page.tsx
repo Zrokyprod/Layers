@@ -3320,6 +3320,9 @@ function ConnectorInspector({
     : row.kind === "support"
       ? "Workflow delivery"
       : "Read-only proof";
+  const needsOneClickAuthorization = setupProfile.oneClick && (
+    !row.connected || (row.id === "jira_issue" && !jiraStatus?.has_oauth_refresh_token)
+  );
 
   const startOneClickConnect = async () => {
     setConnecting(true);
@@ -3336,6 +3339,11 @@ function ConnectorInspector({
       }
       if (row.id === "zoho_crm") {
         const result = await startZohoCrmOAuth();
+        externalNavigator.assign(result.authorization_url);
+        return;
+      }
+      if (row.id === "jira_issue") {
+        const result = await startJiraIssueOAuth();
         externalNavigator.assign(result.authorization_url);
         return;
       }
@@ -3395,12 +3403,12 @@ function ConnectorInspector({
       </div>
 
       <div className="connector-inspector-actions">
-        {setupProfile.oneClick && !row.connected ? (
+        {needsOneClickAuthorization ? (
           <>
             <DashboardButton loading={connecting} onClick={() => void startOneClickConnect()} variant="primary">
               {connectorPrimaryCtaLabel(row)}
             </DashboardButton>
-            {row.id === "zoho_crm" ? (
+            {row.id === "zoho_crm" || row.id === "jira_issue" ? (
               <DashboardButton onClick={() => setSetupOpen(true)} variant="soft">
                 Use manual access
               </DashboardButton>
