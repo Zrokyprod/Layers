@@ -17,18 +17,15 @@ import {
   type SourceMutationView,
 } from "@/lib/api";
 import { buildFleetView } from "@/lib/agent-fleet";
-import { formatCount, formatPercent, timeSince } from "@/lib/format";
-import { buildDecisionQueue, homeVerdictForQueue, type HomeQueueRow } from "@/lib/home-queue";
+import { formatCount, timeSince } from "@/lib/format";
+import { buildDecisionQueue, homeVerdictForQueue } from "@/lib/home-queue";
 import { useDashboardStore } from "@/lib/store";
 import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
 
-import { ControlLoopStrip, type ControlLoopStats } from "./ControlLoopStrip";
-import { buildControlReadiness, ControlHealthPanel, firstMissingControl } from "./ControlHealthPanel";
-import { DecisionQueue, type HomeQueueFilter } from "./DecisionQueue";
-import { FleetContextLine } from "./FleetContextLine";
+import { AgentHealthTimeline } from "./AgentHealthTimeline";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
+import { HomeActivitySections } from "./HomeActivitySections";
 import { ProofStrip, type ProofMetric } from "./ProofStrip";
-import { SelectedProofRail } from "./SelectedProofRail";
 import { VerdictHero } from "./VerdictHero";
 
 type MissionData = {
@@ -45,7 +42,6 @@ type MissionData = {
   apiKeys: ApiKeyResponse[];
   billingUsage: BillingUsageResponse | null;
   homeSummary: HomeSummaryResponse | null;
-  controlHealth: NonNullable<NonNullable<HomeSummaryResponse["data"]>["control_health"]> | null;
 };
 
 type MissionSource =
@@ -81,7 +77,6 @@ const EMPTY_DATA: MissionData = {
   apiKeys: [],
   billingUsage: null,
   homeSummary: null,
-  controlHealth: null,
 };
 
 const NO_SOURCES_AVAILABLE: MissionAvailability = {
@@ -115,16 +110,15 @@ const ALL_SOURCES_AVAILABLE: MissionAvailability = {
 };
 
 function firstRunSignals(data: MissionData): FirstRunSignals {
-  const setupAgent = data.agentProfiles.find((profile) => profile.metadata?.setup_source === "agent_control_setup_wizard")
-    ?? data.agentProfiles.find((profile) => profile.is_active)
-    ?? data.agentProfiles[0]
-    ?? null;
   const hasProjectKey = data.apiKeys.some((key) => !key.revoked && !key.expired);
   const hasActiveAgent = data.agentProfiles.some((profile) => profile.is_active) || (data.agentProfileMeta?.active_count ?? 0) > 0;
-  const hasInstalledActions = data.agentProfiles.some((profile) => (
-    typeof profile.metadata?.setup_action_pack_id === "string" && profile.metadata.setup_action_pack_id.trim().length > 0
-  ));
+  const hasRunnerConnected = data.actionRunners.length > 0;
+  const hasVerificationConnected = data.outcomes.length > 0 || (data.outcomeSummary?.total ?? 0) > 0 || (data.sourceSummary?.matched_receipt ?? 0) > 0;
   const hasActionIntent = data.intents.length > 0;
+  const hasReceiptGenerated =
+    data.intents.some((intent) => intent.receipt_status === "generated") ||
+    (data.homeSummary?.metrics.receipts_generated ?? 0) > 0 ||
+    (data.sourceSummary?.matched_receipt ?? 0) > 0;
   const hasProofSignal =
     data.approvals.length > 0 ||
     data.outcomes.length > 0 ||
@@ -132,12 +126,13 @@ function firstRunSignals(data: MissionData): FirstRunSignals {
     data.intents.some((intent) => intent.receipt_status === "generated" || ["matched", "mismatched"].includes(intent.proof_status));
 
   return {
-    agentId: setupAgent?.id ?? null,
     hasProjectKey,
     hasActiveAgent,
-    hasInstalledActions,
+    hasRunnerConnected,
+    hasVerificationConnected,
     hasActionIntent,
     hasProofSignal,
+    hasReceiptGenerated,
   };
 }
 
@@ -197,30 +192,44 @@ function homeWindowDays(dateRange: { from: Date | null; to: Date | null }): numb
   return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
 }
 
-function proofMetrics(data: MissionData, availability: MissionAvailability): ProofMetric[] {
+function proofMetrics(data: MissionData, availability: MissionAvailability, protectedAgentCount: number): ProofMetric[] {
   const summary = data.homeSummary;
   if (!availability.homeSummary || !summary) {
     return [
-      unavailableProofMetric("protected-actions", "Protected actions", "Home summary unavailable", "/actions"),
+      availability.agentProfiles
+        ? {
+            id: "agents-protected",
+            label: "Agents protected",
+            value: formatCount(protectedAgentCount),
+            detail: protectedAgentCount > 0 ? "Active managed agents" : "No agents protected yet",
+            href: "/agents",
+            tone: protectedAgentCount > 0 ? "success" : "warning",
+          }
+        : unavailableProofMetric("agents-protected", "Agents protected", "Agent data unavailable", "/agents"),
+      unavailableProofMetric("controlled-actions", "Actions controlled", "Home summary unavailable", "/actions"),
       unavailableProofMetric("pending-approvals", "Pending approvals", "Home summary unavailable", "/approvals"),
-      unavailableProofMetric("verified-outcomes", "System-of-record health", "Home summary unavailable", "/outcomes"),
-      unavailableProofMetric("evidence-pack", "Evidence Pack", "Home summary unavailable", "/evidence"),
+      unavailableProofMetric("proof-generated", "Proof generated", "Home summary unavailable", "/evidence"),
     ];
   }
-  const totalChecks = summary?.metrics.outcome_checks ?? 0;
-  const matchedChecks = summary?.metrics.verified_outcomes ?? 0;
-  const matchedRate = totalChecks > 0 ? (matchedChecks / totalChecks) * 100 : null;
   const receiptsGenerated = summary?.metrics.receipts_generated ?? 0;
   const windowLabel = summary ? `Last ${summary.window_days} days` : "Summary unavailable";
 
   return [
     {
-      id: "protected-actions",
-      label: "Protected actions",
+      id: "agents-protected",
+      label: "Agents protected",
+      value: formatCount(protectedAgentCount),
+      detail: protectedAgentCount > 0 ? "Active managed agents" : "No agents protected yet",
+      href: "/agents",
+      tone: protectedAgentCount > 0 ? "success" : "warning",
+    },
+    {
+      id: "controlled-actions",
+      label: "Actions controlled",
       value: formatCount(summary.metrics.controlled_actions),
       detail: windowLabel,
       href: "/actions",
-      tone: "neutral",
+      tone: summary.metrics.controlled_actions > 0 ? "success" : "neutral",
     },
     {
       id: "pending-approvals",
@@ -231,45 +240,14 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
       tone: summary.metrics.pending_approvals > 0 ? "warning" : "success",
     },
     {
-      id: "verified-outcomes",
-      label: "System-of-record health",
-      value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
-      detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks, ${windowLabel.toLowerCase()}`,
-      href: "/outcomes",
-      tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
-    },
-    {
-      id: "evidence-pack",
-      label: "Evidence Pack",
+      id: "proof-generated",
+      label: "Proof generated",
       value: formatCount(receiptsGenerated),
-      detail: `Signed receipts generated, ${windowLabel.toLowerCase()}`,
+      detail: `Receipts generated, ${windowLabel.toLowerCase()}`,
       href: "/evidence",
       tone: receiptsGenerated > 0 ? "success" : "neutral",
     },
   ];
-}
-
-function controlLoopStats(data: MissionData, availability: MissionAvailability): ControlLoopStats {
-  const summary = data.homeSummary;
-  if (!availability.homeSummary || !summary) {
-    return {
-      actionCount: null,
-      approvalCount: null,
-      verifiedCount: null,
-      receiptCount: null,
-      bypassCount: null,
-      sequenceRiskCount: null,
-    };
-  }
-
-  return {
-    actionCount: summary.metrics.controlled_actions,
-    approvalCount: summary.metrics.pending_approvals,
-    verifiedCount: summary.metrics.verified_outcomes,
-    receiptCount: summary.metrics.receipts_generated,
-    bypassCount: summary.metrics.bypass_mutations,
-    sequenceRiskCount: summary.metrics.sequence_risks,
-  };
 }
 
 function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
@@ -287,7 +265,6 @@ function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
     actionRunners: details?.action_runners ?? [],
     apiKeys: details?.api_keys ?? [],
     billingUsage: details?.billing_usage ?? null,
-    controlHealth: details?.control_health ?? null,
     homeSummary: summary,
   };
 }
@@ -326,8 +303,6 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
-  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<HomeQueueFilter>("all");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -404,54 +379,31 @@ export default function HomePage() {
     data.outcomes,
     data.staleAttempts,
   ]);
-  useEffect(() => {
-    if (rows.length === 0) {
-      setSelectedRowId(null);
-      return;
-    }
-    if (!selectedRowId || !rows.some((row) => row.id === selectedRowId)) {
-      setSelectedRowId(rows[0].id);
-    }
-  }, [rows, selectedRowId]);
 
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
-  const readiness = buildControlReadiness(data.controlHealth, data.homeSummary?.metrics.receipts_generated ?? 0);
-  const missingControl = firstMissingControl(readiness);
-  const verdict = homeVerdictForQueue(rows, homeUnlocked, missingControl ?? undefined);
-  const metrics = proofMetrics(data, availability);
-  const loopStats = controlLoopStats(data, availability);
-  const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0] ?? null;
-  const selectedIntent = selectedRow?.actionId
-    ? data.intents.find((intent) => intent.action_id === selectedRow.actionId) ?? null
-    : null;
+  const verdict = homeVerdictForQueue(rows, homeUnlocked);
+  const protectedAgentCount = data.agentProfileMeta?.active_count ?? data.agentProfiles.filter((profile) => profile.is_active).length;
+  const metrics = proofMetrics(data, availability, protectedAgentCount);
+  const healthWindow = useMemo(() => {
+    const generatedAt = data.homeSummary?.generated_at ?? lastLoadedAt ?? new Date().toISOString();
+    const generatedAtMs = new Date(generatedAt).getTime();
+    const safeGeneratedAtMs = Number.isFinite(generatedAtMs) ? generatedAtMs : Date.now();
+    return {
+      windowDays: data.homeSummary?.window_days ?? summaryDays,
+      windowStart: data.homeSummary?.window_start ?? new Date(safeGeneratedAtMs - summaryDays * MS_PER_DAY).toISOString(),
+      generatedAt: new Date(safeGeneratedAtMs).toISOString(),
+    };
+  }, [data.homeSummary, lastLoadedAt, summaryDays]);
   const initialLoading = isLoading && lastLoadedAt == null;
-  const showFirstRun = !homeUnlocked && !initialLoading;
+  const showFirstRun = !initialLoading && (
+    !signals.hasRunnerConnected ||
+    !signals.hasVerificationConnected ||
+    !signals.hasActionIntent ||
+    !signals.hasReceiptGenerated
+  );
   const updatedLabel = lastLoadedAt ? `Updated ${timeSince(lastLoadedAt)}` : "Loading";
 
-  const liveDashboardBody = (
-    <>
-      <ProofStrip metrics={metrics} loading={initialLoading} />
-      <ControlHealthPanel
-        health={data.controlHealth}
-        receipts={data.homeSummary?.metrics.receipts_generated ?? 0}
-        proof={data.outcomeSummary}
-      />
-      <FleetContextLine fleet={fleet} loading={initialLoading} />
-      <ControlLoopStrip {...loopStats} />
-      <div className="mc-main-grid">
-        <DecisionQueue
-          rows={rows}
-          selectedId={selectedRow?.id ?? null}
-          filter={filter}
-          onFilterChange={setFilter}
-          onSelect={(row: HomeQueueRow) => setSelectedRowId(row.id)}
-          loading={initialLoading}
-        />
-        <SelectedProofRail row={selectedRow} intent={selectedIntent} />
-      </div>
-    </>
-  );
   return (
     <main className="mission-control-page">
       <div className="mc-shell">
@@ -465,13 +417,26 @@ export default function HomePage() {
           onRefresh={() => void load()}
         />
 
-        {showFirstRun ? (
-          <section className="mc-locked-home" aria-label="Home setup required">
-            <FirstRunPanel signals={signals} />
-          </section>
-        ) : (
-          liveDashboardBody
-        )}
+        <ProofStrip metrics={metrics} loading={initialLoading} />
+        <AgentHealthTimeline
+          loading={initialLoading}
+          windowDays={healthWindow.windowDays}
+          windowStart={healthWindow.windowStart}
+          generatedAt={healthWindow.generatedAt}
+          intents={data.intents}
+          approvals={data.approvals}
+          outcomes={data.outcomes}
+          mutations={data.mutations}
+          staleAttempts={data.staleAttempts}
+          fleet={fleet}
+        />
+        {showFirstRun ? <FirstRunPanel signals={signals} /> : null}
+        <HomeActivitySections
+          intents={data.intents}
+          approvals={data.approvals}
+          outcomes={data.outcomes}
+          loading={initialLoading}
+        />
 
       </div>
     </main>

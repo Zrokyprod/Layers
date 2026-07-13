@@ -4,67 +4,58 @@ import Link from "next/link";
 import {
   ArrowRight,
   CheckCircle2,
-  KeyRound,
+  FileSearch,
   FileCheck2,
-  PackageCheck,
+  RadioTower,
   ShieldCheck,
-  UserRoundCheck,
 } from "lucide-react";
 
 import { DashboardButtonLink } from "@/components/dashboard-button";
 
 export type FirstRunSignals = {
-  agentId: string | null;
   hasProjectKey: boolean;
   hasActiveAgent: boolean;
-  hasInstalledActions: boolean;
+  hasRunnerConnected: boolean;
+  hasVerificationConnected: boolean;
   hasActionIntent: boolean;
   hasProofSignal: boolean;
+  hasReceiptGenerated: boolean;
 };
 
 const STEPS = [
   {
-    id: "key",
-    label: "Create project key",
-    detail: "Create the scoped credential your agent runtime will use.",
-    completeDetail: "An active project key is ready.",
-    cta: "Start agent setup",
-    href: "/agents/setup?intent=protect-agent&source=home",
-    icon: KeyRound,
+    id: "runner",
+    label: "Connect runner",
+    detail: "Connect the execution path that will run approved actions.",
+    completeDetail: "Runner connected.",
+    cta: "Connect runner",
+    href: "/agents/setup?intent=connect-runner&source=home",
+    icon: RadioTower,
   },
   {
-    id: "agent",
-    label: "Connect agent",
-    detail: "Name one runtime and apply safe fail-closed defaults.",
-    completeDetail: "An active agent profile is connected.",
-    cta: "Connect agent",
-    href: "/agents/setup?intent=protect-agent&source=home",
-    icon: UserRoundCheck,
-  },
-  {
-    id: "actions",
-    label: "Install protected actions",
-    detail: "Choose the exact workflow actions Zroky should govern.",
-    completeDetail: "A protected action pack is installed.",
-    cta: "Choose actions",
-    href: "/agents/setup?intent=protect-agent&source=home",
-    icon: PackageCheck,
+    id: "verification",
+    label: "Connect source-of-record",
+    detail: "Connect the system Zroky checks after an action runs.",
+    completeDetail: "Verification connected.",
+    cta: "Connect verification",
+    href: "/integrations",
+    icon: FileSearch,
   },
   {
     id: "action",
-    label: "Submit action",
-    detail: "Create an action intent with a contract and digest.",
-    completeDetail: "First action intent reached the control plane.",
-    cta: "Send first action",
+    label: "Run first protected action",
+    detail: "Send one real action through policy before execution.",
+    completeDetail: "First action reached Zroky.",
+    cta: "Run first action",
     href: "/agents/setup",
     icon: ShieldCheck,
   },
   {
-    id: "proof",
-    label: "Approve and prove",
-    detail: "Use dashboard or Slack approval, then inspect the receipt.",
-    completeDetail: "Approval, receipt, or outcome proof is available.",
-    cta: "Review proof",
+    id: "receipt",
+    label: "Generate first receipt",
+    detail: "Verify the action and create the first signed receipt.",
+    completeDetail: "Receipt generated.",
+    cta: "Review receipt",
     href: "/evidence",
     icon: FileCheck2,
   },
@@ -73,34 +64,33 @@ const STEPS = [
 type StepState = "done" | "current" | "locked";
 
 function stepState(stepId: (typeof STEPS)[number]["id"], signals: FirstRunSignals): StepState {
-  if (stepId === "key") {
-    return signals.hasProjectKey ? "done" : "current";
+  if (stepId === "runner") {
+    return signals.hasRunnerConnected ? "done" : "current";
   }
-  if (stepId === "agent") {
-    if (signals.hasActiveAgent) return "done";
-    return signals.hasProjectKey ? "current" : "locked";
-  }
-  if (stepId === "actions") {
-    if (signals.hasInstalledActions) return "done";
-    return signals.hasActiveAgent ? "current" : "locked";
+  if (stepId === "verification") {
+    if (signals.hasVerificationConnected) return "done";
+    return signals.hasRunnerConnected ? "current" : "locked";
   }
   if (stepId === "action") {
     if (signals.hasActionIntent) return "done";
-    return signals.hasInstalledActions ? "current" : "locked";
+    return signals.hasRunnerConnected && signals.hasVerificationConnected ? "current" : "locked";
   }
-  if (signals.hasProofSignal) return "done";
+  if (signals.hasReceiptGenerated) return "done";
   return signals.hasActionIntent ? "current" : "locked";
 }
 
-function stepDetail(step: (typeof STEPS)[number], state: StepState): string {
+function stepDetail(step: (typeof STEPS)[number], state: StepState, signals: FirstRunSignals): string {
   if (state === "done") {
     return step.completeDetail;
   }
-  if (step.id === "action" && state === "current") {
-    return "Run the generated SDK example to submit the first intent.";
+  if (step.id === "action" && state === "current" && signals.hasActiveAgent) {
+    return "Agent is protected. Run the first controlled action.";
   }
-  if (step.id === "proof" && state === "current") {
-    return "Review the decision and inspect the signed evidence.";
+  if (step.id === "action" && state === "current") {
+    return "Connect one agent, then run the first action.";
+  }
+  if (step.id === "receipt" && state === "current") {
+    return "Verify the outcome and generate the receipt.";
   }
   return step.detail;
 }
@@ -118,24 +108,16 @@ function stepHint(stepId: (typeof STEPS)[number]["id"], state: StepState): strin
   if (state === "locked") {
     return "Unlocks after the previous step";
   }
-  if (stepId === "key") {
-    return "Create or reuse one active project key.";
+  if (stepId === "runner") {
+    return "Runner connected";
   }
-  if (stepId === "agent") {
-    return "Create one enforced agent profile.";
-  }
-  if (stepId === "actions") {
-    return "Install one launch-ready action pack.";
+  if (stepId === "verification") {
+    return "Verification connected";
   }
   if (stepId === "action") {
-    return "Run one protected action from your agent runtime.";
+    return "Action controlled";
   }
-  return "Approve the first hold and inspect the signed receipt.";
-}
-
-function stepHref(step: (typeof STEPS)[number], signals: FirstRunSignals): string {
-  if (step.id === "key" || !signals.agentId) return step.href;
-  return `/agents/setup?agentId=${encodeURIComponent(signals.agentId)}&source=home`;
+  return "Receipt generated";
 }
 
 export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
@@ -148,14 +130,13 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
       <div className="mc-first-run-copy">
         <div className="mc-first-run-status">
           <CheckCircle2 aria-hidden="true" size={15} />
-          <span>Home unlocks after the first protected action signal</span>
+          <span>Setup checklist</span>
         </div>
         <div>
           <p className="mc-eyebrow">First run</p>
-          <h2>Protect your first agent action</h2>
+          <h2>Get Home reporting real activity</h2>
           <p className="mc-muted">
-            Finish this path once. The live Home dashboard behind this panel opens when Zroky sees the first action
-            intent, approval, receipt, or verified outcome.
+            Connect the runtime and verification path, then run one protected action and generate its receipt.
           </p>
         </div>
       </div>
@@ -177,18 +158,18 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
                 </div>
                 <div className="mc-step-copy">
                   <strong>{step.label}</strong>
-                  <span>{stepDetail(step, state)}</span>
+                  <span>{stepDetail(step, state, signals)}</span>
                 </div>
                 <div className="mc-step-foot">
                   <span className="mc-step-hint">{stepHint(step.id, state)}</span>
                   {state === "current" ? (
-                    <DashboardButtonLink href={stepHref(step, signals)} icon={<ArrowRight />} iconPosition="right" size="sm" variant="primary">
+                    <DashboardButtonLink href={step.href} icon={<ArrowRight />} iconPosition="right" size="sm" variant="primary">
                       {step.cta}
                     </DashboardButtonLink>
                   ) : null}
-                  {step.id === "key" && state === "current" ? (
-                    <Link className="mc-step-text-link" href="/settings/keys">
-                      Project keys
+                  {step.id === "runner" && state === "current" ? (
+                    <Link className="mc-step-text-link" href="/agents">
+                      Agents protected
                     </Link>
                   ) : null}
                 </div>
