@@ -1,0 +1,227 @@
+import type { ConnectorInventoryId } from "@/lib/connector-inventory";
+
+export type ConnectorSetupKind = "oauth" | "credential" | "manual" | "planned";
+
+export type ConnectorSetupProfile = {
+  kind: ConnectorSetupKind;
+  methodLabel: string;
+  cardLabel: string;
+  requirement: string;
+  detail: string;
+  oneClick: boolean;
+  configurable: boolean;
+};
+
+export const CONFIGURABLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
+  "mcp_upstream",
+  "generic_rest",
+  "hubspot_crm",
+  "salesforce_crm",
+  "zoho_crm",
+  "zendesk_ticket",
+  "jira_issue",
+  "stripe_refund",
+  "stripe_payment",
+  "razorpay_refund",
+  "netsuite_finance",
+  "shopify_admin",
+  "postgres_read",
+  "github",
+  "slack",
+]);
+
+const PROFILES: Record<ConnectorInventoryId, ConnectorSetupProfile> = {
+  github: {
+    kind: "oauth",
+    methodLabel: "One-click OAuth",
+    cardLabel: "One-click OAuth",
+    requirement: "No API key",
+    detail: "Authorize repository access in GitHub. Zroky stores the encrypted OAuth grant.",
+    oneClick: true,
+    configurable: true,
+  },
+  slack: {
+    kind: "oauth",
+    methodLabel: "One-click OAuth",
+    cardLabel: "One-click OAuth",
+    requirement: "No token to paste",
+    detail: "Authorize a Slack workspace, then choose the operating channel.",
+    oneClick: true,
+    configurable: true,
+  },
+  zoho_crm: {
+    kind: "oauth",
+    methodLabel: "One-click OAuth",
+    cardLabel: "OAuth",
+    requirement: "No token to paste",
+    detail: "Authorize read-only Zoho CRM access. A manual access-token fallback remains available.",
+    oneClick: true,
+    configurable: true,
+  },
+  stripe_refund: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Restricted secret key",
+    requirement: "Restricted Stripe secret key",
+    detail: "Create a restricted key with read access to refunds and payment data used for proof.",
+    oneClick: false,
+    configurable: true,
+  },
+  stripe_payment: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Restricted secret key",
+    requirement: "Restricted Stripe secret key",
+    detail: "Create a restricted key with read access to PaymentIntents and related payment data.",
+    oneClick: false,
+    configurable: true,
+  },
+  razorpay_refund: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Key ID + secret",
+    requirement: "Razorpay key ID and key secret",
+    detail: "Use a key pair scoped to read refund and payment records.",
+    oneClick: false,
+    configurable: true,
+  },
+  hubspot_crm: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Private app token",
+    requirement: "HubSpot private app token",
+    detail: "Create a private app token with read-only CRM object scopes. Native OAuth is not enabled yet.",
+    oneClick: false,
+    configurable: true,
+  },
+  salesforce_crm: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Instance URL + token",
+    requirement: "Salesforce instance URL and access token",
+    detail: "Use a read-scoped OAuth access token. Automatic OAuth refresh is not enabled yet.",
+    oneClick: false,
+    configurable: true,
+  },
+  zendesk_ticket: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Email + API token",
+    requirement: "Zendesk URL, account email, and API token",
+    detail: "An OAuth bearer token also works, but one-click Zendesk OAuth is not enabled yet.",
+    oneClick: false,
+    configurable: true,
+  },
+  jira_issue: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Email + API token",
+    requirement: "Atlassian site, account email, and API token",
+    detail: "Use an Atlassian API token with read access to Jira or JSM issues.",
+    oneClick: false,
+    configurable: true,
+  },
+  netsuite_finance: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "SuiteTalk URL + token",
+    requirement: "NetSuite SuiteTalk URL and bearer token",
+    detail: "A working read token is required. Native TBA/OAuth setup is not enabled yet.",
+    oneClick: false,
+    configurable: true,
+  },
+  shopify_admin: {
+    kind: "credential",
+    methodLabel: "API credential",
+    cardLabel: "Admin API token",
+    requirement: "Shop URL and Admin API access token",
+    detail: "Use a custom app token with read-only order and commerce scopes.",
+    oneClick: false,
+    configurable: true,
+  },
+  generic_rest: {
+    kind: "manual",
+    methodLabel: "Manual setup",
+    cardLabel: "Endpoint + optional token",
+    requirement: "Base URL, record path, and optional bearer token",
+    detail: "Use this for internal APIs or SaaS systems without a native connector.",
+    oneClick: false,
+    configurable: true,
+  },
+  postgres_read: {
+    kind: "manual",
+    methodLabel: "Manual setup",
+    cardLabel: "Read-only DB URL + query",
+    requirement: "Read-only database URL and parameterized SELECT query",
+    detail: "Use a dedicated database role that cannot insert, update, delete, or alter data.",
+    oneClick: false,
+    configurable: true,
+  },
+  mcp_upstream: {
+    kind: "manual",
+    methodLabel: "Manual setup",
+    cardLabel: "Endpoint + credential ref",
+    requirement: "HTTPS MCP endpoint, tool allowlist, and optional credential reference",
+    detail: "Secrets stay in the managed credential store; the form accepts only a reference.",
+    oneClick: false,
+    configurable: true,
+  },
+  intercom: {
+    kind: "planned",
+    methodLabel: "Coming soon",
+    cardLabel: "Native setup unavailable",
+    requirement: "Use Custom REST today",
+    detail: "Native Intercom credential setup is not enabled.",
+    oneClick: false,
+    configurable: false,
+  },
+  freshdesk_ticket: {
+    kind: "planned",
+    methodLabel: "Coming soon",
+    cardLabel: "Native setup unavailable",
+    requirement: "Use Custom REST today",
+    detail: "Native Freshdesk credential setup is not enabled.",
+    oneClick: false,
+    configurable: false,
+  },
+  quickbooks_ledger: {
+    kind: "planned",
+    methodLabel: "Coming soon",
+    cardLabel: "Native setup unavailable",
+    requirement: "Use Custom REST today",
+    detail: "Native QuickBooks OAuth setup is not enabled.",
+    oneClick: false,
+    configurable: false,
+  },
+  generic_finance: {
+    kind: "manual",
+    methodLabel: "Manual setup",
+    cardLabel: "Use Custom REST",
+    requirement: "Configure the Custom REST connector",
+    detail: "This catalog alias uses the same Custom REST connection path.",
+    oneClick: false,
+    configurable: false,
+  },
+  ledger_template: {
+    kind: "manual",
+    methodLabel: "Manual setup",
+    cardLabel: "Use Custom REST",
+    requirement: "Configure the Custom REST connector",
+    detail: "This template duplicates the general REST verifier setup path.",
+    oneClick: false,
+    configurable: false,
+  },
+  customer_template: {
+    kind: "manual",
+    methodLabel: "Manual setup",
+    cardLabel: "Use Custom REST",
+    requirement: "Configure the Custom REST connector",
+    detail: "This template duplicates the general REST verifier setup path.",
+    oneClick: false,
+    configurable: false,
+  },
+};
+
+export function connectorSetupProfile(id: ConnectorInventoryId): ConnectorSetupProfile {
+  return PROFILES[id];
+}
