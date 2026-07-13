@@ -18,11 +18,11 @@ export function KillSwitchPanel({
   setArmed,
 }: KillSwitchPanelProps) {
   return (
-    <section className={`approval-v2-kill-panel${armed ? " is-armed" : ""}`} aria-label="Runtime kill switch">
+    <section className={`approval-v2-kill-panel${armed ? " is-armed" : ""}`} aria-label="Runtime safety hold">
       <div>
-        <span className="approval-v2-eyebrow">Runtime kill switch</span>
-        <strong>{armed ? "Confirm global runtime hold" : "Fail closed when proof is unsafe"}</strong>
-        <p>Pause high-risk runtime approvals when evidence, connector, or mandate boundaries are unreliable.</p>
+        <span className="approval-v2-eyebrow">Emergency control</span>
+        <strong>{armed ? "Confirm runtime safety hold" : "Runtime safety hold"}</strong>
+        <p>Use this only when approval evidence, connectors, or policy boundaries look unreliable.</p>
       </div>
       {armed ? (
         <div className="approval-v2-kill-actions">
@@ -30,12 +30,12 @@ export function KillSwitchPanel({
             Cancel
           </DashboardButton>
           <DashboardButton icon={<ShieldAlert />} onClick={onConfirm} disabled={isPending} variant="primary">
-            Confirm kill switch
+            Confirm safety hold
           </DashboardButton>
         </div>
       ) : (
         <DashboardButton icon={<ShieldAlert />} onClick={() => setArmed(true)} disabled={isPending} variant="soft">
-          Arm kill switch confirmation
+          Arm safety hold
         </DashboardButton>
       )}
     </section>

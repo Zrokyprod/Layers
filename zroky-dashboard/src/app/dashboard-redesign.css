@@ -23137,6 +23137,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-intent-card p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-console p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel p,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-audit p {
   margin: 0;
@@ -23376,6 +23377,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-console,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-mechanism,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence {
   display: grid;
@@ -23395,13 +23397,40 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 16px;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason {
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: start;
   background: var(--mc-card);
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason > span {
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary {
+  border-left-width: 4px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 17px;
+  color: var(--mc-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary li::marker {
+  color: var(--mc-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason > span,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-badges > span {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -23417,7 +23446,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason strong,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview strong,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary strong,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-action-preview strong,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain strong {
   display: block;
   color: var(--mc-text);
@@ -23453,7 +23483,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-weight: 600;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview {
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-action-preview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 12px;
@@ -23464,7 +23494,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   background: var(--mc-soft);
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview p {
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-action-preview p {
   grid-column: 1 / -1;
 }
 
@@ -23751,6 +23781,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 12px 14px;
+  background: var(--mc-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel strong {
+  font-size: 15px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel.is-armed {
@@ -23828,8 +23864,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason,
-  .app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview {
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary,
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-action-preview {
     grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-badges {
+    justify-content: flex-start;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-side {

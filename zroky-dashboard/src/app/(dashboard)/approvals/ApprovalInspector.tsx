@@ -40,7 +40,7 @@ const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: "decision", label: "Decision" },
   { id: "evidence", label: "Evidence" },
   { id: "audit", label: "Audit" },
-  { id: "raw", label: "Raw" },
+  { id: "raw", label: "Developer" },
 ];
 
 const REASON_CHIPS = [
@@ -94,22 +94,40 @@ function ApproverChain({ row }: { row: ApprovalQueueRow }) {
           ))}
         </ol>
       ) : (
-        <p>No approvers recorded yet.</p>
+        <p>No approver identity captured yet. Check the policy route before releasing a similar action.</p>
       )}
     </section>
   );
 }
 
-function HoldReasonCard({ row }: { row: ApprovalQueueRow }) {
+function riskReasons(row: ApprovalQueueRow): string[] {
+  const reasons = [row.holdReason.detail, ...row.decision.reasons]
+    .map((reason) => humanize(reason, "Runtime policy matched this action."))
+    .filter((reason) => reason !== "-");
+  return [...new Set(reasons)].slice(0, 3);
+}
+
+function RiskSummary({ row }: { row: ApprovalQueueRow }) {
+  const reasons = riskReasons(row);
   return (
-    <section className={`approval-v2-hold-reason approval-v2-tone-${row.holdReason.tone}`}>
+    <section className={`approval-v2-risk-summary approval-v2-tone-${row.holdReason.tone}`}>
       <div>
-        <span className="approval-v2-eyebrow">Held because</span>
+        <span className="approval-v2-eyebrow">{row.status === "pending_approval" ? "Why review is needed" : "Why this was stopped"}</span>
         <strong>{row.holdReason.title}</strong>
-        <p>{row.holdReason.detail}</p>
+        {reasons.length > 0 ? (
+          <ul>
+            {reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>Runtime policy matched this action before execution.</p>
+        )}
       </div>
-      {row.isSequenceRisk ? <span>Sequence</span> : null}
-      {row.isExpiringSoon ? <span>Expiring</span> : null}
+      <div className="approval-v2-risk-badges">
+        {row.isSequenceRisk ? <span>Pattern risk</span> : null}
+        {row.isExpiringSoon ? <span>Expiring</span> : null}
+      </div>
     </section>
   );
 }
@@ -254,8 +272,8 @@ export function ApprovalInspector({
   if (!row) {
     return (
       <section className="approval-v2-empty-state approval-v2-inspector-empty" aria-label="Selected action control">
-        <h2>Select a held action</h2>
-        <p>High-risk agent actions appear here before commit when policy requires human review.</p>
+        <h2>Select an action</h2>
+        <p>Pending approvals and resolved decisions appear here with policy reason, evidence, and audit history.</p>
       </section>
     );
   }
@@ -265,6 +283,10 @@ export function ApprovalInspector({
   const required = requiredApprovals(row);
   const recorded = recordedApprovals(row);
   const approvalCopy = required > 1 ? `${recorded}/${required} approvals recorded` : row.approvalProgress;
+  const actionPreviewLabel = canResolve ? "Approval would release" : row.status === "blocked" || row.status === "rejected" ? "Action stopped" : "Action reviewed";
+  const actionPreviewCopy = canResolve
+    ? "Dashboard and Slack approvals resolve the same decision when Slack is connected."
+    : "This decision is locked. Review evidence and audit before changing policy for future actions.";
   const actionFacts: Fact[] = [
     { label: "Action ID", value: row.actionId, mono: true },
     { label: "Decision ID", value: row.decisionId, mono: true },
@@ -295,7 +317,7 @@ export function ApprovalInspector({
     <section className="approval-v2-inspector-panel" aria-label="Selected action control">
       <header className="approval-v2-inspector-header">
         <div>
-          <span className="approval-v2-eyebrow">Selected hold</span>
+          <span className="approval-v2-eyebrow">{canResolve ? "Selected approval" : "Resolved decision"}</span>
           <h2>{row.title}</h2>
           <p>
             {row.agentName} / {row.kind === "guard_only_hold" ? "Guard-only decision" : row.actionType}
@@ -304,29 +326,33 @@ export function ApprovalInspector({
         <StatusPill value={row.status} label={row.statusLabel} tone={row.statusTone} />
       </header>
 
+      <RiskSummary row={row} />
+
       <section className="approval-v2-console" aria-label="Approve or reject action">
         <div>
           <span className="approval-v2-eyebrow">Decision console</span>
-          <strong>{canResolve ? "Approve or reject this exact held action" : "Decision already resolved"}</strong>
+          <strong>{canResolve ? "Approve or reject this exact action" : "Decision preserved for audit"}</strong>
           <p>
             {canResolve
-              ? "A reason is required. Approval is bound to this decision and the backend advances linked action-intents."
-              : "Resolved decisions remain visible here for audit and evidence review."}
+              ? "A reason is required. Approval is bound to this decision and advances the linked action."
+              : "Resolved decisions cannot be changed here; they remain visible for evidence and review."}
           </p>
         </div>
         <div className="approval-v2-resolution">
           <span>{approvalCopy}</span>
           <StatusPill value={row.status} label={row.statusLabel} tone={row.statusTone} />
         </div>
-        <div className="approval-v2-approve-preview">
+        <div className="approval-v2-action-preview">
           <div>
-            <span className="approval-v2-eyebrow">Approve releases</span>
+            <span className="approval-v2-eyebrow">{actionPreviewLabel}</span>
             <strong>{row.approvalAction}</strong>
           </div>
-          <DashboardButtonLink href="/integrations/slack" icon={<MessageSquare />} variant="soft">
-            Slack route
-          </DashboardButtonLink>
-          <p>Dashboard and Slack approvals resolve the same decision when Slack is connected.</p>
+          {canResolve ? (
+            <DashboardButtonLink href="/integrations/slack" icon={<MessageSquare />} variant="soft">
+              Slack route
+            </DashboardButtonLink>
+          ) : null}
+          <p>{actionPreviewCopy}</p>
         </div>
         {canResolve ? (
           <div className="approval-v2-actions">
@@ -382,7 +408,6 @@ export function ApprovalInspector({
         <div className="approval-v2-tab-panel" role="tabpanel">
           {activeTab === "decision" ? (
             <div className="approval-v2-tab-stack">
-              <HoldReasonCard row={row} />
               <ApproverChain row={row} />
               <section className={`approval-v2-intent-card approval-v2-tone-${row.statusTone}`}>
                 <div>

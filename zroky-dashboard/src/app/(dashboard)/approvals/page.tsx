@@ -290,8 +290,6 @@ export default function RuntimeApprovalsPage() {
         </section>
       ) : null}
 
-      {killSwitchPanel}
-
       {loading ? (
         <section className="approval-v2-empty-state">
           <h2>Loading runtime approvals</h2>
@@ -299,8 +297,8 @@ export default function RuntimeApprovalsPage() {
         </section>
       ) : rows.length === 0 ? (
         <section className="approval-v2-empty-state">
-          <h2>No held actions in this view</h2>
-          <p>When an agent attempts a high-risk action, Zroky will hold it here before commit.</p>
+          <h2>No approval decisions yet</h2>
+          <p>When an agent attempts a high-risk action, Zroky will show the approval or blocked decision here.</p>
         </section>
       ) : (
         <>
@@ -334,6 +332,8 @@ export default function RuntimeApprovalsPage() {
           />
         </>
       )}
+
+      {killSwitchPanel}
     </main>
   );
 }
