@@ -3,25 +3,21 @@
 import { ArrowRight } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import type { RuntimePolicyDecisionStatus } from "@/lib/api";
-import type { ApprovalQueueRow } from "@/lib/approval-queue";
+import type { ApprovalQueueFilter, ApprovalQueueRow } from "@/lib/approval-queue";
 import { formatDateTime, timeUntil } from "@/lib/format";
 
-export type ApprovalFilter = RuntimePolicyDecisionStatus | "all";
-
-const FILTERS: Array<{ id: ApprovalFilter; label: string }> = [
-  { id: "pending_approval", label: "Pending" },
-  { id: "blocked", label: "Blocked" },
+const FILTERS: Array<{ id: ApprovalQueueFilter; label: string }> = [
+  { id: "pending", label: "Pending" },
+  { id: "stopped", label: "Stopped" },
   { id: "approved", label: "Approved" },
-  { id: "rejected", label: "Rejected" },
   { id: "all", label: "All" },
 ];
 
 type ApprovalQueueProps = {
   rows: ApprovalQueueRow[];
   selectedId: string | null;
-  filter: ApprovalFilter;
-  onFilterChange: (filter: ApprovalFilter) => void;
+  filter: ApprovalQueueFilter;
+  onFilterChange: (filter: ApprovalQueueFilter) => void;
   onSelect: (id: string) => void;
 };
 
@@ -32,7 +28,7 @@ export function ApprovalQueue({
   rows,
   selectedId,
 }: ApprovalQueueProps) {
-  const isApprovalQueue = filter === "pending_approval";
+  const isApprovalQueue = filter === "pending";
   const panelLabel = isApprovalQueue ? "Approval queue" : "Decision history";
   const countLabel = isApprovalQueue
     ? `${rows.length} pending action${rows.length === 1 ? "" : "s"}`
@@ -54,6 +50,7 @@ export function ApprovalQueue({
             key={item.id}
             type="button"
             className={`approval-v2-filter-chip${filter === item.id ? " is-active" : ""}`}
+            aria-pressed={filter === item.id}
             onClick={() => onFilterChange(item.id)}
           >
             {item.label}
@@ -77,6 +74,7 @@ export function ApprovalQueue({
               key={row.id}
               type="button"
               className={`approval-v2-queue-row approval-v2-tone-${row.priority.tone}${row.id === selectedId ? " is-selected" : ""}`}
+              aria-pressed={row.id === selectedId}
               onClick={() => onSelect(row.id)}
             >
               <span className="approval-v2-priority">{row.priority.label}</span>
@@ -90,7 +88,8 @@ export function ApprovalQueue({
                   {row.agentName} / {row.actionType}
                 </small>
                 <em>
-                  {row.priority.detail} / {row.impactLabel} / {timeUntil(row.expiresAt)}
+                  {row.priority.detail} / {row.impactLabel}
+                  {row.status === "pending_approval" ? ` / ${timeUntil(row.expiresAt)}` : ""}
                 </em>
               </span>
               <span className="approval-v2-queue-side">

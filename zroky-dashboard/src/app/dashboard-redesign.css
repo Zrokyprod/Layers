@@ -23113,6 +23113,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text);
 }
 
+@media (min-width: 1181px) {
+  .app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-workspace {
+    grid-template-columns: minmax(380px, 0.9fr) minmax(500px, 1.1fr) !important;
+  }
+}
+
 .app-shell[data-dashboard-system="control-v1"] .approvals-v2-page code {
   color: #344054;
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
@@ -23122,7 +23128,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-panel,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-panel,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-alert,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-empty-state,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-notice {
@@ -23136,7 +23141,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-alert p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-intent-card p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-console p,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence p,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-audit p {
@@ -23158,7 +23162,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-live,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-actions,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-status-stack,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-actions,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-resolution,
@@ -23196,8 +23199,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-panel,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-panel,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel {
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-panel {
   display: grid;
   gap: 14px;
   min-width: 0;
@@ -23220,7 +23222,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-section-head strong,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-header h2,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-empty-state h2,
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel strong,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-console strong,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-tab-panel-head strong,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence strong {
@@ -23420,6 +23421,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary li::marker {
   color: var(--mc-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary.approval-v2-tone-success li::marker {
+  color: var(--mc-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary.approval-v2-tone-warning li::marker {
+  color: var(--mc-warning);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-badges {
@@ -23702,9 +23711,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-tab-panel {
   display: grid;
   min-width: 0;
-  max-height: min(420px, calc(100dvh - 430px));
-  overflow: auto;
-  padding-right: 2px;
+  overflow: visible;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-tab-stack {
@@ -23760,6 +23767,17 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 13px;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-permission-note {
+  padding: 10px 12px;
+  border: 1px solid var(--mc-border);
+  border-left: 3px solid var(--mc-warning);
+  border-radius: 8px;
+  background: var(--mc-soft);
+  color: var(--mc-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence {
   background: var(--mc-card);
 }
@@ -23774,29 +23792,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   padding: 0;
   background: transparent;
   box-shadow: none;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
-  background: var(--mc-soft);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel strong {
-  font-size: 15px;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel.is-armed {
-  border-left: 4px solid var(--mc-danger);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-empty-state,
@@ -23846,13 +23841,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-intent-card,
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-section-head,
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-header,
-  .app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-panel,
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence-head {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .app-shell[data-dashboard-system="control-v1"] .approval-v2-kill-actions,
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-actions,
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-status-stack {
     justify-content: flex-start;

@@ -32,6 +32,7 @@ type ApprovalInspectorProps = {
   reason: string;
   setReason: (value: string) => void;
   busy: boolean;
+  canDecide: boolean;
   onApprove: (id: string, reason: string) => void;
   onReject: (id: string, reason: string) => void;
 };
@@ -68,33 +69,62 @@ function recordedApprovals(row: ApprovalQueueRow): number {
 function approveLabel(row: ApprovalQueueRow): string {
   const required = requiredApprovals(row);
   const remaining = Math.max(0, required - recordedApprovals(row));
-  return required > 1 && remaining > 1 ? "Record Approval" : "Approve";
+  return required > 1 && remaining > 1 ? "Record approval" : "Approve action";
+}
+
+function displayApprover(subject: string): string {
+  if (subject.includes("@")) return subject;
+  const [provider, identifier] = subject.split(":", 2);
+  if (!identifier) return subject;
+  const suffix = identifier.length > 6 ? `...${identifier.slice(-6)}` : identifier;
+  return `${humanize(provider, "Identity")} account ${suffix}`;
 }
 
 function ApproverChain({ row }: { row: ApprovalQueueRow }) {
   const remaining = Math.max(0, row.requiredApprovalCount - row.recordedApprovalCount);
+  const state = row.status === "approved"
+    ? {
+        title: `${row.recordedApprovalCount}/${row.requiredApprovalCount} approvals completed`,
+        badge: "Complete",
+        empty: "Approval completed, but the approver identity was not returned.",
+      }
+    : row.status === "rejected"
+      ? {
+          title: "Reviewer rejected this action",
+          badge: "Closed",
+          empty: "The action was rejected before any approval released it.",
+        }
+      : row.status === "expired"
+        ? {
+            title: `${row.recordedApprovalCount}/${row.requiredApprovalCount} approvals completed`,
+            badge: "Expired",
+            empty: "The required approval chain was not completed before the deadline.",
+          }
+        : {
+            title: `${row.recordedApprovalCount}/${row.requiredApprovalCount} approvals recorded`,
+            badge: remaining === 0 ? "Complete" : `${remaining} needed`,
+            empty: "No approval recorded yet. The action remains held at the runtime gate.",
+          };
   return (
     <section className="approval-v2-approver-chain">
       <div className="approval-v2-tab-panel-head">
         <div>
           <span className="approval-v2-eyebrow">Approver chain</span>
-          <strong>
-            {row.recordedApprovalCount}/{row.requiredApprovalCount} approvals recorded
-          </strong>
+          <strong>{state.title}</strong>
         </div>
-        <span>{remaining === 0 ? "Complete" : `${remaining} needed`}</span>
+        <span>{state.badge}</span>
       </div>
       {row.approverSubjects.length > 0 ? (
         <ol>
           {row.approverSubjects.map((subject) => (
             <li key={subject}>
               <Check aria-hidden="true" size={14} />
-              <span>{subject}</span>
+              <span>{displayApprover(subject)}</span>
             </li>
           ))}
         </ol>
       ) : (
-        <p>No approver identity captured yet. Check the policy route before releasing a similar action.</p>
+        <p>{state.empty}</p>
       )}
     </section>
   );
@@ -107,16 +137,52 @@ function riskReasons(row: ApprovalQueueRow): string[] {
   return [...new Set(reasons)].slice(0, 3);
 }
 
-function RiskSummary({ row }: { row: ApprovalQueueRow }) {
-  const reasons = riskReasons(row);
+function decisionSummary(row: ApprovalQueueRow): { eyebrow: string; title: string; reasons: string[] } {
+  const policyReasons = riskReasons(row);
+  const resolutionReason = row.decision.resolution_reason ? humanize(row.decision.resolution_reason) : null;
+  if (row.status === "approved") {
+    return {
+      eyebrow: "Why it was released",
+      title: "Human approval completed",
+      reasons: [...new Set([resolutionReason, ...policyReasons].filter((reason): reason is string => Boolean(reason)))],
+    };
+  }
+  if (row.status === "rejected") {
+    return {
+      eyebrow: "Why the reviewer stopped it",
+      title: "Rejected by reviewer",
+      reasons: [...new Set([resolutionReason, ...policyReasons].filter((reason): reason is string => Boolean(reason)))],
+    };
+  }
+  if (row.status === "expired") {
+    return {
+      eyebrow: "Why approval expired",
+      title: "Approval window ended",
+      reasons: [
+        row.expiresAt
+          ? `The required approval chain was incomplete at ${formatDateTime(row.expiresAt)}.`
+          : "The required approval chain was not completed in time.",
+        ...policyReasons,
+      ],
+    };
+  }
+  return {
+    eyebrow: row.status === "pending_approval" ? "Why review is needed" : "Why policy stopped it",
+    title: row.holdReason.title,
+    reasons: policyReasons,
+  };
+}
+
+function DecisionSummary({ row }: { row: ApprovalQueueRow }) {
+  const summary = decisionSummary(row);
   return (
     <section className={`approval-v2-risk-summary approval-v2-tone-${row.holdReason.tone}`}>
       <div>
-        <span className="approval-v2-eyebrow">{row.status === "pending_approval" ? "Why review is needed" : "Why this was stopped"}</span>
-        <strong>{row.holdReason.title}</strong>
-        {reasons.length > 0 ? (
+        <span className="approval-v2-eyebrow">{summary.eyebrow}</span>
+        <strong>{summary.title}</strong>
+        {summary.reasons.length > 0 ? (
           <ul>
-            {reasons.map((reason) => (
+            {summary.reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>
@@ -254,6 +320,7 @@ function CompactEvidence({
 
 export function ApprovalInspector({
   busy,
+  canDecide,
   onApprove,
   onReject,
   pack,
@@ -278,15 +345,63 @@ export function ApprovalInspector({
     );
   }
 
-  const canResolve = row.status === "pending_approval";
+  const isPendingDecision = row.status === "pending_approval";
+  const canResolve = isPendingDecision && canDecide;
   const disabled = busy || !canResolve || reason.trim().length < 3;
   const required = requiredApprovals(row);
   const recorded = recordedApprovals(row);
+  const remaining = Math.max(0, required - recorded);
   const approvalCopy = required > 1 ? `${recorded}/${required} approvals recorded` : row.approvalProgress;
-  const actionPreviewLabel = canResolve ? "Approval would release" : row.status === "blocked" || row.status === "rejected" ? "Action stopped" : "Action reviewed";
-  const actionPreviewCopy = canResolve
-    ? "Dashboard and Slack approvals resolve the same decision when Slack is connected."
-    : "This decision is locked. Review evidence and audit before changing policy for future actions.";
+  const consoleState = isPendingDecision
+    ? {
+        title: "Decision required",
+        copy: "A reason is required. The decision is bound to this exact action and intent digest.",
+        progress: remaining > 1 ? `${recorded}/${required} approvals complete` : "Final decision required",
+        previewLabel: remaining > 1 ? "This records one approval" : "Approval will release",
+        previewCopy: remaining > 1
+          ? `This records approval ${recorded + 1} of ${required}. Execution remains held until distinct approvers complete the chain.`
+          : "Approval authorizes this exact action to continue through the protected execution flow.",
+      }
+    : row.status === "approved"
+      ? {
+          title: "Approval completed",
+          copy: "This decision is locked and preserved with the approver, reason, and evidence.",
+          progress: `${recorded}/${required} approvals complete`,
+          previewLabel: "Approved action",
+          previewCopy: "The exact action was released to the protected execution flow. Execution and verification remain separate stages.",
+        }
+      : row.status === "rejected"
+        ? {
+            title: "Rejected by reviewer",
+            copy: "This decision is locked and the action cannot execute from this approval.",
+            progress: "Human rejection",
+            previewLabel: "Action rejected",
+            previewCopy: "The reviewer kept this exact action from reaching execution.",
+          }
+        : row.status === "expired"
+          ? {
+              title: "Approval expired",
+              copy: "The required approval chain did not complete before the deadline.",
+              progress: "Deadline passed",
+              previewLabel: "Action remained stopped",
+              previewCopy: "No protected execution was released from this expired approval.",
+            }
+          : {
+              title: "Blocked by policy",
+              copy: "Runtime policy denied this action before it could reach execution.",
+              progress: "Policy block",
+              previewLabel: "Action blocked",
+              previewCopy: "The runtime gate prevented this exact action from reaching a runner.",
+            };
+  const mechanismCopy = row.status === "pending_approval"
+    ? "Policy requires a human decision before this exact action can execute."
+    : row.status === "approved"
+      ? "Human approval changed this exact gate from held to allowed."
+      : row.status === "rejected"
+        ? "A human reviewer denied this exact action at the approval gate."
+        : row.status === "expired"
+          ? "The approval window closed before the required decision chain completed."
+          : "Runtime policy denied this exact action before execution.";
   const actionFacts: Fact[] = [
     { label: "Action ID", value: row.actionId, mono: true },
     { label: "Decision ID", value: row.decisionId, mono: true },
@@ -294,7 +409,14 @@ export function ApprovalInspector({
     { label: "System", value: row.systemRef, mono: true },
     { label: "Environment", value: row.environment },
     { label: "Operation", value: row.operationKind ? humanize(row.operationKind) : null },
-    { label: "Expires", value: timeUntil(row.expiresAt) },
+    {
+      label: isPendingDecision ? "Expires" : "Approval deadline",
+      value: row.expiresAt
+        ? isPendingDecision
+          ? timeUntil(row.expiresAt)
+          : formatDateTime(row.expiresAt)
+        : null,
+    },
   ];
   const decisionFacts: Fact[] = [
     { label: "Runtime decision", value: humanize(row.decision.decision) },
@@ -317,7 +439,7 @@ export function ApprovalInspector({
     <section className="approval-v2-inspector-panel" aria-label="Selected action control">
       <header className="approval-v2-inspector-header">
         <div>
-          <span className="approval-v2-eyebrow">{canResolve ? "Selected approval" : "Resolved decision"}</span>
+          <span className="approval-v2-eyebrow">{isPendingDecision ? "Selected approval" : "Resolved decision"}</span>
           <h2>{row.title}</h2>
           <p>
             {row.agentName} / {row.kind === "guard_only_hold" ? "Guard-only decision" : row.actionType}
@@ -326,25 +448,21 @@ export function ApprovalInspector({
         <StatusPill value={row.status} label={row.statusLabel} tone={row.statusTone} />
       </header>
 
-      <RiskSummary row={row} />
+      <DecisionSummary row={row} />
 
-      <section className="approval-v2-console" aria-label="Approve or reject action">
+      <section className="approval-v2-console" aria-label="Approval decision control">
         <div>
           <span className="approval-v2-eyebrow">Decision console</span>
-          <strong>{canResolve ? "Approve or reject this exact action" : "Decision preserved for audit"}</strong>
-          <p>
-            {canResolve
-              ? "A reason is required. Approval is bound to this decision and advances the linked action."
-              : "Resolved decisions cannot be changed here; they remain visible for evidence and review."}
-          </p>
+          <strong>{consoleState.title}</strong>
+          <p>{consoleState.copy}</p>
         </div>
         <div className="approval-v2-resolution">
-          <span>{approvalCopy}</span>
+          <span>{consoleState.progress}</span>
           <StatusPill value={row.status} label={row.statusLabel} tone={row.statusTone} />
         </div>
         <div className="approval-v2-action-preview">
           <div>
-            <span className="approval-v2-eyebrow">{actionPreviewLabel}</span>
+            <span className="approval-v2-eyebrow">{consoleState.previewLabel}</span>
             <strong>{row.approvalAction}</strong>
           </div>
           {canResolve ? (
@@ -352,7 +470,7 @@ export function ApprovalInspector({
               Slack route
             </DashboardButtonLink>
           ) : null}
-          <p>{actionPreviewCopy}</p>
+          <p>{consoleState.previewCopy}</p>
         </div>
         {canResolve ? (
           <div className="approval-v2-actions">
@@ -366,7 +484,7 @@ export function ApprovalInspector({
             <input
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Reason for approving or rejecting"
+              placeholder="Decision reason (required)"
               aria-label="Decision reason"
             />
             <DashboardButton
@@ -383,8 +501,12 @@ export function ApprovalInspector({
               onClick={() => onReject(row.decisionId, reason)}
               variant="soft"
             >
-              Reject
+              Reject action
             </DashboardButton>
+          </div>
+        ) : isPendingDecision ? (
+          <div className="approval-v2-permission-note" role="note">
+            Admin access is required to approve or reject production actions. You can still review the decision, evidence, and audit history.
           </div>
         ) : null}
       </section>
@@ -396,7 +518,10 @@ export function ApprovalInspector({
               key={tab.id}
               type="button"
               role="tab"
+              id={`approval-tab-${tab.id}`}
+              aria-controls={`approval-panel-${tab.id}`}
               aria-selected={activeTab === tab.id}
+              tabIndex={activeTab === tab.id ? 0 : -1}
               className={`approval-v2-tab${activeTab === tab.id ? " is-active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
             >
@@ -405,10 +530,15 @@ export function ApprovalInspector({
           ))}
         </div>
 
-        <div className="approval-v2-tab-panel" role="tabpanel">
+        <div
+          className="approval-v2-tab-panel"
+          role="tabpanel"
+          id={`approval-panel-${activeTab}`}
+          aria-labelledby={`approval-tab-${activeTab}`}
+        >
           {activeTab === "decision" ? (
             <div className="approval-v2-tab-stack">
-              <ApproverChain row={row} />
+              {row.status === "blocked" ? null : <ApproverChain row={row} />}
               <section className={`approval-v2-intent-card approval-v2-tone-${row.statusTone}`}>
                 <div>
                   <span className="approval-v2-eyebrow">Action intent</span>
@@ -430,7 +560,7 @@ export function ApprovalInspector({
                 <div className="approval-v2-section-head">
                   <div>
                     <span className="approval-v2-eyebrow">Decision mechanism</span>
-                    <strong>Policy gate is the mechanism; the action intent is the thing being held.</strong>
+                    <strong>{mechanismCopy}</strong>
                   </div>
                   <StatusPill value={row.decision.decision} label={humanize(row.decision.decision)} tone={row.statusTone} />
                 </div>

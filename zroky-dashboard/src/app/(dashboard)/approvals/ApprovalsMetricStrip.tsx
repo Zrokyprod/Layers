@@ -3,8 +3,8 @@
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
   Clock3,
-  ShieldAlert,
 } from "lucide-react";
 
 import { DashboardMetricStrip, type DashboardMetric } from "@/components/dashboard-scaffold";
@@ -21,16 +21,16 @@ type Metric = {
 
 type ApprovalsMetricStripProps = {
   pending: number;
-  damageStopped: number;
+  approved: number;
   expiringSoon: number;
-  sequenceRisk: number;
+  stopped: number;
 };
 
 export function ApprovalsMetricStrip({
-  damageStopped,
+  approved,
   expiringSoon,
   pending,
-  sequenceRisk,
+  stopped,
 }: ApprovalsMetricStripProps) {
   const metrics: Metric[] = [
     {
@@ -48,17 +48,17 @@ export function ApprovalsMetricStrip({
       Icon: Clock3,
     },
     {
-      label: "Pattern risk",
-      value: sequenceRisk,
-      helper: "Repeated or linked risky actions caught before execution.",
-      tone: sequenceRisk > 0 ? "warning" : "neutral",
-      Icon: ShieldAlert,
+      label: "Approved",
+      value: approved,
+      helper: "Actions released by a completed human decision.",
+      tone: approved > 0 ? "success" : "neutral",
+      Icon: CheckCircle2,
     },
     {
-      label: "Damage stopped",
-      value: damageStopped,
-      helper: "Blocked or rejected actions preserved for audit.",
-      tone: damageStopped > 0 ? "danger" : "neutral",
+      label: "Stopped",
+      value: stopped,
+      helper: "Blocked, rejected, or expired actions that never ran.",
+      tone: stopped > 0 ? "danger" : "neutral",
       Icon: AlertTriangle,
     },
   ];
