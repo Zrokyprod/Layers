@@ -371,7 +371,7 @@ describe("PoliciesPage mandate control", () => {
     const summary = screen.getByLabelText("Policy safety summary");
     expect(within(summary).getByText("Unavailable")).toBeInTheDocument();
     expect(within(summary).getByText("Unknown")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save policy" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Arm kill switch" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("keeps free-plan policy visible but disables paid configuration", async () => {
@@ -382,7 +382,8 @@ describe("PoliciesPage mandate control", () => {
     expect(await screen.findByRole("heading", { name: "Human review waiting" })).toBeInTheDocument();
     expect(screen.getByText(/Read-only policy view/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Upgrade plan" }).getAttribute("href")).toBe("/settings/billing");
-    expect(screen.getByRole("button", { name: "Save policy" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Apply generated policy" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Save advanced changes" }).hasAttribute("disabled")).toBe(true);
     expect(container.querySelector(".policies-configuration-scope")?.hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("Allowed surface")).toBeInTheDocument();
   });
@@ -397,7 +398,7 @@ describe("PoliciesPage mandate control", () => {
     fireEvent.change(screen.getByLabelText("Sensitive tools"), {
       target: { value: "ledger.refund, email.send, crm.delete" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save advanced changes" }));
 
     await waitFor(() => expect(api.updatePilotPolicy).toHaveBeenCalled());
     expect(api.updatePilotPolicy.mock.calls[0]?.[0]).toEqual(
@@ -415,11 +416,35 @@ describe("PoliciesPage mandate control", () => {
 
     await screen.findByRole("heading", { name: "Guardrails incomplete" });
     fireEvent.click(screen.getByLabelText(/Sequence risk holds/i));
-    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save advanced changes" }));
 
     await waitFor(() => expect(api.updatePilotPolicy).toHaveBeenCalled());
     expect(api.updatePilotPolicy.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({ runtime_sequence_risk_enabled: true }),
+    );
+  });
+
+  it("applies a generated policy from two simple choices", async () => {
+    renderPoliciesPage();
+
+    await screen.findByRole("heading", { name: "Set the control level, not every field" });
+    fireEvent.click(screen.getByRole("button", { name: /Higher autonomy/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Customer and data changes/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply generated policy" }));
+
+    await waitFor(() => expect(api.updatePilotPolicy).toHaveBeenCalled());
+    expect(api.updatePilotPolicy.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        runtime_enabled: true,
+        runtime_max_tool_calls: 20,
+        runtime_max_retries: 3,
+        runtime_amount_approval_threshold_usd: 2000,
+        runtime_amount_deny_threshold_usd: 10000,
+        runtime_block_pii_leak: true,
+        runtime_block_prompt_injected_external_action: true,
+        runtime_sequence_risk_enabled: true,
+        expected_updated_at: now,
+      }),
     );
   });
 

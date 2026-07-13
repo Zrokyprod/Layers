@@ -53,6 +53,7 @@ import {
   buildPolicyRulesView,
   describePolicyPatch,
 } from "@/lib/policy-rules-view";
+import { PolicyGenerator } from "./policy-generator";
 
 const DASH = "-";
 const GUARDRAIL_FIELDS: Array<keyof PilotPolicyPayload> = [
@@ -705,6 +706,14 @@ export default function PoliciesPage() {
     });
   }
 
+  function applyGeneratedPolicy(generatedPolicy: PilotPolicyPayload) {
+    setMessage(null);
+    savePolicyMutation.mutate({
+      ...generatedPolicy,
+      expected_updated_at: policyQuery.data?.updated_at ?? null,
+    });
+  }
+
   function saveRule() {
     const payload = rulePayloadFromForm(ruleForm, selectedRule?.policy_patch ?? null);
     if (!payload.name) {
@@ -774,17 +783,6 @@ export default function PoliciesPage() {
 
   const heroActions = (
     <>
-      <DashboardButton
-        icon={<RefreshCw size={16} />}
-        onClick={() => {
-          setMessage(null);
-          void Promise.all([policyQuery.refetch(), approvalsQuery.refetch()]);
-        }}
-        disabled={policyQuery.isFetching || approvalsQuery.isFetching}
-        variant="soft"
-      >
-        Refresh
-      </DashboardButton>
       {killSwitchConfirmationActive && (
         <DashboardButton
           onClick={() => setKillSwitchTarget(null)}
@@ -802,15 +800,6 @@ export default function PoliciesPage() {
         variant={killSwitchActionVariant}
       >
         {killSwitchActionLabel}
-      </DashboardButton>
-      <DashboardButton
-        icon={<Save size={16} />}
-        disabled={!policy || !canConfigurePolicy}
-        loading={savePolicyMutation.isPending}
-        onClick={savePolicy}
-        variant="primary"
-      >
-        Save policy
       </DashboardButton>
     </>
   );
@@ -853,6 +842,21 @@ export default function PoliciesPage() {
 
       {policy ? (
         <fieldset className="policies-configuration-scope" disabled={!canConfigurePolicy}>
+        <PolicyGenerator
+          disabled={!canConfigurePolicy}
+          onApply={applyGeneratedPolicy}
+          policy={policy}
+          saving={savePolicyMutation.isPending}
+        />
+        <details className="policy-advanced-shell">
+          <summary>
+            <span>
+              <strong>Advanced controls</strong>
+              <small>Scoped rules, exact limits, tool lists and policy testing</small>
+            </span>
+            <span>Open</span>
+          </summary>
+          <div className="policy-advanced-body">
         <DashboardWorkspace
           className="policies-workspace"
           left={
@@ -1069,6 +1073,7 @@ export default function PoliciesPage() {
                 </div>
                 <div className="policy-rule-actions">
                   <DashboardButton
+                    disabled={!canConfigurePolicy}
                     icon={<Save size={16} />}
                     loading={saveRuleMutation.isPending}
                     onClick={saveRule}
@@ -1262,6 +1267,17 @@ export default function PoliciesPage() {
                     placeholder="payment, refund, delete, email"
                   />
                 </div>
+                <div className="policy-rule-actions">
+                  <DashboardButton
+                    disabled={!canConfigurePolicy}
+                    icon={<Save size={16} />}
+                    loading={savePolicyMutation.isPending}
+                    onClick={savePolicy}
+                    variant="primary"
+                  >
+                    Save advanced changes
+                  </DashboardButton>
+                </div>
               </section>
             </>
           }
@@ -1386,41 +1402,6 @@ export default function PoliciesPage() {
                 </div>
               </section>
 
-              <section className="panel settings-control-panel" aria-label="Latest runtime decisions">
-                <header className="panel-header">
-                  <div>
-                    <h2>Latest runtime decisions</h2>
-                    <p>Allow, hold, and block events generated when SDK or Gateway called the runtime gate.</p>
-                  </div>
-                  <DashboardButtonLink href="/approvals" size="sm" variant="soft">
-                    Open approvals
-                  </DashboardButtonLink>
-                </header>
-                {latestDecisions.length > 0 ? (
-                  <div className="policy-decision-list">
-                    {latestDecisions.map((item) => (
-                      <article key={item.id} className="policy-decision-row" data-tone={decisionTone(item)}>
-                        <div>
-                          <strong>{decisionTitle(item)}</strong>
-                          <span>{decisionSubtitle(item)}</span>
-                        </div>
-                        <p>{decisionReason(item)}</p>
-                        <StatusPill
-                          value={item.status}
-                          kind="runtime_policy"
-                          label={decisionStatusLabel(item.status)}
-                          tone={decisionTone(item)}
-                        />
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="policy-empty-state">
-                    Runtime decisions will appear after an agent calls the policy gate.
-                  </div>
-                )}
-              </section>
-
               <section className="panel settings-control-panel" aria-label="Policy evidence path">
                 <header className="panel-header">
                   <div>
@@ -1464,6 +1445,44 @@ export default function PoliciesPage() {
             </>
           }
         />
+          </div>
+        </details>
+
+        <section className="panel settings-control-panel policy-recent-decisions" aria-label="Latest runtime decisions">
+          <header className="panel-header">
+            <div>
+              <span className="dashboard-eyebrow">Real activity</span>
+              <h2>Latest policy decisions</h2>
+              <p>What the runtime gate allowed, held, or blocked.</p>
+            </div>
+            <DashboardButtonLink href="/approvals" size="sm" variant="soft">
+              Open approvals
+            </DashboardButtonLink>
+          </header>
+          {latestDecisions.length > 0 ? (
+            <div className="policy-decision-list">
+              {latestDecisions.map((item) => (
+                <article key={item.id} className="policy-decision-row" data-tone={decisionTone(item)}>
+                  <div>
+                    <strong>{decisionTitle(item)}</strong>
+                    <span>{decisionSubtitle(item)}</span>
+                  </div>
+                  <p>{decisionReason(item)}</p>
+                  <StatusPill
+                    value={item.status}
+                    kind="runtime_policy"
+                    label={decisionStatusLabel(item.status)}
+                    tone={decisionTone(item)}
+                  />
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="policy-empty-state">
+              Runtime decisions will appear after an agent calls the policy gate.
+            </div>
+          )}
+        </section>
         </fieldset>
       ) : null}
     </div>
