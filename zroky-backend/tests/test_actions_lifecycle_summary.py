@@ -13,7 +13,9 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import (
     ActionContractVersion,
+    ActionExecutionAttempt,
     ActionIntent,
+    ActionRunner,
     OutcomeReconciliationCheck,
     Project,
     RuntimePolicyDecision,
@@ -110,6 +112,56 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
                 created_at=now - timedelta(days=1),
             )
 
+        _seed_intent(
+            session,
+            project_id=project_id,
+            contract=contract,
+            index=999,
+            created_at=now - timedelta(days=45),
+        )
+
+        runner = ActionRunner(
+            id="runner_actions_summary",
+            project_id=project_id,
+            name="Actions summary runner",
+            runner_type="customer_hosted",
+            environment="production",
+            status="online",
+        )
+        session.add(runner)
+        session.add_all(
+            [
+                ActionExecutionAttempt(
+                    id="attempt_running",
+                    project_id=project_id,
+                    action_intent_id="act_0",
+                    runner_id=runner.id,
+                    attempt_number=1,
+                    idempotency_key="attempt-running",
+                    status="running",
+                    credential_ref="cred:actions-summary",
+                    plan_digest="sha256:running",
+                    plan_json=json.dumps({}),
+                    created_at=now - timedelta(minutes=5),
+                    updated_at=now - timedelta(minutes=5),
+                ),
+                ActionExecutionAttempt(
+                    id="attempt_stale",
+                    project_id=project_id,
+                    action_intent_id="act_1",
+                    runner_id=runner.id,
+                    attempt_number=1,
+                    idempotency_key="attempt-stale",
+                    status="planned",
+                    credential_ref="cred:actions-summary",
+                    plan_digest="sha256:stale",
+                    plan_json=json.dumps({}),
+                    created_at=now - timedelta(minutes=20),
+                    updated_at=now - timedelta(minutes=20),
+                ),
+            ]
+        )
+
         session.add_all(
             [
                 RuntimePolicyDecision(
@@ -120,6 +172,14 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
                     reasons_json=json.dumps(["approval required"]),
                     created_at=now - timedelta(hours=2),
                 ),
+                RuntimePolicyDecision(
+                    id="decision_old",
+                    project_id=project_id,
+                    decision="allow",
+                    status="allowed",
+                    reasons_json=json.dumps(["old decision"]),
+                    created_at=now - timedelta(days=45),
+                ),
                 OutcomeReconciliationCheck(
                     id="outcome_matched",
                     project_id=project_id,
@@ -128,6 +188,15 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
                     claimed_json=json.dumps({}),
                     comparison_json=json.dumps({}),
                     checked_at=now - timedelta(hours=1),
+                ),
+                OutcomeReconciliationCheck(
+                    id="outcome_old",
+                    project_id=project_id,
+                    connector_type="generic_rest",
+                    verdict="mismatched",
+                    claimed_json=json.dumps({}),
+                    comparison_json=json.dumps({}),
+                    checked_at=now - timedelta(days=45),
                 ),
                 OutcomeReconciliationCheck(
                     id="outcome_unverified",
@@ -146,6 +215,14 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
                     classification="policy_bypass",
                     occurred_at=now - timedelta(hours=1),
                 ),
+                SourceMutationRecord(
+                    id="mutation_old",
+                    project_id=project_id,
+                    source_system="stripe",
+                    mutation_id="evt_old",
+                    classification="policy_bypass",
+                    occurred_at=now - timedelta(days=45),
+                ),
             ]
         )
         session.commit()
@@ -160,6 +237,8 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
     assert body["source_totals"]["approvals"] == 1
     assert body["source_totals"]["outcomes"] == 2
     assert body["source_totals"]["mutations"] == 1
+    assert body["source_totals"]["attempts"] == 2
+    assert body["source_totals"]["stale_attempts"] == 1
     assert body["truncated"] is True
     assert body["truncated_sources"] == ["intents"]
     assert body["metrics"]["controlled_actions"] == 105
@@ -171,4 +250,6 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
     assert len(body["data"]["approvals"]) == 1
     assert len(body["data"]["outcomes"]) == 2
     assert len(body["data"]["mutations"]) == 1
+    assert {item["attempt_id"] for item in body["data"]["attempts"]} == {"attempt_running", "attempt_stale"}
+    assert [item["attempt_id"] for item in body["data"]["stale_attempts"]] == ["attempt_stale"]
     assert body["sources"]["lifecycle_summary"] is True

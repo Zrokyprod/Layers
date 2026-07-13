@@ -254,6 +254,25 @@ export function buildProofChain(
       ? view.receiptStatus || "generated"
       : "signature_invalid"
     : view.receiptStatus;
+  const stoppedByPolicy = view.lifecycle.id === "blocked";
+  const waitingForRelease = ["proposed", "policy", "approval"].includes(view.lifecycle.id);
+  const executionStep: ProofChainStep = stoppedByPolicy
+    ? {
+        step: "execution",
+        label: "Execution",
+        status: "Prevented",
+        tone: "neutral",
+        detail: "Policy stopped this action before any runner could execute it.",
+      }
+    : waitingForRelease
+      ? {
+          step: "execution",
+          label: "Execution",
+          status: view.lifecycle.id === "approval" ? "Waiting for approval" : "Not released",
+          tone: "neutral",
+          detail: "The action must clear the policy gate before a runner can claim it.",
+        }
+      : executionStatusForAttempt(options.attempt);
 
   return [
     {
@@ -272,24 +291,42 @@ export function buildProofChain(
         ? `Runtime policy decision ${decision.id}.`
         : "No linked runtime-policy decision was returned with this action.",
     },
-    executionStatusForAttempt(options.attempt),
+    executionStep,
     {
       step: "verification",
       label: "Verification",
-      status: outcome ? statusLabel(outcome.verdict, "proof") : view.proofLabel,
-      tone: outcome ? statusTone(outcome.verdict, "proof") : view.proofTone,
-      detail: outcome
-        ? `Source-of-record verdict from ${outcome.connector_type}.`
-        : "No independent source-of-record outcome is linked yet.",
+      status: stoppedByPolicy ? "Not required" : outcome ? statusLabel(outcome.verdict, "proof") : view.proofLabel,
+      tone: stoppedByPolicy || waitingForRelease ? "neutral" : outcome ? statusTone(outcome.verdict, "proof") : view.proofTone,
+      detail: stoppedByPolicy
+        ? "No outcome verification is required because execution was prevented."
+        : outcome
+          ? `Source-of-record verdict from ${outcome.connector_type}.`
+          : waitingForRelease
+            ? "Verification starts only after a protected execution."
+            : "No independent source-of-record outcome is linked yet.",
     },
     {
       step: "receipt",
       label: "Receipt",
-      status: receipt?.signature_valid === false ? "Signature invalid" : statusLabel(receiptStatus, "receipt"),
-      tone: receipt?.signature_valid === false ? "danger" : statusTone(receiptStatus, "receipt"),
-      detail: receipt
-        ? `Signed receipt ${receipt.receipt_id}.`
-        : "Signed action receipt has not been fetched or generated yet.",
+      status: stoppedByPolicy
+        ? "Evidence only"
+        : waitingForRelease
+          ? "Not generated"
+          : receipt?.signature_valid === false
+            ? "Signature invalid"
+            : statusLabel(receiptStatus, "receipt"),
+      tone: stoppedByPolicy || waitingForRelease
+        ? "neutral"
+        : receipt?.signature_valid === false
+          ? "danger"
+          : statusTone(receiptStatus, "receipt"),
+      detail: stoppedByPolicy
+        ? "The policy decision remains available as audit evidence; no execution receipt is expected."
+        : receipt
+          ? `Signed receipt ${receipt.receipt_id}.`
+          : waitingForRelease
+            ? "A receipt can be generated only after protected execution."
+            : "Signed action receipt has not been fetched or generated yet.",
     },
   ];
 }

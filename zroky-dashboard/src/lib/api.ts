@@ -3788,6 +3788,7 @@ export interface ActionsLifecycleSummaryResponse {
     approvals: number;
     outcomes: number;
     mutations: number;
+    attempts?: number;
     stale_attempts: number;
   };
   truncated: boolean;
@@ -3808,6 +3809,7 @@ export interface ActionsLifecycleSummaryResponse {
     outcome_summary: boolean;
     source_summary: boolean;
     mutations: boolean;
+    attempts?: boolean;
     stale_attempts: boolean;
     billing_usage: boolean;
   };
@@ -3818,6 +3820,7 @@ export interface ActionsLifecycleSummaryResponse {
     outcome_summary: OutcomeReconciliationSummaryResponse | null;
     source_summary: SourceMutationSummaryResponse | null;
     mutations: SourceMutationView[];
+    attempts?: ActionExecutionAttemptResponse[];
     stale_attempts: ActionExecutionAttemptResponse[];
     billing_usage: BillingUsageResponse | null;
   };

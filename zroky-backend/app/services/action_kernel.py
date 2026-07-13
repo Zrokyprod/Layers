@@ -523,6 +523,7 @@ def list_action_intents(
     status: str | None = None,
     proof_status: str | None = None,
     receipt_status: str | None = None,
+    since: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
     max_limit: int = 100,
@@ -536,6 +537,8 @@ def list_action_intents(
         query = query.where(ActionIntent.proof_status == proof_status)
     if receipt_status:
         query = query.where(ActionIntent.receipt_status == receipt_status)
+    if since:
+        query = query.where(ActionIntent.created_at >= since)
     return list(
         db.execute(
             query.order_by(ActionIntent.created_at.desc(), ActionIntent.id.desc())

@@ -11,10 +11,11 @@ import { formatDateTime } from "@/lib/format";
 
 const FILTERS: Array<{ id: ActionLifecycleFilter; label: string }> = [
   { id: "all", label: "All" },
-  { id: "held", label: "Held" },
-  { id: "executing", label: "Executing" },
-  { id: "mismatched", label: "Mismatched" },
-  { id: "not_verified", label: "Not verified" },
+  { id: "needs_action", label: "Needs action" },
+  { id: "awaiting_runner", label: "Awaiting runner" },
+  { id: "in_progress", label: "In progress" },
+  { id: "completed", label: "Completed" },
+  { id: "stopped", label: "Stopped" },
   { id: "bypassed", label: "Bypassed" },
 ];
 
@@ -49,6 +50,7 @@ export function ActionLifecycleQueue({
             key={item.id}
             type="button"
             className={`al-filter-chip${filter === item.id ? " is-active" : ""}`}
+            aria-pressed={filter === item.id}
             onClick={() => onFilterChange(item.id)}
           >
             {item.label}
@@ -68,6 +70,7 @@ export function ActionLifecycleQueue({
               key={row.id}
               type="button"
               className={`al-queue-row al-tone-${row.stage.tone}${row.id === selectedId ? " is-selected" : ""}`}
+              aria-pressed={row.id === selectedId}
               onClick={() => onSelect(row.id)}
             >
               <span className="al-queue-content">
