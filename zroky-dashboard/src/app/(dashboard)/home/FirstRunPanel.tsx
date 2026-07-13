@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowRight,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   FileCheck2,
   RadioTower,
   ShieldCheck,
+  X,
 } from "lucide-react";
 
 import { DashboardButtonLink } from "@/components/dashboard-button";
@@ -120,80 +122,101 @@ function stepHint(stepId: (typeof STEPS)[number]["id"], state: StepState): strin
   return "Receipt generated";
 }
 
-export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
+type FirstRunPanelProps = {
+  signals: FirstRunSignals;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export function FirstRunPanel({ signals, open, onOpenChange }: FirstRunPanelProps) {
   const states = STEPS.map((step) => stepState(step.id, signals));
   const currentIndex = states.findIndex((state) => state === "current");
   const completedCount = states.filter((state) => state === "done").length;
 
   return (
-    <section className="mc-first-run" aria-label="First run setup">
-      <div className="mc-first-run-copy">
-        <div className="mc-first-run-status">
-          <CheckCircle2 aria-hidden="true" size={15} />
-          <span>Setup checklist</span>
-        </div>
-        <div>
-          <p className="mc-eyebrow">First run</p>
-          <h2>Get Home reporting real activity</h2>
-          <p className="mc-muted">
-            Connect the runtime and verification path, then run one protected action and generate its receipt.
-          </p>
-        </div>
-      </div>
-      <ol className="mc-first-run-steps">
-        {STEPS.map((step, index) => {
-          const Icon = step.icon;
-          const state = states[index];
-          return (
-            <li key={step.label}>
-              <article className="mc-first-run-step-card" data-state={state}>
-                <div className="mc-step-head">
-                  <span className="mc-step-index">
-                    {state === "done" ? <CheckCircle2 aria-hidden="true" size={14} /> : index + 1}
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="mc-first-run-overlay" />
+        <Dialog.Content className="mc-first-run-dialog">
+          <div className="mc-first-run-copy">
+            <div className="mc-first-run-status">
+              <CheckCircle2 aria-hidden="true" size={15} />
+              <span>{completedCount} of {STEPS.length} complete</span>
+            </div>
+            <div>
+              <p className="mc-eyebrow">Setup checklist</p>
+              <Dialog.Title>Finish connecting your agent</Dialog.Title>
+              <Dialog.Description className="mc-first-run-description">
+                Complete the remaining steps so Home can report real agent work and proof.
+              </Dialog.Description>
+            </div>
+          </div>
+
+          <Dialog.Close asChild>
+            <button className="mc-first-run-close" type="button" aria-label="Close setup checklist">
+              <X aria-hidden="true" size={18} />
+            </button>
+          </Dialog.Close>
+
+          <ol className="mc-first-run-steps">
+            {STEPS.map((step, index) => {
+              const Icon = step.icon;
+              const state = states[index];
+              return (
+                <li key={step.label}>
+                  <article className="mc-first-run-step-card" data-state={state}>
+                    <div className="mc-step-head">
+                      <span className="mc-step-index">
+                        {state === "done" ? <CheckCircle2 aria-hidden="true" size={14} /> : index + 1}
+                      </span>
+                      <span className="mc-step-icon" aria-hidden="true">
+                        <Icon size={18} />
+                      </span>
+                      <div className="mc-step-copy">
+                        <strong>{step.label}</strong>
+                        <span>{stepDetail(step, state, signals)}</span>
+                      </div>
+                      <span className="mc-step-state">{stateLabel(state)}</span>
+                    </div>
+                    <div className="mc-step-foot">
+                      <span className="mc-step-hint">{stepHint(step.id, state)}</span>
+                      {state === "current" ? (
+                        <DashboardButtonLink href={step.href} icon={<ArrowRight />} iconPosition="right" size="sm" variant="primary">
+                          {step.cta}
+                        </DashboardButtonLink>
+                      ) : null}
+                      {step.id === "runner" && state === "current" ? (
+                        <Link className="mc-step-text-link" href="/agents">
+                          Agents protected
+                        </Link>
+                      ) : null}
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="mc-first-run-footer">
+            <div className="mc-first-run-progress" aria-label="First run progress">
+              {STEPS.map((step, index) => {
+                const state = states[index];
+                return (
+                  <span
+                    className={`${state === "done" ? "is-done" : ""}${index === currentIndex ? " is-current" : ""}`.trim()}
+                    key={step.label}
+                  >
+                    {state === "done" ? <CheckCircle2 aria-hidden="true" size={13} /> : index + 1}
                   </span>
-                  <span className="mc-step-icon" aria-hidden="true">
-                    <Icon size={18} />
-                  </span>
-                  <span className="mc-step-state">{stateLabel(state)}</span>
-                </div>
-                <div className="mc-step-copy">
-                  <strong>{step.label}</strong>
-                  <span>{stepDetail(step, state, signals)}</span>
-                </div>
-                <div className="mc-step-foot">
-                  <span className="mc-step-hint">{stepHint(step.id, state)}</span>
-                  {state === "current" ? (
-                    <DashboardButtonLink href={step.href} icon={<ArrowRight />} iconPosition="right" size="sm" variant="primary">
-                      {step.cta}
-                    </DashboardButtonLink>
-                  ) : null}
-                  {step.id === "runner" && state === "current" ? (
-                    <Link className="mc-step-text-link" href="/agents">
-                      Agents protected
-                    </Link>
-                  ) : null}
-                </div>
-              </article>
-            </li>
-          );
-        })}
-      </ol>
-      <div className="mc-first-run-footer">
-        <div className="mc-first-run-progress" aria-label="First run progress">
-          {STEPS.map((step, index) => {
-            const state = states[index];
-            return (
-              <span
-                className={`${state === "done" ? "is-done" : ""}${index === currentIndex ? " is-current" : ""}`.trim()}
-                key={step.label}
-              >
-                {state === "done" ? <CheckCircle2 aria-hidden="true" size={13} /> : index + 1}
-              </span>
-            );
-          })}
-        </div>
-        <p className="mc-first-run-help">{completedCount} of {STEPS.length} setup steps complete.</p>
-      </div>
-    </section>
+                );
+              })}
+            </div>
+            <Dialog.Close asChild>
+              <button className="mc-first-run-later" type="button">Do this later</button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

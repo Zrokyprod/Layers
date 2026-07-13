@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -473,6 +473,7 @@ function mockHomeData(overrides: {
 describe("Mission Control Home", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     storeState.selectedProject = "proj_1";
     storeState.realTimeEnabled = false;
     storeState.dateRange = { from: null, to: null };
@@ -497,20 +498,21 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "Close setup checklist" }));
     expect(await screen.findByRole("heading", { name: "Action mismatch" })).toBeInTheDocument();
     const proofMetrics = screen.getByLabelText("Proof metrics");
     expect(within(proofMetrics).getByText("Agents protected")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Actions controlled")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Pending approvals")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Proof generated")).toBeInTheDocument();
-    const agentWorkingStatus = screen.getByLabelText("Agent working status");
-    expect(within(agentWorkingStatus).getByRole("heading", { name: "Agent Working Status" })).toBeInTheDocument();
-    expect(within(agentWorkingStatus).getByText("Current status")).toBeInTheDocument();
-    expect(within(agentWorkingStatus).getByText("Work completed")).toBeInTheDocument();
-    expect(within(agentWorkingStatus).getAllByText("Needs attention").length).toBeGreaterThan(0);
-    expect(within(agentWorkingStatus).getByText("Last active")).toBeInTheDocument();
-    expect(within(agentWorkingStatus).queryByText("0 / 0 online")).not.toBeInTheDocument();
-    expect(within(agentWorkingStatus).queryByText("Health score")).not.toBeInTheDocument();
+    const agentActivityTrend = screen.getByLabelText("Agent activity trend, last 7 days");
+    expect(within(agentActivityTrend).getByText("Agent actions")).toBeInTheDocument();
+    expect(within(agentActivityTrend).getByText("Completed")).toBeInTheDocument();
+    expect(within(agentActivityTrend).getAllByText("Needs attention").length).toBeGreaterThan(0);
+    expect(within(agentActivityTrend).getByText("Last active")).toBeInTheDocument();
+    expect(within(agentActivityTrend).queryByRole("heading")).not.toBeInTheDocument();
+    expect(within(agentActivityTrend).queryByText("Agent Working Status")).not.toBeInTheDocument();
+    expect(within(agentActivityTrend).queryByText("Health score")).not.toBeInTheDocument();
     expect(screen.queryByText("Verified action loop")).not.toBeInTheDocument();
     expect(screen.queryByText("Sequence risk watch")).not.toBeInTheDocument();
     const protectedActions = screen.getByLabelText("Recent protected actions");
@@ -551,6 +553,39 @@ describe("Mission Control Home", () => {
     expect(screen.queryByLabelText("Agent fleet context")).not.toBeInTheDocument();
   });
 
+  it("rebuilds the graph from the dashboard time window", async () => {
+    storeState.dateRange = {
+      from: new Date("2026-04-29T10:00:00.000Z"),
+      to: new Date("2026-05-29T10:00:00.000Z"),
+    };
+    const thirtyDaySummary = homeSummary(
+      { controlled_actions: 1 },
+      {
+        intents: [intent({ created_at: "2026-05-20T10:00:00.000Z" })],
+        approvals: [],
+        outcomes: [],
+        outcome_summary: outcomeSummary(),
+        source_summary: sourceSummary(),
+        mutations: [],
+        stale_attempts: [],
+        agent_profiles: [profile()],
+        agent_profile_meta: { active_count: 1, max_active_agents: -1, limit_reached: false },
+        action_runners: [runner()],
+        api_keys: [apiKey()],
+        billing_usage: billingUsage(),
+      },
+    );
+    thirtyDaySummary.window_days = 30;
+    thirtyDaySummary.window_start = "2026-04-29T10:00:00.000Z";
+    mockHomeData({ homeSummary: thirtyDaySummary });
+
+    render(<HomePage />);
+
+    expect((await screen.findByLabelText("Agent activity trend, last 30 days")).getAttribute("data-window-days")).toBe("30");
+    expect(api.getHomeSummary.mock.calls[0][0]).toBe(30);
+    expect(screen.queryByText("Agent Working Status")).not.toBeInTheDocument();
+  });
+
   it("keeps guard-only runtime approvals visible", async () => {
     mockHomeData({
       approvals: [
@@ -581,10 +616,10 @@ describe("Mission Control Home", () => {
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
     expect(screen.getByText("Actions controlled")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Get Home reporting real activity" })).toBeInTheDocument();
-    const agentWorkingStatus = screen.getByLabelText("Agent working status");
-    expect(within(agentWorkingStatus).getAllByText("No recent work").length).toBeGreaterThan(0);
-    expect(within(agentWorkingStatus).getByText("No agent work in this timeframe yet.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Finish connecting your agent" })).toBeInTheDocument();
+    const agentActivityTrend = screen.getByLabelText("Agent activity trend, last 7 days");
+    expect(within(agentActivityTrend).getAllByText("No recent activity").length).toBeGreaterThan(0);
+    expect(within(agentActivityTrend).getByText("No agent activity in the selected timeframe.")).toBeInTheDocument();
     expect(screen.getByText("Setup checklist")).toBeInTheDocument();
     const runnerCard = screen.getAllByText("Connect runner")[0].closest(".mc-first-run-step-card");
     const verificationCard = screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card");
@@ -602,6 +637,21 @@ describe("Mission Control Home", () => {
     expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
   });
 
+  it("lets the user dismiss the setup checklist without removing the setup CTA", async () => {
+    mockHomeData({ apiKeys: [] });
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("dialog", { name: "Finish connecting your agent" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close setup checklist" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Finish connecting your agent" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("link", { name: "Set up agent" }).getAttribute("href")).toBe("/agents/setup");
+    expect(window.localStorage.getItem("zroky.home.setup-dismissed.proj_1")).toBe("1");
+  });
+
   it("tracks runner and verification progress before the first action signal", async () => {
     mockHomeData({
       apiKeys: [apiKey()],
@@ -614,7 +664,7 @@ describe("Mission Control Home", () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Get Home reporting real activity" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Finish connecting your agent" })).toBeInTheDocument();
     expect(screen.getByText("Connect runner").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
     expect(screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
     expect(screen.getByText("Connect the system Zroky checks after an action runs.")).toBeInTheDocument();
@@ -633,7 +683,7 @@ describe("Mission Control Home", () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Get Home reporting real activity" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Finish connecting your agent" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
   });
@@ -669,6 +719,7 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "Close setup checklist" }));
     expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
     const proofMetrics = screen.getByLabelText("Proof metrics");
     const approvalsCard = within(proofMetrics).getByText("Pending approvals").closest(".mc-proof-card") as HTMLElement;

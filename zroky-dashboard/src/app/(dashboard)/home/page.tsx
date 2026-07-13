@@ -16,7 +16,6 @@ import {
   type SourceMutationSummaryResponse,
   type SourceMutationView,
 } from "@/lib/api";
-import { buildFleetView } from "@/lib/agent-fleet";
 import { formatCount, timeSince } from "@/lib/format";
 import { buildDecisionQueue, homeVerdictForQueue } from "@/lib/home-queue";
 import { useDashboardStore } from "@/lib/store";
@@ -295,6 +294,7 @@ function unavailableSourceCount(availability: MissionAvailability): number {
 }
 
 export default function HomePage() {
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const dateRange = useDashboardStore((state) => state.dateRange);
   const summaryDays = useMemo(() => homeWindowDays(dateRange), [dateRange]);
@@ -303,6 +303,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -361,25 +362,6 @@ export default function HomePage() {
     [data.approvals, data.intents, data.mutations, data.outcomes, data.staleAttempts, lastLoadedAt],
   );
 
-  const fleet = useMemo(() => buildFleetView({
-    profiles: data.agentProfiles,
-    profileMeta: data.agentProfileMeta,
-    intents: data.intents,
-    decisions: data.approvals,
-    outcomes: data.outcomes,
-    runners: data.actionRunners,
-    attempts: data.staleAttempts,
-    staleAttemptIds: data.staleAttempts.map((attempt) => attempt.attempt_id),
-  }), [
-    data.actionRunners,
-    data.agentProfileMeta,
-    data.agentProfiles,
-    data.approvals,
-    data.intents,
-    data.outcomes,
-    data.staleAttempts,
-  ]);
-
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
   const verdict = homeVerdictForQueue(rows, homeUnlocked);
@@ -402,6 +384,23 @@ export default function HomePage() {
     !signals.hasActionIntent ||
     !signals.hasReceiptGenerated
   );
+  const setupDismissalKey = `zroky.home.setup-dismissed.${selectedProject ?? "default"}`;
+
+  useEffect(() => {
+    if (!showFirstRun) {
+      setSetupDialogOpen(false);
+      return;
+    }
+    setSetupDialogOpen(window.localStorage.getItem(setupDismissalKey) !== "1");
+  }, [setupDismissalKey, showFirstRun]);
+
+  const handleSetupDialogOpenChange = useCallback((open: boolean) => {
+    setSetupDialogOpen(open);
+    if (!open) {
+      window.localStorage.setItem(setupDismissalKey, "1");
+    }
+  }, [setupDismissalKey]);
+
   const updatedLabel = lastLoadedAt ? `Updated ${timeSince(lastLoadedAt)}` : "Loading";
 
   return (
@@ -412,7 +411,7 @@ export default function HomePage() {
           updatedLabel={updatedLabel}
           loading={isLoading}
           errorCount={loadErrors}
-          hideCta={showFirstRun}
+          hideCta={setupDialogOpen}
           quotaWarning={quotaWarning(data.billingUsage)}
           onRefresh={() => void load()}
         />
@@ -428,9 +427,10 @@ export default function HomePage() {
           outcomes={data.outcomes}
           mutations={data.mutations}
           staleAttempts={data.staleAttempts}
-          fleet={fleet}
         />
-        {showFirstRun ? <FirstRunPanel signals={signals} /> : null}
+        {showFirstRun ? (
+          <FirstRunPanel signals={signals} open={setupDialogOpen} onOpenChange={handleSetupDialogOpenChange} />
+        ) : null}
         <HomeActivitySections
           intents={data.intents}
           approvals={data.approvals}
