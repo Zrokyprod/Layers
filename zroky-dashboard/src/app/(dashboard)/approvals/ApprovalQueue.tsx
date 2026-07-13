@@ -32,14 +32,20 @@ export function ApprovalQueue({
   rows,
   selectedId,
 }: ApprovalQueueProps) {
+  const isApprovalQueue = filter === "pending_approval";
+  const panelLabel = isApprovalQueue ? "Approval queue" : "Decision history";
+  const countLabel = isApprovalQueue
+    ? `${rows.length} pending action${rows.length === 1 ? "" : "s"}`
+    : `${rows.length} decision${rows.length === 1 ? "" : "s"} shown`;
+
   return (
-    <section className="approval-v2-queue-panel" aria-label="Held action queue">
+    <section className="approval-v2-queue-panel" aria-label={panelLabel}>
       <div className="approval-v2-section-head">
         <div>
-          <span className="approval-v2-eyebrow">Held action queue</span>
-          <strong>{rows.length} action{rows.length === 1 ? "" : "s"} shown</strong>
+          <span className="approval-v2-eyebrow">{panelLabel}</span>
+          <strong>{countLabel}</strong>
         </div>
-        <span className="approval-v2-live">live</span>
+        <span className="approval-v2-live">{isApprovalQueue ? "live" : "audit"}</span>
       </div>
 
       <div className="approval-v2-filter-group" aria-label="Approval filters">
@@ -58,8 +64,12 @@ export function ApprovalQueue({
       <div className="approval-v2-queue-list">
         {rows.length === 0 ? (
           <div className="approval-v2-empty-state">
-            <h2>No held actions in this view</h2>
-            <p>When an agent reaches an approval gate, the action hold will appear here.</p>
+            <h2>{isApprovalQueue ? "No pending approvals" : "No decisions in this view"}</h2>
+            <p>
+              {isApprovalQueue
+                ? "When an agent reaches an approval gate, the action will appear here before commit."
+                : "Resolved decisions stay in history after approval, rejection, or runtime block."}
+            </p>
           </div>
         ) : (
           rows.map((row) => (

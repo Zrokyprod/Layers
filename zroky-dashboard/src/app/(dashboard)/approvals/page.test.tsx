@@ -276,18 +276,18 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     const metrics = screen.getByRole("region", { name: "Approval control metrics" });
     expect(within(metrics).getByText("Pending holds")).toBeInTheDocument();
     expect(within(metrics).getByText("Expiring soon")).toBeInTheDocument();
-    expect(within(metrics).getByText("Sequence risk")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Held action queue" })).toBeInTheDocument();
+    expect(within(metrics).getByText("Pattern risk")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Approval queue" })).toBeInTheDocument();
     const selected = screen.getByRole("region", { name: "Selected action control" });
     expect(screen.getByText("P0")).toBeInTheDocument();
     expect(screen.getByText(/money-touching hold/)).toBeInTheDocument();
     expect(screen.getAllByText("Action intent").length).toBeGreaterThan(0);
     expect(within(selected).getByText("Held by runtime policy")).toBeInTheDocument();
     expect(within(selected).getByText("Refund amount above runtime mandate")).toBeInTheDocument();
-    expect(within(selected).getByText("Approve releases")).toBeInTheDocument();
+    expect(within(selected).getByText("Approval would release")).toBeInTheDocument();
     expect(within(selected).getByText(/Business mutation: Refund payment rf_100/)).toBeInTheDocument();
     expect(within(selected).getByText("0/1 approvals recorded")).toBeInTheDocument();
-    expect(within(selected).getByText("No approvers recorded yet.")).toBeInTheDocument();
+    expect(within(selected).getByText("No approver identity captured yet. Check the policy route before releasing a similar action.")).toBeInTheDocument();
     expect(within(selected).getByRole("link", { name: "Slack route" }).getAttribute("href")).toBe("/integrations/slack");
     expect(screen.getByText("act_1")).toBeInTheDocument();
     expect(screen.getByText("intent_digest_1")).toBeInTheDocument();
@@ -311,13 +311,13 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     render(<RuntimeApprovalsPage />);
 
     expect(screen.getByRole("heading", { name: "Approval gate clear" })).toBeInTheDocument();
-    expect(screen.getByText("No held actions in this view")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Runtime kill switch" })).toBeInTheDocument();
+    expect(screen.getByText("No approval decisions yet")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Runtime safety hold" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Arm safety hold" }));
     expect(hookState.killSwitch).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm safety hold" }));
     await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
   });
 
@@ -338,11 +338,11 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(await screen.findByRole("heading", { name: "Unsafe action stopped" })).toBeInTheDocument();
     expect(screen.getByText("1 blocked or rejected decision remains preserved with audit evidence.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Blocked" }).className).toContain("is-active");
-    const queue = screen.getByRole("region", { name: "Held action queue" });
-    expect(within(queue).getByText("1 action shown")).toBeInTheDocument();
+    const queue = screen.getByRole("region", { name: "Decision history" });
+    expect(within(queue).getByText("1 decision shown")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Selected action control" })).toBeInTheDocument();
-    expect(screen.getByText("Decision already resolved")).toBeInTheDocument();
-    expect(screen.queryByText("No held actions in this view")).not.toBeInTheDocument();
+    expect(screen.getByText("Decision preserved for audit")).toBeInTheDocument();
+    expect(screen.queryByText("No decisions in this view")).not.toBeInTheDocument();
   });
 
   it("keeps the inspector empty when the selected filter has no rows", async () => {
@@ -362,9 +362,9 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect((await screen.findByRole("button", { name: "Blocked" })).className).toContain("is-active");
     fireEvent.click(screen.getByRole("button", { name: "Pending" }));
 
-    expect(await screen.findByText("No held actions in this view")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Select a held action" })).toBeInTheDocument();
-    expect(screen.queryByText("Decision already resolved")).not.toBeInTheDocument();
+    expect(await screen.findByText("No pending approvals")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Select an action" })).toBeInTheDocument();
+    expect(screen.queryByText("Decision preserved for audit")).not.toBeInTheDocument();
   });
 
   it("requires an audit reason before approving or rejecting a held action", async () => {
@@ -402,10 +402,10 @@ describe("RuntimeApprovalsPage evidence pack", () => {
   it("requires confirmation before enabling the runtime kill switch", async () => {
     render(<RuntimeApprovalsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Arm safety hold" }));
     expect(hookState.killSwitch).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm safety hold" }));
 
     await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
   });

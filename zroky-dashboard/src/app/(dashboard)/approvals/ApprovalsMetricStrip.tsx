@@ -48,9 +48,9 @@ export function ApprovalsMetricStrip({
       Icon: Clock3,
     },
     {
-      label: "Sequence risk",
+      label: "Pattern risk",
       value: sequenceRisk,
-      helper: "Cross-action patterns held before execution.",
+      helper: "Repeated or linked risky actions caught before execution.",
       tone: sequenceRisk > 0 ? "warning" : "neutral",
       Icon: ShieldAlert,
     },
