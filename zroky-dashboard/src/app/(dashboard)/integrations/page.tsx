@@ -55,6 +55,7 @@ import {
   saveStripeRefundConnectorConfig,
   saveZendeskTicketConnectorConfig,
   saveZohoCrmConnectorConfig,
+  startJiraIssueOAuth,
   startZohoCrmOAuth,
   startSlackInstall,
   testGenericRestConnector,
@@ -2362,15 +2363,20 @@ function JiraSetupPanel({
 }) {
   const [form, setForm] = useState<JiraFormState>(defaultJiraForm);
   const [saving, setSaving] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!status) return;
+    const siteUrl =
+      typeof status.query?.atlassian_site_url === "string"
+        ? status.query.atlassian_site_url
+        : null;
     setForm((current) => ({
       ...current,
-      baseUrl: status.base_url ?? current.baseUrl,
+      baseUrl: siteUrl ?? status.base_url ?? current.baseUrl,
       authUsername:
         typeof status.query?.auth_username === "string"
           ? status.query.auth_username
@@ -2400,6 +2406,19 @@ function JiraSetupPanel({
       setError(err instanceof Error ? err.message : "Failed to save Jira verifier.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const connectWithOAuth = async () => {
+    setConnecting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await startJiraIssueOAuth();
+      window.location.assign(result.authorization_url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start Jira OAuth.");
+      setConnecting(false);
     }
   };
 
@@ -2434,7 +2453,7 @@ function JiraSetupPanel({
           <span className="dashboard-eyebrow">Jira / JSM verifier</span>
           <h2>Native Jira issue verification</h2>
           <p>
-            Read Jira or Jira Service Management issues for support, access, incident, and change proof. API token setup works today; Atlassian OAuth is planned.
+            Read Jira or Jira Service Management issues for support, access, incident, and change proof. Connect Jira with OAuth, or use an API token as a fallback.
           </p>
         </div>
         <StatusPill
@@ -2448,8 +2467,18 @@ function JiraSetupPanel({
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
             <strong>1. Access</strong>
-            <span>Use an Atlassian account email plus API token. Saved tokens never render in the browser.</span>
+            <span>
+              OAuth is the fastest path. API token setup remains available for manual access.
+            </span>
           </div>
+          <DashboardButton loading={connecting} onClick={connectWithOAuth} type="button" variant="primary">
+            Connect Jira
+          </DashboardButton>
+          {status?.has_oauth_refresh_token ? (
+            <div className="connectors-success-strip">
+              Jira OAuth connected{status.query?.atlassian_site_url ? ` to ${status.query.atlassian_site_url}` : ""}.
+            </div>
+          ) : null}
           <div className="connectors-generic-grid">
             <label>
               <span>Atlassian site URL</span>

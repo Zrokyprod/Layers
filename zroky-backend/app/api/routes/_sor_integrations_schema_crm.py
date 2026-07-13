@@ -188,6 +188,8 @@ class JiraIssueConnectorStatusResponse(BaseModel):
     readiness: dict[str, Any] = Field(default_factory=dict)
     created_at: Any | None = None
     updated_at: Any | None = None
+    has_oauth_refresh_token: bool = False
+    oauth_refresh_token_last4: str | None = None
 
 
 class JiraIssueConnectorConfigRequest(BaseModel):

@@ -2238,6 +2238,8 @@ export interface JiraIssueConnectorStatusResponse {
   readiness?: SystemOfRecordConnectorReadiness;
   created_at: string | null;
   updated_at: string | null;
+  has_oauth_refresh_token?: boolean;
+  oauth_refresh_token_last4?: string | null;
 }
 
 export interface JiraIssueConnectorConfigPayload {
@@ -2810,6 +2812,12 @@ export function getJiraIssueConnectorStatus(
   return request<JiraIssueConnectorStatusResponse>(
     "/v1/integrations/system-of-record/jira-issue/status",
     { signal },
+  );
+}
+
+export function startJiraIssueOAuth(): Promise<OAuthStartResponse> {
+  return request<OAuthStartResponse>(
+    "/v1/integrations/system-of-record/jira-issue/oauth/start",
   );
 }
 

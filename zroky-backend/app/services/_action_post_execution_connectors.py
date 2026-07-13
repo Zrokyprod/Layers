@@ -179,7 +179,12 @@ def _saved_connector_for_context(
         )
         if record_ref is None:
             return None, connector_type, "jira_issue_ref_missing"
-        bearer_token = decrypt_connector_bearer_token(config, project_id=intent.project_id, db=db)
+        bearer_token = resolve_jira_bearer_token(
+            config,
+            project_id=intent.project_id,
+            settings=settings,
+            db=db,
+        )
         return (
             build_jira_issue_connector(
                 config,
