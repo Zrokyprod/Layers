@@ -467,6 +467,14 @@ class Settings(BaseSettings):
     )
     ZOHO_OAUTH_SCOPES: str = "ZohoCRM.modules.READ"
 
+    # Atlassian OAuth 2.0 (3LO) for Jira system-of-record verification.
+    ATLASSIAN_CLIENT_ID: Optional[str] = None
+    ATLASSIAN_CLIENT_SECRET: Optional[str] = None
+    ATLASSIAN_OAUTH_REDIRECT_URL: str = (
+        "http://localhost:8000/v1/integrations/system-of-record/jira-issue/oauth/callback"
+    )
+    ATLASSIAN_OAUTH_SCOPES: str = "read:jira-work read:jira-user offline_access"
+
 
     # Weekly digest pipeline.
     DIGEST_ENABLED: bool = False

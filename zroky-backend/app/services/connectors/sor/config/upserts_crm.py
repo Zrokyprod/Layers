@@ -161,6 +161,8 @@ def upsert_jira_issue_connector_config(
     auth_username: str | None = None,
     bearer_token: str | None = None,
     clear_bearer_token: bool = False,
+    oauth_refresh_token: str | None = None,
+    clear_oauth_refresh_token: bool = False,
     updated_by_subject: str | None = None,
 ) -> SystemOfRecordConnectorConfig:
     try:
@@ -221,6 +223,25 @@ def upsert_jira_issue_connector_config(
         row.bearer_token_fingerprint = bundle.key_fingerprint
         row.bearer_token_last4 = bundle.key_last4
         row.kms_key_id = bundle.kms_key_id
+
+    if clear_oauth_refresh_token:
+        row.oauth_refresh_token_ciphertext = None
+        row.oauth_refresh_token_fingerprint = None
+        row.oauth_refresh_token_last4 = None
+    elif oauth_refresh_token is not None:
+        cleaned_refresh = oauth_refresh_token.strip()
+        if not cleaned_refresh:
+            raise InvalidSystemOfRecordConnectorError(
+                "oauth_refresh_token must not be empty when provided"
+            )
+        refresh_bundle = encrypt_provider_key(
+            plaintext=cleaned_refresh,
+            project_id=project_id,
+        )
+        row.oauth_refresh_token_ciphertext = refresh_bundle.ciphertext
+        row.oauth_refresh_token_fingerprint = refresh_bundle.key_fingerprint
+        row.oauth_refresh_token_last4 = refresh_bundle.key_last4
+        row.kms_key_id = refresh_bundle.kms_key_id
 
     db.add(row)
     db.commit()

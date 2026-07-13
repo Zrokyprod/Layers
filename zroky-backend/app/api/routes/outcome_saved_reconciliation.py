@@ -81,6 +81,7 @@ from app.services.system_of_record_connector_config import (
     decrypt_connector_database_url,
     get_connector_config,
 )
+from app.services.atlassian_oauth import resolve_jira_bearer_token
 from app.services.zoho_oauth import ZohoOAuthError, resolve_zoho_crm_bearer_token
 
 
@@ -203,7 +204,12 @@ def _create_saved_ledger_refund_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
+        bearer_token = resolve_jira_bearer_token(
+            config,
+            project_id=tenant_id,
+            settings=settings,
+            db=db,
+        )
         connector = build_ledger_refund_connector(
             config,
             refund_id=refund_id,
