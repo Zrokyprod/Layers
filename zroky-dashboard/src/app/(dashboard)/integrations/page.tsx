@@ -24,12 +24,10 @@ import { StatusPill } from "@/components/status-pill";
 import {
   activateMcpUpstream,
   disableMcpUpstream,
-  getCustomerRecordConnectorStatus,
   getGenericRestConnectorStatus,
   getGithubConnectionStatus,
   getHubSpotCrmConnectorStatus,
   getJiraIssueConnectorStatus,
-  getLedgerRefundConnectorStatus,
   getMcpUpstreamBinding,
   getNetSuiteFinanceConnectorStatus,
   getPostgresReadConnectorStatus,
@@ -49,6 +47,7 @@ import {
   saveJiraIssueConnectorConfig,
   saveMcpUpstreamDraft,
   saveNetSuiteFinanceConnectorConfig,
+  savePostgresReadConnectorConfig,
   saveRazorpayRefundConnectorConfig,
   saveSalesforceCrmConnectorConfig,
   saveShopifyConnectorConfig,
@@ -57,10 +56,12 @@ import {
   saveZendeskTicketConnectorConfig,
   saveZohoCrmConnectorConfig,
   startZohoCrmOAuth,
+  startSlackInstall,
   testGenericRestConnector,
   testHubSpotCrmConnector,
   testJiraIssueConnector,
   testNetSuiteFinanceConnector,
+  testPostgresReadConnector,
   testRazorpayRefundConnector,
   testSalesforceCrmConnector,
   testShopifyConnector,
@@ -68,11 +69,9 @@ import {
   testStripeRefundConnector,
   testZendeskTicketConnector,
   testZohoCrmConnector,
-  type CustomerRecordConnectorStatusResponse,
   type GenericRestConnectorStatusResponse,
   type HubSpotCrmConnectorStatusResponse,
   type JiraIssueConnectorStatusResponse,
-  type LedgerRefundConnectorStatusResponse,
   type McpUpstreamBindingResponse,
   type NetSuiteFinanceConnectorStatusResponse,
   type OutcomeReconciliationView,
@@ -97,6 +96,10 @@ import {
   type ConnectorInventoryRow,
 } from "@/lib/connector-inventory";
 import { ConnectorLogo } from "@/lib/connector-logo";
+import {
+  CONFIGURABLE_CONNECTOR_IDS,
+  connectorSetupProfile,
+} from "@/lib/connector-setup-profile";
 import { externalNavigator } from "@/lib/external-navigation";
 import { compactJson, formatCount, humanize } from "@/lib/format";
 import type {
@@ -108,11 +111,9 @@ type ConnectorsOverviewState = {
   mcp: McpUpstreamBindingResponse | null;
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
-  ledger: LedgerRefundConnectorStatusResponse | null;
   stripe: StripeRefundConnectorStatusResponse | null;
   stripePayment: StripePaymentConnectorStatusResponse | null;
   razorpay: RazorpayRefundConnectorStatusResponse | null;
-  customer: CustomerRecordConnectorStatusResponse | null;
   generic: GenericRestConnectorStatusResponse | null;
   hubspot: HubSpotCrmConnectorStatusResponse | null;
   salesforce: SalesforceCrmConnectorStatusResponse | null;
@@ -229,15 +230,23 @@ type ShopifyFormState = {
   matchFieldsText: string;
 };
 
+type PostgresFormState = {
+  databaseUrl: string;
+  readQuery: string;
+  systemRef: string;
+  paramsJson: string;
+  actionType: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
 const initialOverview: ConnectorsOverviewState = {
   mcp: null,
   github: null,
   slack: null,
-  ledger: null,
   stripe: null,
   stripePayment: null,
   razorpay: null,
-  customer: null,
   generic: null,
   hubspot: null,
   salesforce: null,
@@ -450,6 +459,23 @@ const defaultShopifyForm: ShopifyFormState = {
   matchFieldsText: "order_id,amount_major,currency,financial_status",
 };
 
+const defaultPostgresForm: PostgresFormState = {
+  databaseUrl: "",
+  readQuery: "",
+  systemRef: "record_1001",
+  paramsJson: JSON.stringify({ record_id: "record_1001" }, null, 2),
+  actionType: "database_record_update",
+  claimedJson: JSON.stringify(
+    {
+      record_id: "record_1001",
+      status: "approved",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "record_id,status",
+};
+
 const ADVANCED_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "generic_rest",
   "ledger_template",
@@ -470,6 +496,7 @@ const SETUP_PANEL_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "zendesk_ticket",
   "jira_issue",
   "netsuite_finance",
+  "postgres_read",
 ]);
 
 function firstSelectedId(inventory: ConnectorInventory): ConnectorInventoryId | null {
@@ -500,6 +527,15 @@ function parseClaimedJson(value: string): Record<string, unknown> {
     throw new Error("Claimed JSON must be an object.");
   }
   return parsed as Record<string, unknown>;
+}
+
+function parseSqlParams(value: string): Record<string, string | number | boolean | null> {
+  const parsed = parseClaimedJson(value);
+  const entries = Object.entries(parsed);
+  if (entries.some(([, item]) => item !== null && !["string", "number", "boolean"].includes(typeof item))) {
+    throw new Error("Query params must contain only strings, numbers, booleans, or null.");
+  }
+  return parsed as Record<string, string | number | boolean | null>;
 }
 
 function matchFieldsFromText(value: string): string[] {
@@ -586,6 +622,7 @@ function statusValue(row: ConnectorInventoryRow | ConnectorCoverageRow) {
 }
 
 function connectorSearchText(row: ConnectorInventoryRow): string {
+  const setupProfile = connectorSetupProfile(row.id);
   return [
     row.title,
     row.category,
@@ -596,6 +633,9 @@ function connectorSearchText(row: ConnectorInventoryRow): string {
     row.detail,
     row.metadata.connectorType,
     row.metadata.maskedEndpoint,
+    setupProfile.methodLabel,
+    setupProfile.requirement,
+    setupProfile.detail,
     ...row.supportedActionTypes,
   ]
     .filter(Boolean)
@@ -618,12 +658,14 @@ function filterCategoryGroups(
 }
 
 function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
+  const profile = connectorSetupProfile(row.id);
+  if (row.connected) return profile.oneClick ? `Manage ${connectorSystemLabel(row)}` : "Update access";
+  if (profile.oneClick) return `Connect ${connectorSystemLabel(row)}`;
   if (row.id === "mcp_upstream") return "Configure MCP upstream";
-  if (row.kind === "support") return row.ctaLabel;
   if (row.id === "generic_rest") return "Set up custom REST";
   if (row.id === "postgres_read") return "Set up database";
-  if (row.id === "ledger_template" || row.id === "customer_template") return "Set up template";
-  return `Connect ${connectorSystemLabel(row)}`;
+  if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Add Stripe key";
+  return `Add ${connectorSystemLabel(row)} access`;
 }
 
 function connectorSystemLabel(row: ConnectorInventoryRow): string {
@@ -638,22 +680,11 @@ function connectorSystemLabel(row: ConnectorInventoryRow): string {
 }
 
 function connectorCardMeta(row: ConnectorInventoryRow): string {
-  if (row.id === "mcp_upstream") return "Inline gateway";
-  if (row.kind === "support") return "Workflow";
-  if (row.transport === "sql_read") return "SQL read";
-  if (row.id === "generic_rest") return "Custom REST";
-  if (row.id === "stripe_refund" || row.id === "razorpay_refund") return "Refunds";
-  if (row.id === "stripe_payment") return "Payments";
-  if (row.id === "ledger_template" || row.id === "customer_template") return "Template";
-  return "Read-only verifier";
+  return connectorSetupProfile(row.id).cardLabel;
 }
 
 function connectorInspectorEyebrow(row: ConnectorInventoryRow): string {
-  if (row.id === "mcp_upstream") return "Agent execution rail";
-  if (row.kind === "support") return "Workflow";
-  if (row.id === "generic_rest") return "Custom connector";
-  if (row.id === "postgres_read") return "Database connector";
-  return "Native connector";
+  return connectorSetupProfile(row.id).methodLabel;
 }
 
 function connectorInspectorCopy(row: ConnectorInventoryRow): string {
@@ -715,7 +746,11 @@ function connectorDisplayCards(
         ids: stripeRows.map((stripeRow) => stripeRow.id),
         key: "stripe",
         logoId: "stripe_refund",
-        meta: hasRefunds && hasPayments ? "Refunds + payments" : hasPayments ? "Payments" : "Refunds",
+        meta: hasRefunds && hasPayments
+          ? "Restricted key / Refunds + payments"
+          : hasPayments
+            ? "Restricted key / Payments"
+            : "Restricted key / Refunds",
         row: preferredStripeRow,
         title: "Stripe",
       });
@@ -734,13 +769,6 @@ function connectorDisplayCards(
   }
 
   return cards;
-}
-
-function connectorActionSummary(row: ConnectorInventoryRow): string {
-  if (row.supportedActionTypes.includes("*")) return "custom agent actions";
-  const actions = row.supportedActionTypes.slice(0, 3).map((item) => humanize(item));
-  if (actions.length === 0) return row.kind === "support" ? "workflow events" : "agent actions";
-  return `${actions.join(", ")}${row.supportedActionTypes.length > actions.length ? ", and more" : ""}`;
 }
 
 function connectorPreflightSummary(row: ConnectorInventoryRow) {
@@ -801,14 +829,13 @@ function Fact({
 }
 
 function CoverageMap({ rows }: { rows: ConnectorCoverageRow[] }) {
-  const hasCoverageGap = rows.some((row) => row.status !== "healthy" && row.status !== "generic_fallback");
   return (
     <section
       className="panel connectors-coverage-panel connectors-coverage-panel-secondary"
       aria-label="Verification coverage audit"
       id="verification-coverage"
     >
-      <details className="connectors-coverage-details" open={hasCoverageGap}>
+      <details className="connectors-coverage-details">
         <summary>
           <span>
             <span className="dashboard-eyebrow">Coverage audit</span>
@@ -869,12 +896,12 @@ function ConnectorInventoryList({
   onSelect: (id: ConnectorInventoryId) => void;
 }) {
   return (
-    <section className="panel connectors-inventory-panel" aria-label="Connector inventory">
+    <section className="panel connectors-inventory-panel" aria-label="Connector inventory" id="connector-catalog">
       <div className="connectors-section-head">
         <div>
           <span className="dashboard-eyebrow">Connectors</span>
-          <h2>Available systems</h2>
-          <p>Select a source system, connect read-only access, and use it for proof.</p>
+          <h2>Connect a system</h2>
+          <p>One-click connectors use OAuth. Every other connector names the exact read-only credential you need.</p>
         </div>
       </div>
 
@@ -883,7 +910,7 @@ function ConnectorInventoryList({
         <span className="sr-only">Search connectors</span>
         <input
           aria-label="Search connectors"
-          placeholder="Search connectors, systems, action types..."
+          placeholder="Search systems, OAuth, API keys, or action types..."
           type="search"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
@@ -2834,6 +2861,166 @@ function ShopifySetupPanel({
   );
 }
 
+function PostgresReadSetupPanel({
+  onStatusChange,
+  status,
+}: {
+  onStatusChange: (status: PostgresReadConnectorStatusResponse) => void;
+  status: PostgresReadConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<PostgresFormState>(defaultPostgresForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const updateForm = (key: keyof PostgresFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await savePostgresReadConnectorConfig({
+        database_url: form.databaseUrl.trim() || undefined,
+        read_query: form.readQuery.trim(),
+      });
+      onStatusChange(result);
+      setForm((current) => ({ ...current, databaseUrl: "" }));
+      setMessage("Read-only database access saved. Run preflight with a real record.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save database access.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await testPostgresReadConnector({
+        action_type: form.actionType.trim() || null,
+        claimed: parseClaimedJson(form.claimedJson),
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+        params: parseSqlParams(form.paramsJson),
+        system_ref: form.systemRef.trim() || null,
+      });
+      onStatusChange(result.connector);
+      setMessage(result.ok ? "Database preflight matched the claimed record." : "Database preflight completed without a match.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Database preflight failed.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const canSave = Boolean(
+    form.readQuery.trim()
+      && (form.databaseUrl.trim() || status?.has_database_url),
+  );
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Postgres read verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <h2>SQL database</h2>
+          <p>Read one business record through a dedicated read-only database role.</p>
+        </div>
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Read-only access</strong>
+            <span>Database credentials are encrypted and never rendered again.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label className="connectors-generic-wide">
+              <span>Database URL</span>
+              <input
+                aria-label="Read-only database URL"
+                autoComplete="off"
+                onChange={(event) => updateForm("databaseUrl", event.target.value)}
+                placeholder={status?.has_database_url ? "Database URL saved" : "postgresql://readonly_user:..."}
+                type="password"
+                value={form.databaseUrl}
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Parameterized SELECT query</span>
+              <textarea
+                aria-label="Parameterized SELECT query"
+                onChange={(event) => updateForm("readQuery", event.target.value)}
+                placeholder={status?.has_read_query ? "Enter a replacement SELECT query" : "SELECT id, status FROM records WHERE id = :record_id"}
+                rows={4}
+                value={form.readQuery}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!canSave} loading={saving} type="submit" variant="primary">
+            Save database access
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Preflight</strong>
+            <span>Use a real record reference and compare only stable fields.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>System reference</span>
+              <input value={form.systemRef} onChange={(event) => updateForm("systemRef", event.target.value)} />
+            </label>
+            <label>
+              <span>Action type</span>
+              <input value={form.actionType} onChange={(event) => updateForm("actionType", event.target.value)} />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Query params JSON</span>
+              <textarea
+                aria-label="Query params JSON"
+                rows={3}
+                value={form.paramsJson}
+                onChange={(event) => updateForm("paramsJson", event.target.value)}
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                aria-label="Database claimed JSON"
+                rows={4}
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Match fields</span>
+              <input
+                aria-label="Database match fields"
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!status?.connected} loading={testing} type="submit" variant="soft">
+            Run database preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+    </section>
+  );
+}
+
 function McpUpstreamSetupPanel({
   onStatusChange,
   status,
@@ -3021,6 +3208,7 @@ function ConnectorInspector({
   hubspotStatus,
   jiraStatus,
   netsuiteStatus,
+  postgresStatus,
   razorpayStatus,
   salesforceStatus,
   shopifyStatus,
@@ -3032,6 +3220,7 @@ function ConnectorInspector({
   onHubSpotStatusChange,
   onJiraStatusChange,
   onNetSuiteStatusChange,
+  onPostgresStatusChange,
   onRazorpayStatusChange,
   onSalesforceStatusChange,
   onShopifyStatusChange,
@@ -3047,6 +3236,7 @@ function ConnectorInspector({
   hubspotStatus: HubSpotCrmConnectorStatusResponse | null;
   jiraStatus: JiraIssueConnectorStatusResponse | null;
   netsuiteStatus: NetSuiteFinanceConnectorStatusResponse | null;
+  postgresStatus: PostgresReadConnectorStatusResponse | null;
   razorpayStatus: RazorpayRefundConnectorStatusResponse | null;
   salesforceStatus: SalesforceCrmConnectorStatusResponse | null;
   shopifyStatus: ShopifyConnectorStatusResponse | null;
@@ -3058,6 +3248,7 @@ function ConnectorInspector({
   onHubSpotStatusChange: (status: HubSpotCrmConnectorStatusResponse) => void;
   onJiraStatusChange: (status: JiraIssueConnectorStatusResponse) => void;
   onNetSuiteStatusChange: (status: NetSuiteFinanceConnectorStatusResponse) => void;
+  onPostgresStatusChange: (status: PostgresReadConnectorStatusResponse) => void;
   onRazorpayStatusChange: (status: RazorpayRefundConnectorStatusResponse) => void;
   onSalesforceStatusChange: (status: SalesforceCrmConnectorStatusResponse) => void;
   onShopifyStatusChange: (status: ShopifyConnectorStatusResponse) => void;
@@ -3069,9 +3260,12 @@ function ConnectorInspector({
   row: ConnectorInventoryRow | null;
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
     setSetupOpen(false);
+    setConnectionError(null);
   }, [row?.id]);
 
   if (!row) {
@@ -3086,6 +3280,43 @@ function ConnectorInspector({
   }
 
   const preflight = connectorPreflightSummary(row);
+  const setupProfile = connectorSetupProfile(row.id);
+  const accessStatus = row.connected
+    ? "Saved"
+    : setupProfile.oneClick
+      ? "Authorization required"
+      : "Credential required";
+  const accessScope = row.id === "mcp_upstream"
+    ? "Policy-gated execution"
+    : row.kind === "support"
+      ? "Workflow delivery"
+      : "Read-only proof";
+
+  const startOneClickConnect = async () => {
+    setConnecting(true);
+    setConnectionError(null);
+    try {
+      if (row.id === "github") {
+        externalNavigator.assign("/api/zroky/v1/settings/github/connect/start");
+        return;
+      }
+      if (row.id === "slack") {
+        const result = await startSlackInstall();
+        externalNavigator.assign(result.authorization_url);
+        return;
+      }
+      if (row.id === "zoho_crm") {
+        const result = await startZohoCrmOAuth();
+        externalNavigator.assign(result.authorization_url);
+        return;
+      }
+      setSetupOpen(true);
+    } catch (err) {
+      setConnectionError(err instanceof Error ? err.message : "Failed to start connector authorization.");
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   return (
     <section className="panel connector-inspector-panel" aria-label="Selected connector">
@@ -3116,17 +3347,51 @@ function ConnectorInspector({
         </div>
       </div>
 
+      <div className="connector-launch-grid" aria-label="Connector access requirements">
+        <article>
+          <span>Setup method</span>
+          <strong>{setupProfile.methodLabel}</strong>
+          <span>{setupProfile.oneClick ? "No credential copy and paste." : "Secure form setup."}</span>
+        </article>
+        <article>
+          <span>Access needed</span>
+          <strong>{setupProfile.requirement}</strong>
+          <span>{setupProfile.detail}</span>
+        </article>
+        <article>
+          <span>Current access</span>
+          <strong>{accessStatus}</strong>
+          <span>{accessScope}</span>
+        </article>
+      </div>
+
       <div className="connector-inspector-actions">
-        {row.kind === "proof" || row.id === "mcp_upstream" ? (
+        {setupProfile.oneClick && !row.connected ? (
+          <>
+            <DashboardButton loading={connecting} onClick={() => void startOneClickConnect()} variant="primary">
+              {connectorPrimaryCtaLabel(row)}
+            </DashboardButton>
+            {row.id === "zoho_crm" ? (
+              <DashboardButton onClick={() => setSetupOpen(true)} variant="soft">
+                Use manual access
+              </DashboardButton>
+            ) : null}
+          </>
+        ) : row.kind === "proof" || row.id === "mcp_upstream" ? (
           <DashboardButton onClick={() => setSetupOpen(true)} variant="primary">
             {connectorPrimaryCtaLabel(row)}
           </DashboardButton>
         ) : (
-          <DashboardButtonLink href={row.href} variant="primary">
+          <DashboardButtonLink
+            href={row.id === "github" ? "/api/zroky/v1/settings/github/connect/start" : row.href}
+            variant="primary"
+          >
             {connectorPrimaryCtaLabel(row)}
           </DashboardButtonLink>
         )}
       </div>
+
+      {connectionError ? <div className="alert-strip connectors-alert">{connectionError}</div> : null}
 
       <details className="connector-advanced-details">
         <summary>
@@ -3259,6 +3524,12 @@ function ConnectorInspector({
                   status={shopifyStatus}
                 />
               ) : null}
+              {row.id === "postgres_read" ? (
+                <PostgresReadSetupPanel
+                  onStatusChange={onPostgresStatusChange}
+                  status={postgresStatus}
+                />
+              ) : null}
               {row.id === "mcp_upstream" ? (
                 <McpUpstreamSetupPanel onStatusChange={onMcpStatusChange} status={mcpStatus} />
               ) : null}
@@ -3283,8 +3554,6 @@ export default function IntegrationsPage() {
       mcpResult,
       githubResult,
       slackResult,
-      ledgerResult,
-      customerResult,
       genericResult,
       stripeResult,
       stripePaymentResult,
@@ -3303,8 +3572,6 @@ export default function IntegrationsPage() {
       getMcpUpstreamBinding(),
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
-      getLedgerRefundConnectorStatus(),
-      getCustomerRecordConnectorStatus(),
       getGenericRestConnectorStatus(),
       getStripeRefundConnectorStatus(),
       getStripePaymentConnectorStatus(),
@@ -3325,8 +3592,6 @@ export default function IntegrationsPage() {
       mcp: mcpResult.status === "fulfilled" ? mcpResult.value : null,
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
-      ledger: ledgerResult.status === "fulfilled" ? ledgerResult.value : null,
-      customer: customerResult.status === "fulfilled" ? customerResult.value : null,
       generic: genericResult.status === "fulfilled" ? genericResult.value : null,
       stripe: stripeResult.status === "fulfilled" ? stripeResult.value : null,
       stripePayment: stripePaymentResult.status === "fulfilled" ? stripePaymentResult.value : null,
@@ -3346,8 +3611,6 @@ export default function IntegrationsPage() {
       mcpResult,
       githubResult,
       slackResult,
-      ledgerResult,
-      customerResult,
       genericResult,
       stripeResult,
       stripePaymentResult,
@@ -3371,7 +3634,13 @@ export default function IntegrationsPage() {
   }, [loadOverview]);
 
   const inventory = useMemo(
-    () => buildConnectorInventory({ ...overview, partialFailure }),
+    () => buildConnectorInventory({
+      ...overview,
+      customer: null,
+      ledger: null,
+      partialFailure,
+      visibleConnectorIds: CONFIGURABLE_CONNECTOR_IDS,
+    }),
     [overview, partialFailure],
   );
   const visibleInventory = inventory;
@@ -3395,15 +3664,15 @@ export default function IntegrationsPage() {
             <DashboardButton icon={<RefreshCw />} loading={loading} onClick={() => void loadOverview()} variant="soft">
               Refresh
             </DashboardButton>
-            <DashboardButtonLink href={visibleInventory.verdict.ctaHref} variant="primary">
-              {visibleInventory.verdict.ctaLabel}
+            <DashboardButtonLink href="#connector-catalog" variant="primary">
+              Connect a system
             </DashboardButtonLink>
           </>
         }
-        copy="Connect the systems Zroky can read for proof. Keep setup focused: choose a connector, save read-only access, run preflight."
+        copy="Choose a system, authorize read-only access, then run one real preflight. OAuth connectors connect in one click; manual connectors show the exact key or token required."
         eyebrow="Connectors"
         icon={<Database />}
-        pill="Read-only proof"
+        pill="3 one-click options"
         tone="neutral"
         title="Connectors"
         updatedLabel={loading ? "Refreshing" : "Updated live"}
@@ -3427,6 +3696,7 @@ export default function IntegrationsPage() {
             hubspotStatus={overview.hubspot}
             jiraStatus={overview.jira}
             netsuiteStatus={overview.netsuite}
+            postgresStatus={overview.postgres}
             razorpayStatus={overview.razorpay}
             salesforceStatus={overview.salesforce}
             shopifyStatus={overview.shopify}
@@ -3438,6 +3708,7 @@ export default function IntegrationsPage() {
             onHubSpotStatusChange={(hubspot) => setOverview((current) => ({ ...current, hubspot }))}
             onJiraStatusChange={(jira) => setOverview((current) => ({ ...current, jira }))}
             onNetSuiteStatusChange={(netsuite) => setOverview((current) => ({ ...current, netsuite }))}
+            onPostgresStatusChange={(postgres) => setOverview((current) => ({ ...current, postgres }))}
             onRazorpayStatusChange={(razorpay) => setOverview((current) => ({ ...current, razorpay }))}
             onSalesforceStatusChange={(salesforce) => setOverview((current) => ({ ...current, salesforce }))}
             onShopifyStatusChange={(shopify) => setOverview((current) => ({ ...current, shopify }))}

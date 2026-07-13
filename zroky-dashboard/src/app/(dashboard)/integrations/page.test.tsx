@@ -50,6 +50,7 @@ const api = vi.hoisted(() => ({
   saveJiraIssueConnectorConfig: vi.fn(),
   saveMcpUpstreamDraft: vi.fn(),
   saveNetSuiteFinanceConnectorConfig: vi.fn(),
+  savePostgresReadConnectorConfig: vi.fn(),
   saveRazorpayRefundConnectorConfig: vi.fn(),
   saveSalesforceCrmConnectorConfig: vi.fn(),
   saveShopifyConnectorConfig: vi.fn(),
@@ -58,10 +59,12 @@ const api = vi.hoisted(() => ({
   saveZendeskTicketConnectorConfig: vi.fn(),
   saveZohoCrmConnectorConfig: vi.fn(),
   startZohoCrmOAuth: vi.fn(),
+  startSlackInstall: vi.fn(),
   testGenericRestConnector: vi.fn(),
   testHubSpotCrmConnector: vi.fn(),
   testJiraIssueConnector: vi.fn(),
   testNetSuiteFinanceConnector: vi.fn(),
+  testPostgresReadConnector: vi.fn(),
   testRazorpayRefundConnector: vi.fn(),
   testSalesforceCrmConnector: vi.fn(),
   testShopifyConnector: vi.fn(),
@@ -120,6 +123,7 @@ vi.mock("@/lib/api", async () => {
     saveJiraIssueConnectorConfig: api.saveJiraIssueConnectorConfig,
     saveMcpUpstreamDraft: api.saveMcpUpstreamDraft,
     saveNetSuiteFinanceConnectorConfig: api.saveNetSuiteFinanceConnectorConfig,
+    savePostgresReadConnectorConfig: api.savePostgresReadConnectorConfig,
     saveRazorpayRefundConnectorConfig: api.saveRazorpayRefundConnectorConfig,
     saveSalesforceCrmConnectorConfig: api.saveSalesforceCrmConnectorConfig,
     saveShopifyConnectorConfig: api.saveShopifyConnectorConfig,
@@ -128,10 +132,12 @@ vi.mock("@/lib/api", async () => {
     saveZendeskTicketConnectorConfig: api.saveZendeskTicketConnectorConfig,
     saveZohoCrmConnectorConfig: api.saveZohoCrmConnectorConfig,
     startZohoCrmOAuth: api.startZohoCrmOAuth,
+    startSlackInstall: api.startSlackInstall,
     testGenericRestConnector: api.testGenericRestConnector,
     testHubSpotCrmConnector: api.testHubSpotCrmConnector,
     testJiraIssueConnector: api.testJiraIssueConnector,
     testNetSuiteFinanceConnector: api.testNetSuiteFinanceConnector,
+    testPostgresReadConnector: api.testPostgresReadConnector,
     testRazorpayRefundConnector: api.testRazorpayRefundConnector,
     testSalesforceCrmConnector: api.testSalesforceCrmConnector,
     testShopifyConnector: api.testShopifyConnector,
@@ -765,6 +771,9 @@ describe("IntegrationsPage", () => {
     api.startZohoCrmOAuth.mockResolvedValue({
       authorization_url: "https://accounts.zoho.com/oauth/v2/auth?state=test",
     });
+    api.startSlackInstall.mockResolvedValue({
+      authorization_url: "https://slack.com/oauth/v2/authorize?state=test",
+    });
     api.getPostgresReadConnectorStatus.mockResolvedValue(postgresStatus({
       connected: true,
       has_database_url: true,
@@ -775,6 +784,31 @@ describe("IntegrationsPage", () => {
       readiness: { status: "ready" },
       last_checked_at: "2026-06-24T09:03:00Z",
     }));
+    api.savePostgresReadConnectorConfig.mockResolvedValue(postgresStatus({
+      connected: true,
+      has_database_url: true,
+      has_read_query: true,
+      read_query_digest: "sha256:replacement",
+      health_status: "not_verified",
+    }));
+    api.testPostgresReadConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "postgres_read",
+        system_ref: "record_1001",
+        action_type: "database_record_update",
+        metadata: { connector_kind: "postgres_read" },
+      }),
+      connector: postgresStatus({
+        connected: true,
+        has_database_url: true,
+        has_read_query: true,
+        read_query_digest: "sha256:replacement",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
     api.listOutcomeReconciliations.mockResolvedValue({
       items: [
         {
@@ -1202,20 +1236,21 @@ describe("IntegrationsPage", () => {
     expect(screen.getByRole("region", { name: "Verification coverage audit" })).toBeInTheDocument();
     const coverageRegion = screen.getByRole("region", { name: "Verification coverage audit" });
     expect(coverageRegion.getAttribute("id")).toBe("verification-coverage");
-    expect(coverageRegion.querySelector("details")?.hasAttribute("open")).toBe(true);
-    expect(screen.getByRole("link", { name: "Review coverage" }).getAttribute("href")).toBe(
-      "/integrations#verification-coverage",
+    expect(coverageRegion.querySelector("details")?.hasAttribute("open")).toBe(false);
+    expect(screen.getByRole("link", { name: "Connect a system" }).getAttribute("href")).toBe(
+      "#connector-catalog",
     );
     expect(screen.getAllByText("refund").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Verifier healthy").length).toBeGreaterThan(0);
     expect(screen.getByText("custom")).toBeInTheDocument();
-    expect(screen.getByText("No verifier")).toBeInTheDocument();
+    expect(screen.getAllByText("No verifier").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("heading", { name: "Available systems" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connect a system" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
     expect(screen.getByText("Verify refunds and payments from Stripe.")).toBeInTheDocument();
     expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
+    expect(screen.getByText("Restricted Stripe secret key")).toBeInTheDocument();
+    expect(screen.getByText("Credential required")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add Stripe key" }));
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
@@ -1231,19 +1266,28 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("Zendesk ticket")).toBeInTheDocument();
     expect(screen.getByText("Jira / JSM")).toBeInTheDocument();
     expect(screen.getAllByText("Stripe").length).toBeGreaterThan(0);
-    expect(screen.getByText("Refunds + payments")).toBeInTheDocument();
+    expect(screen.getByText("Restricted key / Refunds + payments")).toBeInTheDocument();
     expect(screen.getByText("Razorpay")).toBeInTheDocument();
     expect(screen.getByText("Shopify Admin")).toBeInTheDocument();
-    expect(screen.getByText("Refund ledger")).toBeInTheDocument();
-    expect(screen.getByText("Customer / CRM record")).toBeInTheDocument();
+    expect(screen.queryByText("Refund ledger")).not.toBeInTheDocument();
+    expect(screen.queryByText("Customer / CRM record")).not.toBeInTheDocument();
+    expect(screen.queryByText("Intercom")).not.toBeInTheDocument();
+    expect(screen.queryByText("Freshdesk ticket")).not.toBeInTheDocument();
+    expect(screen.queryByText("QuickBooks ledger")).not.toBeInTheDocument();
     expect(screen.getAllByText("SQL database").length).toBeGreaterThan(0);
     expect(screen.getByText("Slack")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "stripe" } });
-    expect(screen.getByRole("button", { name: /Stripe.*Refunds \+ payments/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stripe.*Restricted key.*Refunds \+ payments/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Stripe payment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /HubSpot CRM/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "OAuth" } });
+    expect(screen.getByRole("button", { name: /GitHub.*One-click OAuth/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Slack.*One-click OAuth/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Zoho CRM.*OAuth/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stripe.*Restricted key/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
     expect(screen.getByText("No connectors match this search")).toBeInTheDocument();
@@ -1347,7 +1391,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("stripe_payment");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Stripe key" }));
     fireEvent.change(screen.getByLabelText("Stripe secret key"), {
       target: { value: "sk_live_payment" },
     });
@@ -1401,7 +1445,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("razorpay_refund");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Razorpay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Razorpay access" }));
     fireEvent.change(screen.getByLabelText("Razorpay key id"), {
       target: { value: "rzp_test_key" },
     });
@@ -1459,7 +1503,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("shopify_admin");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Shopify Admin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Shopify Admin access" }));
     fireEvent.change(screen.getByLabelText("Shop Admin base URL"), {
       target: { value: "https://example.myshopify.com" },
     });
@@ -1517,7 +1561,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("hubspot_crm");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect HubSpot CRM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add HubSpot CRM access" }));
     fireEvent.change(screen.getByLabelText("Private app token"), {
       target: { value: "hubspot-private-app-token" },
     });
@@ -1569,7 +1613,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("zoho_crm");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Zoho CRM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use manual access" }));
     fireEvent.change(screen.getByLabelText("Manual bearer token"), {
       target: { value: "zoho-oauth-access-token" },
     });
@@ -1625,7 +1669,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("jira_issue");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Jira / JSM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Jira / JSM access" }));
     fireEvent.change(screen.getByLabelText("Atlassian email"), {
       target: { value: "agent@example.com" },
     });
@@ -1678,7 +1722,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("netsuite_finance");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect NetSuite finance" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add NetSuite finance access" }));
     fireEvent.change(screen.getByLabelText("Bearer token"), {
       target: { value: "netsuite-token" },
     });
@@ -1744,7 +1788,6 @@ describe("IntegrationsPage", () => {
 
       await screen.findByRole("heading", { name: "Connectors" });
       fireEvent.click(screen.getByRole("button", { name: "Connect Zoho CRM" }));
-      fireEvent.click(await screen.findByRole("button", { name: /Connect with OAuth/i }));
 
       await waitFor(() => expect(api.startZohoCrmOAuth).toHaveBeenCalledTimes(1));
       expect(assignSpy).toHaveBeenCalledWith(
@@ -1753,6 +1796,63 @@ describe("IntegrationsPage", () => {
     } finally {
       assignSpy.mockRestore();
     }
+  });
+
+  it("starts Slack OAuth directly from the connector inspector", async () => {
+    const assignSpy = vi.spyOn(externalNavigator, "assign").mockImplementation(() => undefined);
+    try {
+      renderWithConnector("slack");
+
+      await screen.findByRole("heading", { name: "Slack" });
+      fireEvent.click(screen.getByRole("button", { name: "Connect Slack" }));
+
+      await waitFor(() => expect(api.startSlackInstall).toHaveBeenCalledTimes(1));
+      expect(assignSpy).toHaveBeenCalledWith("https://slack.com/oauth/v2/authorize?state=test");
+    } finally {
+      assignSpy.mockRestore();
+    }
+  });
+
+  it("routes GitHub through the real OAuth start endpoint", async () => {
+    renderWithConnector("github");
+
+    await screen.findByRole("heading", { name: "GitHub" });
+    expect(screen.getByRole("link", { name: "Manage GitHub" }).getAttribute("href")).toBe(
+      "/api/zroky/v1/settings/github/connect/start",
+    );
+  });
+
+  it("saves and preflights the SQL database connector", async () => {
+    renderWithConnector("postgres_read");
+
+    await screen.findByRole("heading", { name: "SQL database" });
+    fireEvent.click(screen.getByRole("button", { name: "Update access" }));
+    fireEvent.change(await screen.findByLabelText("Read-only database URL"), {
+      target: { value: "postgresql://readonly:secret@db.example.com/app" },
+    });
+    fireEvent.change(screen.getByLabelText("Parameterized SELECT query"), {
+      target: { value: "SELECT id AS record_id, status FROM records WHERE id = :record_id" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save database access" }));
+
+    await waitFor(() => {
+      expect(api.savePostgresReadConnectorConfig).toHaveBeenCalledWith({
+        database_url: "postgresql://readonly:secret@db.example.com/app",
+        read_query: "SELECT id AS record_id, status FROM records WHERE id = :record_id",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run database preflight" }));
+    await waitFor(() => {
+      expect(api.testPostgresReadConnector).toHaveBeenCalledWith({
+        action_type: "database_record_update",
+        claimed: { record_id: "record_1001", status: "approved" },
+        match_fields: ["record_id", "status"],
+        params: { record_id: "record_1001" },
+        system_ref: "record_1001",
+      });
+    });
+    expect(await screen.findByText("Database preflight matched the claimed record.")).toBeInTheDocument();
   });
 
   it("saves, preflights, and activates an MCP upstream without collecting a secret", async () => {
