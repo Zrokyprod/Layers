@@ -44,6 +44,7 @@ from app.services.system_of_record_connector_config import (
     decrypt_connector_database_url,
     get_connector_config,
 )
+from app.services.atlassian_oauth import resolve_jira_bearer_token
 from app.services.zoho_oauth import resolve_zoho_crm_bearer_token
 
 

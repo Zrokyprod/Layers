@@ -65,6 +65,16 @@ from app.services.system_of_record_connector_config import (
     upsert_zoho_crm_connector_config,
 )
 from app.services.security import generate_oauth_state_with_payload, verify_oauth_state_with_payload
+from app.services.atlassian_oauth import (
+    ATLASSIAN_API_BASE_URL,
+    ATLASSIAN_AUTHORIZE_URL,
+    AtlassianOAuthError,
+    exchange_atlassian_code,
+    list_atlassian_accessible_resources,
+    pick_jira_resource,
+    require_atlassian_oauth_config,
+    resolve_jira_bearer_token,
+)
 from app.services.zoho_oauth import (
     ZOHO_AUTHORIZE_PATH,
     ZohoOAuthError,
@@ -78,6 +88,18 @@ from ._sor_integrations_helpers import *
 from ._sor_integrations_schemas import *
 
 router = APIRouter()
+
+
+def _existing_query(row) -> dict[str, object]:
+    if row is None or not row.query_json:
+        return {}
+    try:
+        import json
+
+        loaded = json.loads(row.query_json)
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 @router.get(
     "/hubspot-crm/status",
@@ -337,6 +359,132 @@ def test_zendesk_ticket_connector(
 
 
 @router.get(
+    "/jira-issue/oauth/start",
+    response_model=OAuthStartResponse,
+)
+@limiter.limit("10/minute")
+def start_jira_issue_oauth(
+    request: Request,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OAuthStartResponse:
+    if context.role not in {"admin", "owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant admin role is required.",
+        )
+    ensure_project_exists(db, context.tenant_id)
+    settings = get_settings()
+    try:
+        require_atlassian_oauth_config(settings)
+    except AtlassianOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    state = generate_oauth_state_with_payload(
+        _oauth_state_secret(settings),
+        {
+            "purpose": "jira_issue_connect",
+            "tenant_id": context.tenant_id,
+            "subject": context.subject,
+        },
+    )
+    params = {
+        "audience": "api.atlassian.com",
+        "client_id": settings.ATLASSIAN_CLIENT_ID,
+        "scope": settings.ATLASSIAN_OAUTH_SCOPES,
+        "redirect_uri": settings.ATLASSIAN_OAUTH_REDIRECT_URL,
+        "state": state,
+        "response_type": "code",
+        "prompt": "consent",
+    }
+    return OAuthStartResponse(authorization_url=f"{ATLASSIAN_AUTHORIZE_URL}?{urlencode(params)}")
+
+
+@router.get("/jira-issue/oauth/callback")
+@limiter.limit("10/minute")
+def complete_jira_issue_oauth(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db_session),
+) -> RedirectResponse:
+    settings = get_settings()
+    try:
+        require_atlassian_oauth_config(settings)
+    except AtlassianOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    state_payload = verify_oauth_state_with_payload(state, _oauth_state_secret(settings))
+    if state_payload is None or state_payload.get("purpose") != "jira_issue_connect":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired Jira OAuth state.",
+        )
+    tenant_id = str(state_payload.get("tenant_id") or "").strip()
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Jira OAuth state missing tenant.",
+        )
+    ensure_project_exists(db, tenant_id)
+    try:
+        payload = exchange_atlassian_code(code=code, settings=settings)
+        access_token = str(payload.get("access_token") or "").strip()
+        refresh_token = str(payload.get("refresh_token") or "").strip() or None
+        if not refresh_token:
+            raise AtlassianOAuthError(
+                "Atlassian OAuth did not return a refresh token; include offline_access in ATLASSIAN_OAUTH_SCOPES."
+            )
+        resource = pick_jira_resource(
+            list_atlassian_accessible_resources(access_token=access_token)
+        )
+    except AtlassianOAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    cloud_id = str(resource.get("id") or "").strip()
+    site_url = str(resource.get("url") or "").strip()
+    site_name = str(resource.get("name") or "").strip()
+    if not cloud_id:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Atlassian OAuth response missing Jira cloud id.",
+        )
+
+    existing = get_connector_config(
+        db, project_id=tenant_id, connector_type=JIRA_ISSUE_CONNECTOR_TYPE
+    )
+    query = {
+        **_existing_query(existing),
+        "auth_mode": "oauth",
+        "atlassian_cloud_id": cloud_id,
+        "atlassian_site_url": site_url,
+        "atlassian_site_name": site_name,
+    }
+    query.pop("auth_username", None)
+    upsert_jira_issue_connector_config(
+        db,
+        project_id=tenant_id,
+        base_url=f"{ATLASSIAN_API_BASE_URL}/ex/jira/{cloud_id}",
+        path_template=existing.path_template if existing is not None else "/rest/api/3/issue/{record_ref}",
+        record_path=existing.record_path if existing is not None else None,
+        query=query,
+        bearer_token=access_token,
+        oauth_refresh_token=refresh_token,
+        updated_by_subject=str(state_payload.get("subject") or "").strip() or None,
+    )
+    return RedirectResponse(
+        url=f"{settings.FRONTEND_URL.rstrip('/')}/integrations?connector=jira_issue&oauth=success"
+    )
+
+
+@router.get(
     "/jira-issue/status",
     response_model=JiraIssueConnectorStatusResponse,
 )
@@ -420,7 +568,12 @@ def test_jira_issue_connector(
     claimed.setdefault("issue_key", record_ref)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = resolve_jira_bearer_token(
+            config,
+            project_id=tenant_id,
+            settings=settings,
+            db=db,
+        )
         connector = build_jira_issue_connector(
             config,
             record_ref=record_ref,

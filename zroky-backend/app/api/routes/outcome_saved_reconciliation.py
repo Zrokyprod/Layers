@@ -81,6 +81,7 @@ from app.services.system_of_record_connector_config import (
     decrypt_connector_database_url,
     get_connector_config,
 )
+from app.services.atlassian_oauth import resolve_jira_bearer_token
 from app.services.zoho_oauth import ZohoOAuthError, resolve_zoho_crm_bearer_token
 
 
@@ -1025,5 +1026,4 @@ def _create_saved_postgres_read_reconciliation(
         raise _map_saved_connector_error(exc) from exc
 
     return _serialize_reconciliation(row)
-
 
