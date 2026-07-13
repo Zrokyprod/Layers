@@ -20,53 +20,33 @@ import {
 import type { StatusTone } from "@/lib/action-status";
 import { loadActionsLifecycleFeed } from "@/lib/actions-lifecycle-feed";
 import { formatCount, timeSince } from "@/lib/format";
-import type { BillingUsageMeter } from "@/lib/types";
+import { useDashboardStore } from "@/lib/store";
 
-function formatMeter(meter: BillingUsageMeter | null | undefined): string {
-  if (!meter) return "Loading";
-  const used = formatCount(meter.used);
-  if (meter.unlimited || meter.limit == null) return `${used} used`;
-  return `${used} / ${formatCount(meter.limit)}`;
+const DEFAULT_ACTION_WINDOW_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const ACTION_FILTERS = new Set<ActionLifecycleFilter>([
+  "all",
+  "needs_action",
+  "awaiting_runner",
+  "in_progress",
+  "completed",
+  "stopped",
+  "bypassed",
+]);
+
+function actionsWindowDays(dateRange: { from: Date | null; to: Date | null }): number {
+  if (!dateRange.from || !dateRange.to) return DEFAULT_ACTION_WINDOW_DAYS;
+  const fromMs = new Date(dateRange.from).getTime();
+  const toMs = new Date(dateRange.to).getTime();
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+    return DEFAULT_ACTION_WINDOW_DAYS;
+  }
+  return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
 }
 
-function meterHelper(label: string, meter: BillingUsageMeter | null | undefined): string {
-  if (!meter) return `${label} usage is loading.`;
-  if (meter.state === "exceeded") return `${label} exceeded by ${formatCount(meter.overage ?? 0)}.`;
-  if (meter.state === "near_limit") return `${label} is near the current plan limit.`;
-  if (meter.state === "blocked") return `${label} is blocked on this plan.`;
-  if (meter.unlimited) return `${label} is unlimited on this plan.`;
-  return meter.resets_at ? `Resets ${meter.resets_at}.` : "Current billing period.";
-}
-
-function meterPercent(meter: BillingUsageMeter | null | undefined): number {
-  if (!meter || meter.unlimited || meter.limit == null || meter.limit <= 0) return 0;
-  return Math.min(100, Math.max(0, (meter.used / meter.limit) * 100));
-}
-
-function quotaState(meter: BillingUsageMeter | null | undefined): StatusTone {
-  if (!meter || meter.unlimited || meter.limit == null) return "neutral";
-  if (meter.state === "blocked" || meter.state === "exceeded") return "danger";
-  if (meter.state === "near_limit" || meter.used / meter.limit >= 0.8) return "warning";
-  return "success";
-}
-
-function ProtectedActionQuota({ meter }: { meter: BillingUsageMeter | null | undefined }) {
-  const percent = meterPercent(meter);
-  const tone = quotaState(meter);
-  return (
-    <section className={`al-quota-gauge al-tone-${tone}`} aria-label="Protected action quota">
-      <div>
-        <span className="al-eyebrow">Protected action quota</span>
-        <strong>{formatMeter(meter)}</strong>
-        <p>{meterHelper("Protected actions", meter)}</p>
-      </div>
-      {meter && !meter.unlimited && meter.limit != null ? (
-        <div className="al-quota-meter" aria-label={`${Math.round(percent)}% of protected action quota used`}>
-          <span style={{ width: `${percent}%` }} />
-        </div>
-      ) : null}
-    </section>
-  );
+function initialFilter(search: URLSearchParams): ActionLifecycleFilter {
+  const requested = search.get("filter") as ActionLifecycleFilter | null;
+  return requested && ACTION_FILTERS.has(requested) ? requested : "all";
 }
 
 type HeroState = {
@@ -170,7 +150,7 @@ function heroState({
       copy: `${formatCount(executing)} protected action${executing === 1 ? " is" : "s are"} still inside the runner lifecycle.`,
       pill: `${formatCount(executing)} executing`,
       tone: "neutral",
-      ctaHref: "/actions?filter=executing",
+      ctaHref: "/actions?filter=in_progress",
       ctaLabel: "Review execution",
     };
   }
@@ -227,42 +207,46 @@ function initialDeepLink(rows: ActionLifecycleRow[], search: URLSearchParams): s
 }
 
 export default function ActionsPage() {
-  const [filter, setFilter] = useState<ActionLifecycleFilter>("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
   const search = useMemo(
     () => new URLSearchParams(typeof window === "undefined" ? "" : window.location.search),
     [],
   );
+  const [filter, setFilter] = useState<ActionLifecycleFilter>(() => initialFilter(search));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const windowDays = useMemo(() => actionsWindowDays(dateRange), [dateRange]);
 
   const lifecycleQuery = useQuery({
-    queryKey: ["actions", "lifecycle-summary", 30, 200],
-    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: 30, limit: 200 }, signal),
+    queryKey: ["actions", "lifecycle-summary", windowDays, 200],
+    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: windowDays, limit: 200 }, signal),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
 
   const lifecycleSummary = lifecycleQuery.data?.summary;
-  const billing = lifecycleSummary?.data.billing_usage ?? null;
   const sourceSummary = lifecycleSummary?.data.source_summary ?? null;
   const outcomeSummary = lifecycleSummary?.data.outcome_summary ?? null;
-  const rows = lifecycleQuery.data?.rows ?? [];
+  const rows = useMemo(() => lifecycleQuery.data?.rows ?? [], [lifecycleQuery.data?.rows]);
   const filteredRows = useMemo(() => filterActionLifecycle(rows, filter), [filter, rows]);
   const counts = lifecycleQuery.data?.counts ?? {
     total: 0,
     protectedActions: 0,
     guardOnly: 0,
+    needsAction: 0,
     held: 0,
     awaitingRunner: 0,
+    inProgress: 0,
     executing: 0,
+    completed: 0,
+    stopped: 0,
     stalled: 0,
     mismatched: 0,
     notVerified: 0,
     bypassed: 0,
   };
-  const selectedRow = rows.find((row) => row.id === selectedId)
+  const selectedRow = filteredRows.find((row) => row.id === selectedId)
     ?? filteredRows[0]
-    ?? rows[0]
     ?? null;
   const selectedActionId = selectedRow?.actionId ?? null;
 
@@ -291,32 +275,40 @@ export default function ActionsPage() {
         lifecycleSources.outcome_summary ? null : "outcome summary",
         lifecycleSources.source_summary ? null : "bypass summary",
         lifecycleSources.mutations ? null : "bypass mutations",
+        lifecycleSources.attempts === false ? "runner attempts" : null,
         lifecycleSources.stale_attempts ? null : "runner attempts",
       ].filter((feed): feed is string => Boolean(feed))
     : [];
   const hasError = lifecycleQuery.isError || degradedFeeds.length > 0;
-  const billingUnavailable = Boolean(lifecycleQuery.data && lifecycleSources?.billing_usage === false);
   const bypassRisk = sourceSummary?.unreceipted ?? 0;
   const connectedBypassFeeds = sourceSummary?.connected_feeds ?? 0;
   const successfulBypassPollers = sourceSummary?.successful_pollers ?? 0;
-  const bypassFeedLabel =
-    connectedBypassFeeds > 0
-      ? `${formatCount(connectedBypassFeeds)} connected feed${connectedBypassFeeds === 1 ? "" : "s"} / ${formatCount(successfulBypassPollers)} active poller${successfulBypassPollers === 1 ? "" : "s"}`
-      : "Webhook/API feed ready; no poller connected.";
+  const bypassCoverageLabel = connectedBypassFeeds === 0
+    ? "No source mutation feed is connected; zero observed bypasses is not coverage."
+    : successfulBypassPollers === 0
+      ? `${formatCount(connectedBypassFeeds)} source feed${connectedBypassFeeds === 1 ? " is" : "s are"} configured, but no poller has synced successfully yet.`
+      : `${formatCount(connectedBypassFeeds)} source feed${connectedBypassFeeds === 1 ? "" : "s"} configured / ${formatCount(successfulBypassPollers)} poller${successfulBypassPollers === 1 ? "" : "s"} synced.`;
+  const bypassFeedLabel = bypassRisk > 0
+    ? `${formatCount(bypassRisk)} unreceipted source mutation${bypassRisk === 1 ? "" : "s"} detected. ${
+        connectedBypassFeeds === 0 ? "Continuous source coverage is not connected." : bypassCoverageLabel
+      }`
+    : bypassCoverageLabel;
   const matched = outcomeSummary?.matched ?? 0;
   const mismatched = outcomeSummary?.mismatched ?? counts.mismatched;
   const notVerified = outcomeSummary?.not_verified ?? counts.notVerified;
+  const protectedActions = lifecycleSummary?.metrics.controlled_actions ?? counts.protectedActions;
+  const heldActions = lifecycleSummary?.metrics.held_actions ?? counts.held;
   const hero = heroState({
     awaitingRunner: counts.awaitingRunner,
     bypassRisk,
     error: hasError,
     executing: counts.executing,
     guardOnly: counts.guardOnly,
-    held: counts.held,
+    held: heldActions,
     loading,
     mismatched,
     notVerified,
-    protectedActions: counts.protectedActions,
+    protectedActions,
     stalled: counts.stalled,
   });
   const lastUpdatedMs = Math.max(
@@ -336,6 +328,10 @@ export default function ActionsPage() {
       setSelectedId(null);
       return;
     }
+    if (filteredRows.length === 0) {
+      setSelectedId(null);
+      return;
+    }
     const linked = initialDeepLink(rows, search);
     if (linked && selectedId == null) {
       setSelectedId(linked);
@@ -343,10 +339,6 @@ export default function ActionsPage() {
     }
     if (filteredRows.length > 0 && (!selectedId || !filteredRows.some((row) => row.id === selectedId))) {
       setSelectedId(filteredRows[0].id);
-      return;
-    }
-    if (!selectedId || !rows.some((row) => row.id === selectedId)) {
-      setSelectedId(rows[0].id);
     }
   }, [filteredRows, rows, search, selectedId]);
 
@@ -372,38 +364,24 @@ export default function ActionsPage() {
       />
 
       <ActionsMetricStrip
-        protectedActions={formatCount(counts.protectedActions)}
-        policyChecks={formatMeter(billing?.policy_checks)}
-        runnerExecutions={formatMeter(billing?.runner_executions)}
-        receipts={formatMeter(billing?.action_receipts)}
+        protectedActions={formatCount(protectedActions)}
+        waitingApproval={formatCount(heldActions)}
+        awaitingRunner={formatCount(counts.awaitingRunner)}
         verifiedOutcomes={formatCount(matched)}
-        bypassRisk={formatCount(bypassRisk)}
-        policyHelper={`${formatCount(counts.held)} held action${counts.held === 1 ? "" : "s"}.`}
-        runnerHelper={meterHelper("Runner executions", billing?.runner_executions)}
-        receiptHelper={meterHelper("Action receipts", billing?.action_receipts)}
-        outcomeHelper={`${formatCount(mismatched)} mismatched / ${formatCount(notVerified)} not verified.`}
-        bypassHelper={`${formatCount(sourceSummary?.policy_bypass ?? 0)} policy bypass / ${formatCount(sourceSummary?.unmanaged_agent_action ?? 0)} unmanaged. ${bypassFeedLabel}`}
+        bypassRisk={connectedBypassFeeds === 0 && bypassRisk === 0 ? "Not covered" : formatCount(bypassRisk)}
+        protectedHelper={`Action intents in the selected ${windowDays}-day window.`}
+        approvalHelper={`${formatCount(heldActions)} action${heldActions === 1 ? "" : "s"} waiting for a human decision.`}
+        awaitingRunnerHelper={`${formatCount(counts.awaitingRunner)} authorized action${counts.awaitingRunner === 1 ? "" : "s"} without a healthy completion path.`}
+        outcomeHelper={`${formatCount(mismatched)} mismatched / ${formatCount(notVerified)} need verification.`}
+        bypassHelper={bypassFeedLabel}
         tones={{
-          protectedActions: counts.protectedActions > 0 ? "success" : "neutral",
-          policyChecks: counts.held > 0 ? "warning" : "neutral",
-          runnerExecutions: counts.stalled > 0 ? "danger" : (billing?.runner_executions.used ?? 0) > 0 ? "success" : "neutral",
-          receipts: (billing?.action_receipts.used ?? 0) > 0 ? "success" : "warning",
+          protectedActions: protectedActions > 0 ? "success" : "neutral",
+          waitingApproval: heldActions > 0 ? "warning" : "neutral",
+          awaitingRunner: counts.stalled > 0 ? "danger" : counts.awaitingRunner > 0 ? "warning" : "success",
           verifiedOutcomes: mismatched > 0 ? "danger" : notVerified > 0 ? "warning" : matched > 0 ? "success" : "neutral",
-          bypassRisk: bypassRisk > 0 ? "danger" : "success",
+          bypassRisk: bypassRisk > 0 ? "danger" : connectedBypassFeeds > 0 && successfulBypassPollers > 0 ? "success" : "warning",
         }}
       />
-
-      <ProtectedActionQuota meter={billing?.protected_actions} />
-
-      {billingUnavailable ? (
-        <section className="al-alert al-tone-warning" role="status">
-          <div>
-            <span className="al-eyebrow">Billing meter</span>
-            <strong>Quota usage unavailable</strong>
-            <p>Action lifecycle data is still live. Refresh billing before making plan or quota decisions.</p>
-          </div>
-        </section>
-      ) : null}
 
       {lifecycleSummary?.truncated ? (
         <section className="al-alert al-tone-warning" role="status">

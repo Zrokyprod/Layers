@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ActionExecutionAttempt, ActionIntent, ActionRunner
@@ -412,6 +412,8 @@ def list_project_execution_attempts(
     statuses: list[str] | None = None,
     stale: bool = False,
     stale_after_seconds: int = 600,
+    since: datetime | None = None,
+    newest_first: bool = False,
     limit: int = 50,
     offset: int = 0,
     now: datetime | None = None,
@@ -423,9 +425,16 @@ def list_project_execution_attempts(
     if stale:
         cutoff = (now or _now()) - timedelta(seconds=max(1, int(stale_after_seconds)))
         query = query.where(ActionExecutionAttempt.updated_at <= cutoff)
+    if since:
+        query = query.where(ActionExecutionAttempt.updated_at >= since)
+    order_by = (
+        (desc(ActionExecutionAttempt.updated_at), desc(ActionExecutionAttempt.created_at))
+        if newest_first
+        else (ActionExecutionAttempt.updated_at.asc(), ActionExecutionAttempt.created_at.asc())
+    )
     return list(
         db.execute(
-            query.order_by(ActionExecutionAttempt.updated_at.asc(), ActionExecutionAttempt.created_at.asc())
+            query.order_by(*order_by)
             .offset(max(0, int(offset)))
             .limit(max(1, min(max(1, int(max_limit)), int(limit))))
         ).scalars()

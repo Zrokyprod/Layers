@@ -21,7 +21,7 @@ export async function loadActionsLifecycleFeed(
     intents: summary.data.intents,
     decisions: summary.data.approvals,
     outcomes: summary.data.outcomes,
-    attempts: summary.data.stale_attempts,
+    attempts: summary.data.attempts ?? summary.data.stale_attempts,
     staleAttemptIds: summary.data.stale_attempts.map((attempt) => attempt.attempt_id),
     mutations: summary.data.mutations,
   });

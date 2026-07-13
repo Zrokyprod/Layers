@@ -211,7 +211,7 @@ export function ActionInspector({ attempts, row, timeline }: ActionInspectorProp
             {row.agentName} / {row.actionType}
           </p>
         </div>
-        <StatusPill value={row.status} label={row.statusLabel} tone={row.statusTone} />
+        <StatusPill value={row.stage.id} label={row.stage.label} tone={row.stage.tone} />
       </header>
 
       <div className={`al-stage-summary al-tone-${row.stage.tone}`}>
@@ -241,7 +241,11 @@ export function ActionInspector({ attempts, row, timeline }: ActionInspectorProp
           Open Outcomes
         </DashboardButtonLink>
         <DashboardButtonLink href={row.hrefs.evidence ?? "/evidence"} variant="primary">
-          {row.kind === "orphan_decision" ? "Open Evidence Pack" : "Open Action Receipt"}
+          {row.kind === "orphan_decision"
+            ? "Open Evidence Pack"
+            : row.stage.id === "blocked"
+              ? "Open Audit Evidence"
+              : "Open Action Receipt"}
         </DashboardButtonLink>
       </div>
 

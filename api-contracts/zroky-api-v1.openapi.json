@@ -39521,6 +39521,14 @@
             "type": "array",
             "title": "Mutations"
           },
+          "attempts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Attempts"
+          },
           "stale_attempts": {
             "items": {
               "additionalProperties": true,
@@ -39611,6 +39619,11 @@
             "minimum": 0.0,
             "title": "Mutations"
           },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Attempts"
+          },
           "stale_attempts": {
             "type": "integer",
             "minimum": 0.0,
@@ -39623,6 +39636,7 @@
           "approvals",
           "outcomes",
           "mutations",
+          "attempts",
           "stale_attempts"
         ],
         "title": "ActionsLifecycleSourceTotals"
@@ -39662,6 +39676,11 @@
           "mutations": {
             "type": "boolean",
             "title": "Mutations",
+            "default": true
+          },
+          "attempts": {
+            "type": "boolean",
+            "title": "Attempts",
             "default": true
           },
           "stale_attempts": {

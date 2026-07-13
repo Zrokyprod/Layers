@@ -206,6 +206,7 @@ def list_source_mutations(
     project_id: str,
     classification: str | None = None,
     unreceipted_only: bool = False,
+    since: datetime | None = None,
     limit: int = 100,
 ) -> list[SourceMutationRecord]:
     query = select(SourceMutationRecord).where(SourceMutationRecord.project_id == project_id)
@@ -213,6 +214,8 @@ def list_source_mutations(
         query = query.where(SourceMutationRecord.classification == classification)
     if unreceipted_only:
         query = query.where(SourceMutationRecord.classification.in_(BYPASS_CLASSIFICATIONS))
+    if since:
+        query = query.where(SourceMutationRecord.occurred_at >= since)
     return list(
         db.execute(
             query.order_by(desc(SourceMutationRecord.occurred_at), desc(SourceMutationRecord.id)).limit(limit)
@@ -224,10 +227,12 @@ def source_mutation_summary(
     db: Session,
     *,
     project_id: str,
+    since: datetime | None = None,
 ) -> dict[str, int]:
-    rows = db.execute(
-        select(SourceMutationRecord.classification).where(SourceMutationRecord.project_id == project_id)
-    ).scalars().all()
+    query = select(SourceMutationRecord.classification).where(SourceMutationRecord.project_id == project_id)
+    if since:
+        query = query.where(SourceMutationRecord.occurred_at >= since)
+    rows = db.execute(query).scalars().all()
     counts = Counter(rows)
     connected_feeds = len(
         db.execute(

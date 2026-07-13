@@ -597,6 +597,7 @@ def list_reconciliations(
     project_id: str,
     verdict: str | None = None,
     call_id: str | None = None,
+    since: datetime | None = None,
     limit: int = 50,
 ) -> list[OutcomeReconciliationCheck]:
     query = select(OutcomeReconciliationCheck).where(
@@ -610,6 +611,8 @@ def list_reconciliations(
         query = query.where(OutcomeReconciliationCheck.verdict == verdict)
     if call_id:
         query = query.where(OutcomeReconciliationCheck.call_id == call_id)
+    if since:
+        query = query.where(OutcomeReconciliationCheck.checked_at >= since)
     return list(
         db.execute(
             query.order_by(

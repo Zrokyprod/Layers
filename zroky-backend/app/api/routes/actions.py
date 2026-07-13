@@ -53,25 +53,52 @@ def get_actions_lifecycle_summary(
     since = now - timedelta(days=days)
     sources = ActionsLifecycleSources()
 
-    intents = list_action_intents(db, project_id=tenant_id, limit=limit, offset=0, max_limit=500)
+    intents = list_action_intents(
+        db,
+        project_id=tenant_id,
+        since=since,
+        limit=limit,
+        offset=0,
+        max_limit=500,
+    )
     approvals = list(
         db.execute(
             select(RuntimePolicyDecision)
-            .where(RuntimePolicyDecision.project_id == tenant_id)
+            .where(
+                RuntimePolicyDecision.project_id == tenant_id,
+                RuntimePolicyDecision.created_at >= since,
+            )
             .order_by(RuntimePolicyDecision.created_at.desc())
             .limit(limit)
         ).scalars()
     )
-    outcomes = list_reconciliations(db, project_id=tenant_id, verdict=None, limit=limit)
+    outcomes = list_reconciliations(db, project_id=tenant_id, verdict=None, since=since, limit=limit)
     outcome_summary = get_reconciliation_summary(db, project_id=tenant_id, days=days)
-    source_summary = source_mutation_summary(db, project_id=tenant_id)
-    mutations = list_source_mutations(db, project_id=tenant_id, unreceipted_only=True, limit=limit)
+    source_summary = source_mutation_summary(db, project_id=tenant_id, since=since)
+    mutations = list_source_mutations(
+        db,
+        project_id=tenant_id,
+        unreceipted_only=True,
+        since=since,
+        limit=limit,
+    )
+    attempts = list_project_execution_attempts(
+        db,
+        project_id=tenant_id,
+        since=since,
+        newest_first=True,
+        limit=limit,
+        offset=0,
+        max_limit=500,
+    )
     stale_attempts = list_project_execution_attempts(
         db,
         project_id=tenant_id,
         statuses=["planned", "dispatched", "running"],
         stale=True,
         stale_after_seconds=600,
+        since=since,
+        newest_first=True,
         limit=limit,
         offset=0,
         max_limit=500,
@@ -97,6 +124,7 @@ def get_actions_lifecycle_summary(
             select(func.count(RuntimePolicyDecision.id)).where(
                 RuntimePolicyDecision.project_id == tenant_id,
                 RuntimePolicyDecision.status == "pending_approval",
+                RuntimePolicyDecision.created_at >= since,
             )
         ).scalar_one()
         or 0
@@ -105,6 +133,7 @@ def get_actions_lifecycle_summary(
         db.execute(
             select(func.count(RuntimePolicyDecision.id)).where(
                 RuntimePolicyDecision.project_id == tenant_id,
+                RuntimePolicyDecision.created_at >= since,
             )
         ).scalar_one()
         or 0
@@ -115,6 +144,7 @@ def get_actions_lifecycle_summary(
             select(func.count(ActionExecutionAttempt.id)).where(
                 ActionExecutionAttempt.project_id == tenant_id,
                 ActionExecutionAttempt.status.in_(["planned", "dispatched", "running"]),
+                ActionExecutionAttempt.updated_at >= since,
                 ActionExecutionAttempt.updated_at <= stale_cutoff,
             )
         ).scalar_one()
@@ -125,6 +155,15 @@ def get_actions_lifecycle_summary(
         approvals=approvals_total,
         outcomes=outcome_summary.total,
         mutations=int(source_summary.get("unreceipted", 0) or 0),
+        attempts=int(
+            db.execute(
+                select(func.count(ActionExecutionAttempt.id)).where(
+                    ActionExecutionAttempt.project_id == tenant_id,
+                    ActionExecutionAttempt.updated_at >= since,
+                )
+            ).scalar_one()
+            or 0
+        ),
         stale_attempts=stale_attempts_total,
     )
     returned_by_source = {
@@ -132,6 +171,7 @@ def get_actions_lifecycle_summary(
         "approvals": len(approvals),
         "outcomes": len(outcomes),
         "mutations": len(mutations),
+        "attempts": len(attempts),
         "stale_attempts": len(stale_attempts),
     }
     total_by_source = source_totals.model_dump()
@@ -161,6 +201,7 @@ def get_actions_lifecycle_summary(
         ),
         source_summary=_dump(SourceMutationSummaryResponse(**source_summary)),
         mutations=[_dump(_serialize_source_mutation(row)) for row in mutations],
+        attempts=[_dump(_execution_attempt_response(row)) for row in attempts],
         stale_attempts=[_dump(_execution_attempt_response(row)) for row in stale_attempts],
         billing_usage=_dump(billing_usage) if billing_usage is not None else None,
     )

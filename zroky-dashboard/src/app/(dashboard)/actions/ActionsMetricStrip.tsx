@@ -1,11 +1,10 @@
 import type { ComponentType } from "react";
 import {
   CheckCircle2,
-  Gauge,
-  ReceiptText,
+  Clock3,
   ShieldAlert,
   ShieldCheck,
-  Workflow,
+  UserRoundCheck,
 } from "lucide-react";
 
 import { DashboardMetricStrip, type DashboardMetric } from "@/components/dashboard-scaffold";
@@ -22,72 +21,61 @@ type Metric = {
 
 type ActionsMetricStripProps = {
   protectedActions: string;
-  policyChecks: string;
-  runnerExecutions: string;
-  receipts: string;
+  waitingApproval: string;
+  awaitingRunner: string;
   verifiedOutcomes: string;
   bypassRisk: string;
-  policyHelper: string;
-  runnerHelper: string;
-  receiptHelper: string;
+  protectedHelper: string;
+  approvalHelper: string;
+  awaitingRunnerHelper: string;
   outcomeHelper: string;
   bypassHelper: string;
   tones: {
     protectedActions: StatusTone;
-    policyChecks: StatusTone;
-    runnerExecutions: StatusTone;
-    receipts: StatusTone;
+    waitingApproval: StatusTone;
+    awaitingRunner: StatusTone;
     verifiedOutcomes: StatusTone;
     bypassRisk: StatusTone;
   };
 };
 
 export function ActionsMetricStrip({
+  approvalHelper,
+  awaitingRunner,
+  awaitingRunnerHelper,
   bypassHelper,
   bypassRisk,
   outcomeHelper,
-  policyChecks,
-  policyHelper,
+  protectedHelper,
   protectedActions,
-  receiptHelper,
-  receipts,
-  runnerExecutions,
-  runnerHelper,
   tones,
   verifiedOutcomes,
+  waitingApproval,
 }: ActionsMetricStripProps) {
   const metrics: Metric[] = [
     {
       label: "Protected actions",
       value: protectedActions,
-      helper: "Action intents routed through the kernel.",
+      helper: protectedHelper,
       tone: tones.protectedActions,
       href: "/actions",
       Icon: ShieldCheck,
     },
     {
-      label: "Policy checks",
-      value: policyChecks,
-      helper: policyHelper,
-      tone: tones.policyChecks,
+      label: "Waiting approval",
+      value: waitingApproval,
+      helper: approvalHelper,
+      tone: tones.waitingApproval,
       href: "/approvals",
-      Icon: Gauge,
+      Icon: UserRoundCheck,
     },
     {
-      label: "Runner executions",
-      value: runnerExecutions,
-      helper: runnerHelper,
-      tone: tones.runnerExecutions,
+      label: "Awaiting runner",
+      value: awaitingRunner,
+      helper: awaitingRunnerHelper,
+      tone: tones.awaitingRunner,
       href: "/agents",
-      Icon: Workflow,
-    },
-    {
-      label: "Receipts",
-      value: receipts,
-      helper: receiptHelper,
-      tone: tones.receipts,
-      href: "/evidence",
-      Icon: ReceiptText,
+      Icon: Clock3,
     },
     {
       label: "Verified outcomes",
@@ -110,7 +98,7 @@ export function ActionsMetricStrip({
   return (
     <DashboardMetricStrip
       ariaLabel="Action lifecycle metrics"
-      columns={6}
+      columns={5}
       metrics={metrics.map<DashboardMetric>(({ Icon, helper, href, label, tone, value }) => ({
         helper,
         href,

@@ -229,6 +229,68 @@ describe("buildActionLifecycle", () => {
     expect(rows[0].proofChain.find((step) => step.step === "receipt")?.status).toBe("Not via kernel");
   });
 
+  it("treats policy-denied actions as stopped before execution", () => {
+    const rows = buildActionLifecycle({
+      intents: [
+        intent({
+          status: "denied",
+          proof_status: "not_started",
+          receipt_status: "missing",
+        }),
+      ],
+      decisions: [decision({ status: "blocked", decision: "block", allowed: false })],
+      outcomes: [],
+    });
+
+    expect(rows[0]).toMatchObject({
+      stage: { id: "blocked" },
+      proofStatus: "not_required",
+      proofLabel: "Not required",
+      receiptStatus: "evidence_only",
+      receiptLabel: "Evidence only",
+    });
+    expect(rows[0].proofChain.find((step) => step.step === "execution")?.status).toBe("Prevented");
+    expect(rows[0].proofChain.find((step) => step.step === "verification")?.status).toBe("Not required");
+    expect(rows[0].proofChain.find((step) => step.step === "receipt")?.status).toBe("Evidence only");
+    expect(filterActionLifecycle(rows, "stopped")).toHaveLength(1);
+    expect(filterActionLifecycle(rows, "needs_action")).toHaveLength(0);
+  });
+
+  it("dedupes approval decisions consumed by an action's final release decision", () => {
+    const rows = buildActionLifecycle({
+      intents: [intent({ runtime_policy_decision_id: "decision_release" })],
+      decisions: [
+        decision({ id: "decision_release", status: "allowed" }),
+        decision({
+          id: "decision_approval",
+          status: "approved",
+          consumed_by_decision_id: "decision_release",
+        }),
+      ],
+      outcomes: [],
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "action_intent", decisionId: "decision_release" });
+  });
+
+  it("uses fresh runner attempts for the current execution stage", () => {
+    const rows = buildActionLifecycle({
+      intents: [intent({ proof_status: "not_started", receipt_status: "missing" })],
+      decisions: [decision()],
+      outcomes: [],
+      attempts: [attempt({ status: "running" })],
+      staleAttemptIds: [],
+    });
+
+    expect(rows[0]).toMatchObject({
+      attemptId: "attempt_ready",
+      stage: { id: "execution", label: "Runner executing" },
+    });
+    expect(actionLifecycleCounts(rows)).toMatchObject({ executing: 1, awaitingRunner: 0 });
+    expect(filterActionLifecycle(rows, "in_progress")).toHaveLength(1);
+  });
+
   it("uses one lifecycle row for stale attempts instead of creating attempt sibling rows", () => {
     const rows = buildActionLifecycle({
       intents: [
@@ -329,8 +391,11 @@ describe("buildActionLifecycle", () => {
       statusTone: "warning",
       stage: { tone: "warning" },
     });
-    expect(filterActionLifecycle(rows, "mismatched").map((row) => row.actionId)).toEqual(["act_mismatch"]);
-    expect(filterActionLifecycle(rows, "not_verified").map((row) => row.actionId)).toEqual(["act_unverified"]);
+    expect(filterActionLifecycle(rows, "needs_action").map((row) => row.actionId)).toEqual([
+      "act_mismatch",
+      "act_unverified",
+    ]);
+    expect(filterActionLifecycle(rows, "completed").map((row) => row.actionId)).toEqual(["act_ready"]);
     expect(rows.find((row) => row.actionId === "act_mismatch")?.verificationIssue).toMatchObject({
       title: "Verification failed",
     });
@@ -374,8 +439,11 @@ describe("buildActionLifecycle", () => {
       ],
     });
 
-    expect(filterActionLifecycle(rows, "held").map((row) => row.actionId)).toEqual(["act_held"]);
-    expect(filterActionLifecycle(rows, "executing").map((row) => row.actionId)).toEqual(["act_executing"]);
+    expect(filterActionLifecycle(rows, "needs_action").map((row) => row.actionId)).toEqual(["act_held"]);
+    expect(filterActionLifecycle(rows, "in_progress").map((row) => row.actionId)).toEqual([
+      "act_executing",
+      "act_held",
+    ]);
   });
 
   it("filters bypassed source mutations as first-class lifecycle rows", () => {

@@ -164,6 +164,14 @@ export function lifecycleStage(intent: Pick<ActionIntentResponse, "status" | "pr
       tone: "warning",
     };
   }
+  if (["mismatched", "not_verified"].includes(proof)) {
+    return {
+      id: "verification",
+      label: statusLabel(proof, "proof"),
+      detail: "Verification reached a terminal proof verdict.",
+      tone: statusTone(proof, "proof"),
+    };
+  }
   if (receipt === "generated") {
     return {
       id: "receipted",
@@ -172,7 +180,7 @@ export function lifecycleStage(intent: Pick<ActionIntentResponse, "status" | "pr
       tone: statusTone(proof, "proof"),
     };
   }
-  if (["matched", "mismatched", "not_verified"].includes(proof)) {
+  if (proof === "matched") {
     return {
       id: "verification",
       label: statusLabel(proof, "proof"),

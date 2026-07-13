@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
 
 const queryState = vi.hoisted(() => ({
   attempts: [] as Record<string, unknown>[],
+  lifecycleAttempts: [] as Record<string, unknown>[],
   billingUsage: null as Record<string, unknown> | null,
   decisions: [] as Record<string, unknown>[],
   intents: [] as Record<string, unknown>[],
@@ -37,6 +38,7 @@ const queryState = vi.hoisted(() => ({
     outcome_summary: true,
     source_summary: true,
     mutations: true,
+    attempts: true,
     stale_attempts: true,
     billing_usage: true,
   },
@@ -47,12 +49,12 @@ vi.mock("@tanstack/react-query", () => ({
     const key = queryKey.join(":");
     queryState.queryKeys.push(key);
     const isError = queryState.isError || queryState.errorKeys.has(key);
-    if (key === "actions:lifecycle-summary:30:200") {
+    if (key === "actions:lifecycle-summary:7:200") {
       return {
         data: queryState.makeFeed ? queryState.makeFeed() : {
           project_id: "proj_1",
-          window_days: 30,
-          window_start: "2026-06-01T00:00:00Z",
+          window_days: 7,
+          window_start: "2026-06-13T00:00:00Z",
           generated_at: "2026-06-20T09:15:00Z",
           row_limit: 200,
           source_totals: {
@@ -60,6 +62,7 @@ vi.mock("@tanstack/react-query", () => ({
             approvals: queryState.decisions.length,
             outcomes: Number(queryState.outcomeSummary?.total ?? queryState.outcomes.length),
             mutations: Number(queryState.sourceMutationSummary?.unreceipted ?? queryState.unreceiptedMutations.length),
+            attempts: queryState.lifecycleAttempts.length,
             stale_attempts: queryState.staleAttempts.length,
           },
           truncated: false,
@@ -80,6 +83,7 @@ vi.mock("@tanstack/react-query", () => ({
             outcome_summary: queryState.outcomeSummary,
             source_summary: queryState.sourceMutationSummary,
             mutations: queryState.unreceiptedMutations,
+            attempts: queryState.lifecycleAttempts,
             stale_attempts: queryState.staleAttempts,
             billing_usage: queryState.billingUsage,
           },
@@ -138,6 +142,15 @@ vi.mock("@/lib/api", async () => {
     ...api,
   };
 });
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: { dateRange: { from: Date; to: Date } }) => T) => selector({
+    dateRange: {
+      from: new Date("2026-06-13T00:00:00Z"),
+      to: new Date("2026-06-20T00:00:00Z"),
+    },
+  }),
+}));
 
 function usageMeter(used: number, limit: number | null, state = "ok") {
   return {
@@ -299,15 +312,15 @@ function renderActionsPage() {
       intents: queryState.intents as never[],
       decisions: queryState.decisions as never[],
       outcomes: queryState.outcomes as never[],
-      attempts: queryState.staleAttempts as never[],
+      attempts: queryState.lifecycleAttempts as never[],
       staleAttemptIds: queryState.staleAttempts.map((attempt) => String(attempt.attempt_id)),
       mutations: queryState.unreceiptedMutations as never[],
     });
     return {
       summary: {
         project_id: "proj_1",
-        window_days: 30,
-        window_start: "2026-06-01T00:00:00Z",
+        window_days: 7,
+        window_start: "2026-06-13T00:00:00Z",
         generated_at: "2026-06-20T09:15:00Z",
         row_limit: 200,
         source_totals: {
@@ -315,6 +328,7 @@ function renderActionsPage() {
           approvals: queryState.decisions.length,
           outcomes: Number(queryState.outcomeSummary?.total ?? queryState.outcomes.length),
           mutations: Number(queryState.sourceMutationSummary?.unreceipted ?? queryState.unreceiptedMutations.length),
+          attempts: queryState.lifecycleAttempts.length,
           stale_attempts: queryState.staleAttempts.length,
         },
         truncated: false,
@@ -335,6 +349,7 @@ function renderActionsPage() {
           outcome_summary: queryState.outcomeSummary,
           source_summary: queryState.sourceMutationSummary,
           mutations: queryState.unreceiptedMutations,
+          attempts: queryState.lifecycleAttempts,
           stale_attempts: queryState.staleAttempts,
           billing_usage: queryState.billingUsage,
         },
@@ -363,11 +378,13 @@ describe("ActionsPage", () => {
       outcome_summary: true,
       source_summary: true,
       mutations: true,
+      attempts: true,
       stale_attempts: true,
       billing_usage: true,
     };
     queryState.dataUpdatedAt = Date.now();
     queryState.attempts = [];
+    queryState.lifecycleAttempts = [];
     queryState.billingUsage = billingUsage();
     queryState.intents = [];
     queryState.decisions = [
@@ -417,7 +434,7 @@ describe("ActionsPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Bypass risk" }),
     ).toBeInTheDocument();
-    expect(queryState.queryKeys).toContain("actions:lifecycle-summary:30:200");
+    expect(queryState.queryKeys).toContain("actions:lifecycle-summary:7:200");
     expect(queryState.queryKeys).not.toContain("action-intents:actions:all");
     expect(queryState.queryKeys).not.toContain("runtime-policy:actions:all");
     expect(queryState.queryKeys).not.toContain("outcomes:actions:reconciliation");
@@ -430,15 +447,12 @@ describe("ActionsPage", () => {
 
     const metrics = screen.getByRole("region", { name: "Action lifecycle metrics" });
     expect(within(metrics).getByText("Protected actions")).toBeInTheDocument();
-    expect(within(metrics).getByText("0")).toBeInTheDocument();
-    expect(within(metrics).getByText("Policy checks")).toBeInTheDocument();
-    expect(within(metrics).getByText("30 / 100,000")).toBeInTheDocument();
-    expect(within(metrics).getByText("Runner executions")).toBeInTheDocument();
-    expect(within(metrics).getByText("Receipts")).toBeInTheDocument();
+    expect(within(metrics).getAllByText("0").length).toBeGreaterThan(0);
+    expect(within(metrics).getByText("Waiting approval")).toBeInTheDocument();
+    expect(within(metrics).getByText("Awaiting runner")).toBeInTheDocument();
+    expect(within(metrics).getByText("Verified outcomes")).toBeInTheDocument();
     expect(within(metrics).getByText("Bypass risk")).toBeInTheDocument();
-    const quota = screen.getByRole("region", { name: "Protected action quota" });
-    expect(within(quota).getByText("12 / 25,000")).toBeInTheDocument();
-    expect(within(quota).getByText("Resets 2026-07-01.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Protected action quota" })).not.toBeInTheDocument();
 
     const queue = screen.getByRole("region", { name: "Action lifecycle queue" });
     expect(within(queue).getByText("Refund RF-1001")).toBeInTheDocument();
@@ -466,7 +480,7 @@ describe("ActionsPage", () => {
     expect(within(bypass).getByText("ai_agent:refund-agent")).toBeInTheDocument();
   });
 
-  it("keeps action visibility live when only billing meters fail", async () => {
+  it("keeps billing failures out of the operational Actions module", async () => {
     queryState.billingUsage = null;
     queryState.sources = { ...queryState.sources, billing_usage: false };
 
@@ -474,8 +488,7 @@ describe("ActionsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Bypass risk" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Action visibility unavailable" })).not.toBeInTheDocument();
-    expect(screen.getByText("Quota usage unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Action lifecycle data is still live. Refresh billing before making plan or quota decisions.")).toBeInTheDocument();
+    expect(screen.queryByText("Quota usage unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("One or more lifecycle feeds failed")).not.toBeInTheDocument();
   });
 
@@ -503,7 +516,7 @@ describe("ActionsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Bypass risk" })).toBeInTheDocument();
     const metrics = screen.getByRole("region", { name: "Action lifecycle metrics" });
-    expect(within(metrics).getByText("0 mismatched / 0 not verified.")).toBeInTheDocument();
+    expect(within(metrics).getByText("0 mismatched / 0 need verification.")).toBeInTheDocument();
   });
 
   it("shows action-intent lifecycle details with receipt, timeline, and execution attempts", async () => {
