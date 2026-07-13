@@ -544,6 +544,26 @@ export function buildActionLifecycle({
     const waitingBeforeExecution = ["proposed", "policy", "approval", "awaiting_runner", "no_runner"].includes(stage.id);
     const proofStatus = stoppedBeforeExecution ? "not_required" : waitingBeforeExecution ? "not_started" : view.proofStatus;
     const receiptStatus = stoppedBeforeExecution ? "evidence_only" : waitingBeforeExecution ? "not_generated" : view.receiptStatus;
+    const proofChain = buildProofChain(view, { attempt, decision, outcome }).map((step) => {
+      if (!waitingBeforeExecution) return step;
+      if (step.step === "verification") {
+        return {
+          ...step,
+          status: "Not started",
+          tone: "neutral" as const,
+          detail: "Verification starts only after a protected execution.",
+        };
+      }
+      if (step.step === "receipt") {
+        return {
+          ...step,
+          status: "Not generated",
+          tone: "neutral" as const,
+          detail: "A receipt can be generated only after protected execution.",
+        };
+      }
+      return step;
+    });
 
     rows.push({
       id: `action:${intent.action_id}`,
@@ -591,7 +611,7 @@ export function buildActionLifecycle({
       outcome,
       attempt,
       mutation: null,
-      proofChain: buildProofChain(view, { attempt, decision, outcome }),
+      proofChain,
     });
   }
 

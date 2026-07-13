@@ -611,6 +611,9 @@ describe("ActionsPage", () => {
     expect(await screen.findByRole("heading", { name: "Actions awaiting runner" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Actions controlled" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Restore runner" }).getAttribute("href")).toBe("/agents");
+    const selected = screen.getByRole("region", { name: "Selected action lifecycle" });
+    expect(within(selected).getByRole("button", { name: /Verification: Not started/i })).toBeInTheDocument();
+    expect(within(selected).getByRole("button", { name: /Receipt: Not generated/i })).toBeInTheDocument();
   });
 
   it("surfaces verification mismatches without opening raw JSON", async () => {
