@@ -256,6 +256,22 @@ describe("buildActionLifecycle", () => {
     expect(filterActionLifecycle(rows, "needs_action")).toHaveLength(0);
   });
 
+  it("keeps pre-execution proof-chain labels aligned with the lifecycle summary", () => {
+    const rows = buildActionLifecycle({
+      intents: [intent({ status: "authorized", proof_status: "not_started", receipt_status: "missing" })],
+      decisions: [decision({ status: "allowed", decision: "allow", allowed: true })],
+      outcomes: [],
+    });
+
+    expect(rows[0]).toMatchObject({
+      stage: { id: "awaiting_runner" },
+      proofLabel: "Not started",
+      receiptLabel: "Not generated",
+    });
+    expect(rows[0].proofChain.find((step) => step.step === "verification")?.status).toBe("Not started");
+    expect(rows[0].proofChain.find((step) => step.step === "receipt")?.status).toBe("Not generated");
+  });
+
   it("dedupes approval decisions consumed by an action's final release decision", () => {
     const rows = buildActionLifecycle({
       intents: [intent({ runtime_policy_decision_id: "decision_release" })],
