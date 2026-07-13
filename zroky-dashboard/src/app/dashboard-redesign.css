@@ -11470,6 +11470,303 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   resize: vertical !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .policies-configuration-scope {
+  display: grid !important;
+  gap: 16px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator {
+  display: grid !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  padding: 18px 20px !important;
+  border-bottom: 1px solid var(--dash-border) !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-header > div {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-header h2 {
+  margin: 0 !important;
+  color: var(--dash-text) !important;
+  font-size: 1.15rem !important;
+  line-height: 1.25 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-header p {
+  max-width: 720px !important;
+  margin: 0 !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.84rem !important;
+  line-height: 1.5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-step {
+  flex: 0 0 auto !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 6px !important;
+  background: var(--dash-canvas) !important;
+  padding: 5px 8px !important;
+  color: var(--dash-text-muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-question {
+  display: grid !important;
+  grid-template-columns: minmax(210px, 0.34fr) minmax(0, 1fr) !important;
+  gap: 20px !important;
+  align-items: start !important;
+  padding: 18px 20px !important;
+  border-bottom: 1px solid var(--dash-border) !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-question-copy {
+  display: flex !important;
+  gap: 10px !important;
+  align-items: flex-start !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-question-copy > span {
+  display: grid !important;
+  place-items: center !important;
+  width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  border-radius: 50% !important;
+  background: var(--mc-accent) !important;
+  color: #ffffff !important;
+  font-size: 0.75rem !important;
+  font-weight: 850 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-question-copy div {
+  display: grid !important;
+  gap: 4px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-question-copy strong {
+  color: var(--dash-text) !important;
+  font-size: 0.88rem !important;
+  line-height: 1.35 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-question-copy small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.77rem !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-mode-options {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-choice,
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice {
+  min-width: 0 !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: var(--dash-text) !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-choice {
+  display: grid !important;
+  gap: 5px !important;
+  padding: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.policy-choice, .policy-area-choice)[data-selected="true"] {
+  border-color: var(--mc-accent) !important;
+  background: rgba(47, 95, 102, 0.08) !important;
+  box-shadow: inset 0 0 0 1px var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.policy-choice, .policy-area-choice):focus-visible {
+  outline: 3px solid rgba(47, 95, 102, 0.2) !important;
+  outline-offset: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-choice strong,
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice strong {
+  color: var(--dash-text) !important;
+  font-size: 0.82rem !important;
+  line-height: 1.3 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-choice span,
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-area-options {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  gap: 10px !important;
+  align-items: center !important;
+  padding: 11px 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice > span:not(.policy-area-check) {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice svg {
+  color: var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-area-check {
+  color: var(--dash-text-muted) !important;
+  font-size: 0.7rem !important;
+  font-weight: 850 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-area-choice[data-selected="true"] .policy-area-check {
+  color: var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-result {
+  display: grid !important;
+  grid-template-columns: minmax(190px, 0.32fr) minmax(0, 1fr) auto !important;
+  gap: 18px !important;
+  align-items: center !important;
+  padding: 16px 20px !important;
+  background: #f7faf9 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-title {
+  display: flex !important;
+  gap: 9px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-title svg {
+  color: var(--dash-green) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-title div {
+  display: grid !important;
+  gap: 3px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-title strong {
+  color: var(--dash-text) !important;
+  font-size: 0.88rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-title span {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.75rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generated-result ul {
+  display: grid !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  padding-left: 18px !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-generator-error {
+  grid-column: 1 / -1 !important;
+  color: var(--dash-red) !important;
+  font-size: 0.76rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell {
+  overflow: hidden !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  padding: 14px 16px !important;
+  color: var(--dash-text) !important;
+  cursor: pointer !important;
+  list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary > span:first-child {
+  display: grid !important;
+  gap: 3px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary strong {
+  font-size: 0.9rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary small,
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary > span:last-child {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.76rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell[open] > summary {
+  border-bottom: 1px solid var(--dash-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell[open] > summary > span:last-child {
+  font-size: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell[open] > summary > span:last-child::after {
+  content: "Close" !important;
+  font-size: 0.76rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-advanced-body {
+  padding: 14px !important;
+  background: var(--dash-canvas) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policy-recent-decisions {
+  padding: 16px !important;
+}
+
 @media (max-width: 1240px) {
   .app-shell[data-dashboard-system="control-v1"] .policy-command-hero,
   .app-shell[data-dashboard-system="control-v1"] .policy-mandate-contract,
@@ -11483,6 +11780,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1040px) {
+  .app-shell[data-dashboard-system="control-v1"] .policy-generator-question,
+  .app-shell[data-dashboard-system="control-v1"] .policy-generated-result {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .policy-generated-result .dashboard-button {
+    justify-self: start !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .policy-metric-grid,
   .app-shell[data-dashboard-system="control-v1"] .policy-mandate-contract-grid,
   .app-shell[data-dashboard-system="control-v1"] .policy-proof-strip,
@@ -11501,6 +11807,24 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 760px) {
+  .app-shell[data-dashboard-system="control-v1"] .policy-generator-header,
+  .app-shell[data-dashboard-system="control-v1"] .policy-advanced-shell > summary {
+    align-items: stretch !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .policy-generator-header {
+    flex-direction: column !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .policy-generator-step {
+    width: max-content !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .policy-mode-options,
+  .app-shell[data-dashboard-system="control-v1"] .policy-area-options {
+    grid-template-columns: 1fr !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .policy-metric-grid,
   .app-shell[data-dashboard-system="control-v1"] .policy-mandate-contract-grid,
   .app-shell[data-dashboard-system="control-v1"] .policy-proof-strip,
