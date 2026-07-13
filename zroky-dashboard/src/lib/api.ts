@@ -5003,7 +5003,7 @@ export function listRuntimePolicyApprovals(
   signal?: AbortSignal,
 ): Promise<RuntimePolicyListResponse> {
   return request<RuntimePolicyListResponse>("/v1/runtime-policy/approvals", {
-    query: { status },
+    query: { status, limit: 100 },
     signal,
   });
 }

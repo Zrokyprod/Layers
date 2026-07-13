@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   approvalQueueCounts,
   buildApprovalQueue,
+  filterApprovalQueue,
+  filterApprovalQueueWindow,
 } from "./approval-queue";
 import type {
   ActionIntentResponse,
@@ -114,6 +116,10 @@ describe("buildApprovalQueue", () => {
       "verification",
       "receipt",
     ]);
+    expect(rows[0].proofChain.find((step) => step.step === "execution")).toMatchObject({
+      status: "Waiting for approval",
+      tone: "warning",
+    });
   });
 
   it("keeps guard-only decisions visible as secondary partial chains", () => {
@@ -219,7 +225,8 @@ describe("buildApprovalQueue", () => {
     expect(approvalQueueCounts(rows)).toEqual({
       total: 3,
       pending: 1,
-      damageStopped: 2,
+      approved: 0,
+      stopped: 2,
       moneyTouching: 1,
       expiringSoon: 1,
       sequenceRisk: 1,
@@ -273,12 +280,40 @@ describe("buildApprovalQueue", () => {
       kind: "guard_only_hold",
       approvalProgress: "Approved",
       priority: {
-        label: "P2",
-        detail: "released with audit",
+        label: "Audit",
+        detail: "approved release",
         tone: "success",
       },
       statusLabel: "Approved",
       statusTone: "success",
     });
+  });
+
+  it("keeps runtime allow checks out of the human approval history", () => {
+    const rows = buildApprovalQueue({
+      decisions: [
+        decision({ id: "approved_decision", status: "approved" }),
+        decision({ id: "allowed_followup", status: "allowed", decision: "allow" }),
+      ],
+      intents: [],
+    });
+    expect(rows.map((row) => row.decisionId)).toEqual(["approved_decision"]);
+  });
+
+  it("groups stopped decisions and keeps pending actions visible outside the selected history window", () => {
+    const rows = buildApprovalQueue({
+      decisions: [
+        decision({ id: "pending_old", created_at: "2026-06-01T10:00:00Z" }),
+        decision({ id: "blocked_old", status: "blocked", created_at: "2026-06-01T10:00:00Z" }),
+        decision({ id: "expired_recent", status: "expired", created_at: "2026-06-27T10:00:00Z" }),
+      ],
+      intents: [],
+    });
+    const windowRows = filterApprovalQueueWindow(
+      rows,
+      { from: new Date("2026-06-26T00:00:00Z"), to: new Date("2026-06-29T00:00:00Z") },
+    );
+    expect(windowRows.map((row) => row.decisionId).sort()).toEqual(["expired_recent", "pending_old"]);
+    expect(filterApprovalQueue(windowRows, "stopped").map((row) => row.decisionId)).toEqual(["expired_recent"]);
   });
 });

@@ -1,6 +1,5 @@
 import type {
   ActionIntentResponse,
-  RuntimePolicyDecisionStatus,
   RuntimePolicyDecisionResponse,
 } from "@/lib/api";
 import { statusLabel, statusTone, type StatusTone } from "@/lib/action-status";
@@ -14,6 +13,7 @@ import {
 import { humanize } from "@/lib/format";
 
 export type ApprovalQueueRowKind = "action_intent_hold" | "guard_only_hold";
+export type ApprovalQueueFilter = "pending" | "stopped" | "approved" | "all";
 
 export type ApprovalQueueRow = {
   id: string;
@@ -267,15 +267,18 @@ function priorityForDecision(
     return { score: 3, label: "P0", detail: "money-touching hold", tone: "warning" };
   }
   if (decision.status === "blocked" || decision.status === "rejected") {
-    return { score: 4, label: "P0", detail: "damage stopped", tone: "danger" };
+    return { score: 10, label: "Audit", detail: "execution stopped", tone: "danger" };
+  }
+  if (decision.status === "expired") {
+    return { score: 10, label: "Audit", detail: "approval expired", tone: "warning" };
   }
   if (decision.status === "pending_approval") {
     return { score: 5, label: "P1", detail: "needs decision", tone: "warning" };
   }
   if (decision.status === "approved") {
-    return { score: 6, label: "P2", detail: "released with audit", tone: "success" };
+    return { score: 10, label: "Audit", detail: "approved release", tone: "success" };
   }
-  return { score: 7, label: "P3", detail: "audit only", tone: statusTone(decision.status, "runtime_policy") };
+  return { score: 10, label: "Audit", detail: "decision recorded", tone: statusTone(decision.status, "runtime_policy") };
 }
 
 function linkedIntentForDecision(
@@ -290,9 +293,51 @@ function linkedIntentForDecision(
 }
 
 function latestRowTime(row: ApprovalQueueRow): number {
-  const raw = row.expiresAt ?? row.createdAt;
+  const raw = row.decision.resolved_at ?? row.createdAt;
   const time = raw ? new Date(raw).getTime() : 0;
   return Number.isFinite(time) ? time : 0;
+}
+
+function approvalProofChain(
+  view: ActionView | null,
+  decision: RuntimePolicyDecisionResponse,
+): ProofChainStep[] {
+  const chain = view
+    ? buildProofChain(view, { decision })
+    : buildGuardOnlyProofChain(decision);
+  if (!view) return chain;
+
+  if (decision.status === "pending_approval") {
+    return chain.map((step) => {
+      if (step.step === "execution") {
+        return { ...step, status: "Waiting for approval", tone: "warning", detail: "Execution remains paused until the required approval chain is complete." };
+      }
+      if (step.step === "verification") {
+        return { ...step, status: "Not started", tone: "neutral", detail: "Verification starts only after the protected action runs." };
+      }
+      if (step.step === "receipt") {
+        return { ...step, status: "Not generated", tone: "neutral", detail: "A receipt is generated only after a protected execution attempt." };
+      }
+      return step;
+    });
+  }
+
+  if (["blocked", "rejected", "expired"].includes(decision.status)) {
+    return chain.map((step) => {
+      if (step.step === "execution") {
+        return { ...step, status: "Prevented", tone: "success", detail: "The runtime gate prevented this action from reaching a runner." };
+      }
+      if (step.step === "verification") {
+        return { ...step, status: "Not required", tone: "neutral", detail: "No outcome verification is required because execution did not occur." };
+      }
+      if (step.step === "receipt") {
+        return { ...step, status: "Evidence only", tone: "neutral", detail: "The stopped decision is preserved in the Evidence Pack without an execution receipt." };
+      }
+      return step;
+    });
+  }
+
+  return chain;
 }
 
 export function buildApprovalQueue({
@@ -300,7 +345,9 @@ export function buildApprovalQueue({
   intents,
 }: BuildApprovalQueueInput): ApprovalQueueRow[] {
   const nowMs = Date.now();
-  const rows = decisions.map((decision): ApprovalQueueRow => {
+  const rows = decisions
+    .filter((decision) => decision.status !== "allowed")
+    .map((decision): ApprovalQueueRow => {
     const intent = linkedIntentForDecision(decision, intents);
     const amount = amountForDecision(decision);
     const priority = priorityForDecision(decision, amount, nowMs);
@@ -349,14 +396,14 @@ export function buildApprovalQueue({
       view,
       intent,
       decision,
-      proofChain: view ? buildProofChain(view, { decision }) : buildGuardOnlyProofChain(decision),
+      proofChain: approvalProofChain(view, decision),
     };
   });
 
   return rows.sort((a, b) => {
     if (a.priority.score !== b.priority.score) return a.priority.score - b.priority.score;
     if (a.kind !== b.kind) return a.kind === "action_intent_hold" ? -1 : 1;
-    return latestRowTime(a) - latestRowTime(b);
+    return latestRowTime(b) - latestRowTime(a);
   });
 }
 
@@ -364,7 +411,8 @@ export function approvalQueueCounts(rows: ApprovalQueueRow[]) {
   return {
     total: rows.length,
     pending: rows.filter((row) => row.status === "pending_approval").length,
-    damageStopped: rows.filter((row) => row.status === "blocked" || row.status === "rejected").length,
+    approved: rows.filter((row) => row.status === "approved").length,
+    stopped: rows.filter((row) => ["blocked", "rejected", "expired"].includes(row.status)).length,
     moneyTouching: rows.filter((row) => row.impactValueUsd != null).length,
     expiringSoon: rows.filter((row) => row.isExpiringSoon).length,
     sequenceRisk: rows.filter((row) => row.isSequenceRisk).length,
@@ -375,8 +423,30 @@ export function approvalQueueCounts(rows: ApprovalQueueRow[]) {
 
 export function filterApprovalQueue(
   rows: ApprovalQueueRow[],
-  filter: RuntimePolicyDecisionStatus | "all",
+  filter: ApprovalQueueFilter,
 ): ApprovalQueueRow[] {
   if (filter === "all") return rows;
-  return rows.filter((row) => row.status === filter);
+  if (filter === "pending") return rows.filter((row) => row.status === "pending_approval");
+  if (filter === "stopped") {
+    return rows.filter((row) => ["blocked", "rejected", "expired"].includes(row.status));
+  }
+  return rows.filter((row) => row.status === "approved");
+}
+
+export function filterApprovalQueueWindow(
+  rows: ApprovalQueueRow[],
+  dateRange: { from: Date | null; to: Date | null },
+  preservedDecisionId: string | null = null,
+): ApprovalQueueRow[] {
+  const toMs = dateRange.to ? new Date(dateRange.to).getTime() : Date.now();
+  const defaultFromMs = toMs - 7 * 86_400_000;
+  const fromMs = dateRange.from ? new Date(dateRange.from).getTime() : defaultFromMs;
+  const hasValidRange = Number.isFinite(fromMs) && Number.isFinite(toMs) && toMs >= fromMs;
+  if (!hasValidRange) return rows;
+
+  return rows.filter((row) => {
+    if (row.status === "pending_approval" || row.decisionId === preservedDecisionId) return true;
+    const createdAtMs = new Date(row.createdAt).getTime();
+    return Number.isFinite(createdAtMs) && createdAtMs >= fromMs && createdAtMs <= toMs;
+  });
 }
