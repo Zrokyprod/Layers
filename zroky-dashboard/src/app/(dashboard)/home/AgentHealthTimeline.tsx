@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, HeartPulse, Minus, ShieldCheck, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
+import { Activity, Clock, Minus, ShieldCheck, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
 
 import type {
   ActionExecutionAttemptResponse,
@@ -28,6 +28,7 @@ export type AgentHealthBucket = {
   id: string;
   label: string;
   protectedActions: number;
+  completed: number;
   holds: number;
   verified: number;
   checks: number;
@@ -94,17 +95,35 @@ function bucketIndexFor(time: number, startMs: number, spanMs: number, count: nu
   return clamp(Math.floor(((time - startMs) / spanMs) * count), 0, count - 1);
 }
 
-function scoreBucket(bucket: Omit<AgentHealthBucket, "id" | "label" | "score">, fleet: AgentFleetView): number | null {
+function isCompletedIntent(intent: ActionIntentResponse): boolean {
+  const status = intent.status.toLowerCase();
+  return (
+    intent.receipt_status === "generated" ||
+    intent.proof_status === "matched" ||
+    ["completed", "executed", "succeeded", "verified"].includes(status)
+  );
+}
+
+function completedWork(bucket: Pick<AgentHealthBucket, "completed" | "verified" | "receipts">): number {
+  return Math.max(bucket.completed, bucket.verified, bucket.receipts);
+}
+
+function attentionWork(bucket: Pick<AgentHealthBucket, "holds" | "riskSignals" | "stalled">): number {
+  return bucket.holds + bucket.riskSignals + bucket.stalled;
+}
+
+function scoreBucket(bucket: Omit<AgentHealthBucket, "id" | "label" | "score">): number | null {
   const signalCount = bucket.protectedActions + bucket.holds + bucket.checks + bucket.receipts + bucket.riskSignals + bucket.stalled;
   if (signalCount === 0) return null;
 
-  const runnerRatio = fleet.runners.total > 0 ? fleet.runners.online / fleet.runners.total : 0;
-  const proofRatio = bucket.checks > 0 ? bucket.verified / bucket.checks : bucket.receipts > 0 ? 0.65 : 0;
-  const receiptRatio = bucket.protectedActions > 0 ? Math.min(bucket.receipts / bucket.protectedActions, 1) : bucket.receipts > 0 ? 1 : 0;
-  const coverageRatio = fleet.totals.coveragePercent == null ? 0.45 : fleet.totals.coveragePercent / 100;
-  const penalty = Math.min(42, bucket.riskSignals * 14 + bucket.stalled * 16 + bucket.holds * 4);
+  const completed = completedWork(bucket);
+  const attention = attentionWork(bucket);
+  const total = Math.max(1, completed + attention);
+  const completionRatio = completed / total;
+  const workBonus = bucket.protectedActions > 0 ? 10 : 0;
+  const attentionPenalty = Math.min(26, attention * 5);
 
-  return clamp(Math.round(34 + runnerRatio * 16 + coverageRatio * 12 + proofRatio * 22 + receiptRatio * 16 - penalty), 0, 100);
+  return clamp(Math.round(34 + completionRatio * 58 + workBonus - attentionPenalty), 0, 100);
 }
 
 export function buildAgentHealthBuckets(input: HealthSeriesInput): AgentHealthBucket[] {
@@ -117,6 +136,7 @@ export function buildAgentHealthBuckets(input: HealthSeriesInput): AgentHealthBu
     id: `health-${index}`,
     label: bucketLabel(startMs + bucketSpan * index, startMs + bucketSpan * (index + 1), input.windowDays),
     protectedActions: 0,
+    completed: 0,
     holds: 0,
     verified: 0,
     checks: 0,
@@ -136,6 +156,7 @@ export function buildAgentHealthBuckets(input: HealthSeriesInput): AgentHealthBu
   for (const intent of input.intents) {
     bump(intent.created_at, (bucket) => {
       bucket.protectedActions += 1;
+      if (isCompletedIntent(intent)) bucket.completed += 1;
       if (intent.receipt_status === "generated") bucket.receipts += 1;
       if (intent.proof_status === "matched") bucket.verified += 1;
       if (["mismatched", "failed"].includes(intent.proof_status)) bucket.riskSignals += 1;
@@ -152,7 +173,10 @@ export function buildAgentHealthBuckets(input: HealthSeriesInput): AgentHealthBu
   for (const outcome of input.outcomes) {
     bump(outcome.checked_at ?? outcome.created_at, (bucket) => {
       bucket.checks += 1;
-      if (outcome.verdict === "matched" || outcome.verification_status === "matched") bucket.verified += 1;
+      if (outcome.verdict === "matched" || outcome.verification_status === "matched") {
+        bucket.verified += 1;
+        bucket.completed += 1;
+      }
       if (outcome.verdict === "mismatched" || outcome.verification_status === "mismatched") bucket.riskSignals += 1;
     });
   }
@@ -172,7 +196,7 @@ export function buildAgentHealthBuckets(input: HealthSeriesInput): AgentHealthBu
 
   return buckets.map((bucket) => ({
     ...bucket,
-    score: scoreBucket(bucket, input.fleet),
+    score: scoreBucket(bucket),
   }));
 }
 
@@ -206,10 +230,9 @@ function scoreTone(score: number | null): "success" | "warning" | "danger" | "ne
 }
 
 function scoreStatus(score: number | null): string {
-  if (score == null) return "Waiting for signal";
-  if (score >= 80) return "Stable control";
-  if (score >= 55) return "Needs attention";
-  return "At risk";
+  if (score == null) return "No recent work";
+  if (score >= 72) return "Working well";
+  return "Needs attention";
 }
 
 function trendDelta(buckets: AgentHealthBucket[]): number | null {
@@ -225,13 +248,36 @@ function timeframeLabel(windowDays: number): string {
   return `${windowDays}-day window`;
 }
 
+function latestActivityTime(buckets: AgentHealthBucket[], input: HealthSeriesInput): number | null {
+  const times = [
+    ...input.intents.map((item) => parseTime(item.created_at)),
+    ...input.approvals.map((item) => parseTime(item.created_at)),
+    ...input.outcomes.map((item) => parseTime(item.checked_at ?? item.created_at)),
+    ...input.mutations.map((item) => parseTime(item.occurred_at ?? item.created_at)),
+    ...input.staleAttempts.map((item) => parseTime(item.updated_at ?? item.created_at)),
+  ].filter((time): time is number => time != null);
+  if (times.length === 0 || buckets.every((bucket) => bucket.score == null)) return null;
+  return Math.max(...times);
+}
+
+function relativeTimeLabel(time: number | null, generatedAt: string): string {
+  if (time == null) return "No recent work";
+  const endMs = parseTime(generatedAt) ?? Date.now();
+  const diffMinutes = Math.max(0, Math.round((endMs - time) / 60_000));
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.round(diffHours / 24)}d ago`;
+}
+
 export function AgentHealthTimeline({
   loading,
   ...input
 }: AgentHealthTimelineProps) {
   if (loading) {
     return (
-      <section className="mc-agent-health-panel mc-agent-health-loading" aria-label="Agent health over time">
+      <section className="mc-agent-health-panel mc-agent-health-loading" aria-label="Agent working status">
         <span className="mc-skeleton mc-skeleton-label" />
         <span className="mc-skeleton mc-skeleton-value" />
         <span className="mc-skeleton mc-skeleton-line" />
@@ -250,36 +296,38 @@ export function AgentHealthTimeline({
     (sum, bucket) => sum + bucket.protectedActions + bucket.holds + bucket.checks + bucket.receipts + bucket.riskSignals + bucket.stalled,
     0,
   );
-  const riskTotal = buckets.reduce((sum, bucket) => sum + bucket.riskSignals + bucket.stalled, 0);
-  const protectedTotal = buckets.reduce((sum, bucket) => sum + bucket.protectedActions, 0);
-  const proofTotal = buckets.reduce((sum, bucket) => sum + bucket.verified + bucket.receipts, 0);
+  const attentionTotal = buckets.reduce((sum, bucket) => sum + attentionWork(bucket), 0);
+  const completedTotal = buckets.reduce((sum, bucket) => sum + completedWork(bucket), 0);
+  const receiptTotal = buckets.reduce((sum, bucket) => sum + bucket.receipts, 0);
+  const lastActive = relativeTimeLabel(latestActivityTime(buckets, input), input.generatedAt);
   const innerWidth = CHART_WIDTH - CHART_PAD.left - CHART_PAD.right;
   const innerHeight = CHART_HEIGHT - CHART_PAD.top - CHART_PAD.bottom;
   const barWidth = Math.max(16, innerWidth / Math.max(1, buckets.length) - 12);
   const TrendIcon = delta == null ? Minus : delta >= 0 ? TrendingUp : TrendingDown;
+  const trendLabel = delta == null ? "Trend pending" : delta >= 5 ? "More work completed" : delta <= -5 ? "Needs more attention" : "Steady";
 
   return (
-    <section className="mc-agent-health-panel" aria-label="Agent health over time">
+    <section className="mc-agent-health-panel" aria-label="Agent working status">
       <div className="mc-agent-health-copy">
         <div>
-          <p className="mc-eyebrow">Agent health over time</p>
-          <h2>Timeframe-wise control confidence</h2>
+          <p className="mc-eyebrow">Agent working status</p>
+          <h2>Agent Working Status</h2>
         </div>
-        <p>One operational view of runner availability, protected action volume, signed proof, and risk pressure.</p>
-        <div className="mc-agent-health-pills" aria-label="Agent health window and trend">
+        <p>Shows whether your agent is completing work, waiting for approval, or needs attention in this timeframe.</p>
+        <div className="mc-agent-health-pills" aria-label="Agent work window and trend">
           <span>{timeframeLabel(input.windowDays)}</span>
           <span data-trend={delta == null ? "flat" : delta >= 0 ? "up" : "down"}>
             <TrendIcon aria-hidden="true" size={14} />
-            {delta == null ? "Trend pending" : `${delta >= 0 ? "+" : ""}${delta} pts`}
+            {trendLabel}
           </span>
         </div>
       </div>
 
       <div className="mc-agent-health-score" data-tone={tone}>
-        <HeartPulse aria-hidden="true" size={18} />
-        <span>Health score</span>
-        <strong>{score == null ? "No signal" : `${score}/100`}</strong>
-        <em>{status}</em>
+        <ShieldCheck aria-hidden="true" size={18} />
+        <span>Current status</span>
+        <strong>{status}</strong>
+        <em>{formatCount(completedTotal)} completed / {formatCount(attentionTotal)} needs attention</em>
       </div>
 
       <div className="mc-agent-health-chart" aria-hidden="true">
@@ -308,8 +356,8 @@ export function AgentHealthTimeline({
             return (
               <g key={bucket.id}>
                 <rect className="mc-health-volume-bar" x={barX} y={barY} width={barWidth} height={barHeight} rx={4} />
-                {bucket.riskSignals + bucket.stalled > 0 ? (
-                  <circle className="mc-health-risk-dot" cx={centerX} cy={CHART_PAD.top + 12} r={4 + Math.min(4, bucket.riskSignals + bucket.stalled)} />
+                {attentionWork(bucket) > 0 ? (
+                  <circle className="mc-health-risk-dot" cx={centerX} cy={CHART_PAD.top + 12} r={4 + Math.min(4, attentionWork(bucket))} />
                 ) : null}
                 {scoreY == null ? null : <circle className="mc-health-score-dot" cx={centerX} cy={scoreY} r={4.5} />}
               </g>
@@ -318,7 +366,7 @@ export function AgentHealthTimeline({
           {path ? <path className="mc-health-score-line" d={path} /> : null}
         </svg>
         <div className="mc-agent-health-chart-footer" aria-hidden="true">
-          <span>Start</span>
+          <span>Earlier</span>
           <span>Now</span>
         </div>
       </div>
@@ -326,28 +374,28 @@ export function AgentHealthTimeline({
       <div className="mc-agent-health-breakdown">
         <div>
           <Activity aria-hidden="true" size={15} />
-          <span>Activity</span>
-          <strong>{formatCount(protectedTotal)} protected</strong>
+          <span>Work completed</span>
+          <strong>{formatCount(completedTotal)} done</strong>
+        </div>
+        <div data-tone={attentionTotal > 0 ? "warning" : "success"}>
+          <TriangleAlert aria-hidden="true" size={15} />
+          <span>Needs attention</span>
+          <strong>{formatCount(attentionTotal)} items</strong>
+        </div>
+        <div>
+          <Clock aria-hidden="true" size={15} />
+          <span>Last active</span>
+          <strong>{lastActive}</strong>
         </div>
         <div>
           <ShieldCheck aria-hidden="true" size={15} />
-          <span>Proof</span>
-          <strong>{formatCount(proofTotal)} verified/receipts</strong>
-        </div>
-        <div>
-          <HeartPulse aria-hidden="true" size={15} />
-          <span>Runners</span>
-          <strong>{formatCount(input.fleet.runners.online)} / {formatCount(input.fleet.runners.total)} online</strong>
-        </div>
-        <div data-tone={riskTotal > 0 ? "warning" : "success"}>
-          <TriangleAlert aria-hidden="true" size={15} />
-          <span>Risk</span>
-          <strong>{formatCount(riskTotal)} signals</strong>
+          <span>Proof generated</span>
+          <strong>{formatCount(receiptTotal)} receipts</strong>
         </div>
       </div>
 
       {totalSignals === 0 ? (
-        <p className="mc-agent-health-empty">No agent health events in this timeframe yet.</p>
+        <p className="mc-agent-health-empty">No agent work in this timeframe yet.</p>
       ) : null}
     </section>
   );
