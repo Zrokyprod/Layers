@@ -204,7 +204,7 @@ describe("/api/zroky proxy route", () => {
     expect((init.headers as Headers).get("x-project-id")).toBe("proj_selected");
   });
 
-  it("falls back to the env project when no selected project is provided", async () => {
+  it("never injects the deployment project when no selected project is provided", async () => {
     vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
     vi.stubEnv("ZROKY_PROJECT_ID", "proj_env");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -219,7 +219,7 @@ describe("/api/zroky proxy route", () => {
     await GET(request, context(["v1", "calls"]));
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect((init.headers as Headers).get("x-project-id")).toBe("proj_env");
+    expect((init.headers as Headers).get("x-project-id")).toBeNull();
   });
 
   it("does not inject the env project into an authenticated dashboard session", async () => {
