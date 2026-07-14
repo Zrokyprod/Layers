@@ -85,6 +85,9 @@ DEFAULT_POLICY: dict[str, Any] = {
     "runtime_amount_deny_threshold_usd": 5000.0,
     "runtime_production_deploys_require_approval": True,
     "runtime_changed_recipient_deny": True,
+    # Scoped rules can set one explicit outcome for the action they match.
+    # The project baseline inherits the normal policy evaluation path.
+    "runtime_action_decision": "inherit",
     # Cross-action ("sequence") risk escalation. Off by default: it can turn an
     # otherwise-allowed action into hold_for_approval/block based on the recent
     # action window, so projects opt in deliberately. See services.sequence_risk.
@@ -119,6 +122,7 @@ _POLICY_FIELDS: dict[str, tuple[type | tuple[type, ...], str]] = {
     "runtime_amount_deny_threshold_usd": ((int, float, type(None)), "non-negative number or null"),
     "runtime_production_deploys_require_approval": (bool, "boolean"),
     "runtime_changed_recipient_deny": (bool, "boolean"),
+    "runtime_action_decision": (str, "one of inherit, allow, require_approval, require_two_approvals, deny"),
     "runtime_sequence_risk_enabled": (bool, "boolean"),
 }
 
@@ -234,6 +238,21 @@ def validate_policy_payload(payload: dict[str, Any]) -> dict[str, Any]:
             if int(value) <= 0:
                 raise PolicyValidationError("'runtime_approval_ttl_minutes' must be positive")
             out[key] = int(value)
+            continue
+
+        if key == "runtime_action_decision":
+            normalized = str(value).strip().lower()
+            if normalized not in {
+                "inherit",
+                "allow",
+                "require_approval",
+                "require_two_approvals",
+                "deny",
+            }:
+                raise PolicyValidationError(
+                    "'runtime_action_decision' must be one of inherit, allow, require_approval, require_two_approvals, deny"
+                )
+            out[key] = normalized
             continue
 
         out[key] = value
