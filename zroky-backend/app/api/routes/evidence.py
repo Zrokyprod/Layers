@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -17,6 +17,9 @@ from app.db.models import ActionIntent, OutcomeReconciliationCheck, RuntimePolic
 from app.db.session import get_db_session
 from app.schemas.evidence import (
     EvidenceManifestFilter,
+    EvidenceLedgerCounts,
+    EvidenceLedgerRecord,
+    EvidenceLedgerResponse,
     EvidenceManifestRecord,
     EvidenceManifestResponse,
     EvidenceManifestScope,
@@ -30,6 +33,9 @@ router = APIRouter(prefix="/v1/evidence", tags=["evidence"])
 @dataclass(frozen=True)
 class _LedgerRow:
     action_id: str | None
+    action_type: str
+    agent_name: str
+    call_id: str | None
     checked_at: datetime | None
     decision_id: str | None
     digest: str | None
@@ -38,11 +44,13 @@ class _LedgerRow:
     href_path: str
     id: str
     kind: str
+    outcome_id: str | None
     source_label: str
     status: str
     system_ref: str | None
     title: str
     trace_id: str | None
+    detail: str
     search_text: str
 
 
@@ -80,6 +88,8 @@ def _humanize(value: str | None) -> str:
 
 
 def _row_status_for_intent(intent: ActionIntent) -> str:
+    if intent.status in {"blocked", "denied", "rejected", "expired", "cancelled"}:
+        return intent.status
     if intent.proof_status in {"mismatched", "not_verified"}:
         return intent.proof_status
     if intent.proof_status == "matched" and intent.receipt_status == "generated":
@@ -104,7 +114,16 @@ def _needs_verification(status_value: str) -> bool:
 
 
 def _is_exception(status_value: str) -> bool:
-    return status_value in {"mismatched", "failed", "signature_invalid", "blocked", "denied", "rejected", "expired"}
+    return status_value in {"mismatched", "failed", "signature_invalid"}
+
+
+def _in_day_window(row: _LedgerRow, days: int, now: datetime) -> bool:
+    if row.checked_at is None:
+        return False
+    checked_at = row.checked_at
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=timezone.utc)
+    return checked_at >= now - timedelta(days=days)
 
 
 def _latest_by_date(items: list[OutcomeReconciliationCheck]) -> OutcomeReconciliationCheck | None:
@@ -163,6 +182,13 @@ def _matches_search(row: _LedgerRow, search: str) -> bool:
 def _trace_context_for_intent(intent: ActionIntent) -> dict[str, Any]:
     canonical = _record(_loads(intent.canonical_intent_json, {}))
     return _record(canonical.get("trace_context"))
+
+
+def _agent_name_for_intent(intent: ActionIntent) -> str:
+    canonical = _record(_loads(intent.canonical_intent_json, {}))
+    trace_context = _record(canonical.get("trace_context"))
+    principal = _record(_loads(intent.principal_json, {}))
+    return _string(trace_context.get("agent_name")) or _string(principal.get("id")) or "Protected agent"
 
 
 def _title_for_intent(intent: ActionIntent) -> str:
@@ -226,24 +252,36 @@ def _build_manifest_rows(
         trace_id = outcome.trace_id if outcome else decision.trace_id if decision else _string(trace_context.get("trace_id"))
         call_id = outcome.call_id if outcome else decision.call_id if decision else _string(trace_context.get("call_id"))
         status_value = _row_status_for_intent(intent)
+        expected_block = status_value in {"blocked", "denied", "rejected", "expired", "cancelled"}
         title = _title_for_intent(intent)
         checked_at = outcome.checked_at if outcome else intent.created_at
         rows.append(
             _LedgerRow(
                 action_id=intent.id,
+                action_type=_humanize(intent.action_type),
+                agent_name=_agent_name_for_intent(intent),
+                call_id=call_id,
                 checked_at=checked_at,
                 decision_id=intent.runtime_policy_decision_id,
                 digest=intent.intent_digest,
-                export_kind="receipt",
-                exportable=intent.receipt_status == "generated",
+                export_kind=None if expected_block else "receipt",
+                exportable=not expected_block and intent.receipt_status == "generated",
                 href_path=f"/evidence?action_id={quote(intent.id)}",
                 id=f"action:{intent.id}",
                 kind="action_receipt",
-                source_label="Action Receipt",
+                outcome_id=outcome.id if outcome else None,
+                source_label="Blocked action audit" if expected_block else "Action Receipt",
                 status=status_value,
                 system_ref=outcome.system_ref if outcome else None,
                 title=title,
                 trace_id=trace_id,
+                detail=(
+                    "Policy stopped execution; receipt and outcome proof are not expected."
+                    if expected_block
+                    else "Signed receipt available"
+                    if intent.receipt_status == "generated"
+                    else "Receipt not generated yet"
+                ),
                 search_text=_build_search_text([
                     intent.id,
                     intent.action_type,
@@ -268,6 +306,9 @@ def _build_manifest_rows(
         rows.append(
             _LedgerRow(
                 action_id=None,
+                action_type=_humanize(decision.action_type or decision.tool_name),
+                agent_name=decision.agent_name or "Guard-only action",
+                call_id=outcome.call_id if outcome else decision.call_id,
                 checked_at=outcome.checked_at if outcome else decision.resolved_at or decision.created_at,
                 decision_id=decision.id,
                 digest=None,
@@ -276,11 +317,17 @@ def _build_manifest_rows(
                 href_path=f"/evidence?decision_id={quote(decision.id)}",
                 id=f"decision:{decision.id}",
                 kind="orphan_decision",
+                outcome_id=outcome.id if outcome else None,
                 source_label="Guard-only Evidence Pack",
                 status=status_value,
                 system_ref=outcome.system_ref if outcome else decision.call_id or decision.trace_id,
                 title=title,
                 trace_id=outcome.trace_id if outcome else decision.trace_id,
+                detail=(
+                    "Runtime decision linked to outcome proof"
+                    if outcome
+                    else "Runtime decision has no linked outcome proof"
+                ),
                 search_text=_build_search_text([
                     decision.id,
                     decision.action_type,
@@ -303,6 +350,9 @@ def _build_manifest_rows(
         rows.append(
             _LedgerRow(
                 action_id=None,
+                action_type=_humanize(outcome.action_type),
+                agent_name="Unlinked outcome",
+                call_id=outcome.call_id,
                 checked_at=outcome.checked_at or outcome.created_at,
                 decision_id=outcome.runtime_policy_decision_id,
                 digest=None,
@@ -311,11 +361,13 @@ def _build_manifest_rows(
                 href_path="/outcomes",
                 id=f"outcome:{outcome.id}",
                 kind="unlinked_outcome",
+                outcome_id=outcome.id,
                 source_label="Unlinked outcome",
                 status=status_value,
                 system_ref=outcome.system_ref,
                 title=title,
                 trace_id=outcome.trace_id,
+                detail="Not linked to an action intent in this evidence window",
                 search_text=_build_search_text([
                     outcome.id,
                     outcome.action_type,
@@ -339,6 +391,73 @@ def _build_manifest_rows(
     )
 
 
+def _ledger_record(row: _LedgerRow) -> EvidenceLedgerRecord:
+    return EvidenceLedgerRecord(
+        action_id=row.action_id,
+        action_type=row.action_type,
+        agent_name=row.agent_name,
+        call_id=row.call_id,
+        checked_at=row.checked_at,
+        decision_id=row.decision_id,
+        detail=row.detail,
+        digest=row.digest,
+        export_kind=row.export_kind,
+        exportable=row.exportable,
+        href=row.href_path,
+        id=row.id,
+        kind=row.kind,
+        outcome_id=row.outcome_id,
+        source_label=row.source_label,
+        status=row.status,
+        system_ref=row.system_ref,
+        title=row.title,
+        trace_id=row.trace_id,
+    )
+
+
+@router.get("/ledger", response_model=EvidenceLedgerResponse)
+@limiter.limit("120/minute")
+def get_evidence_ledger(
+    request: Request,
+    days: int = Query(default=7, ge=1, le=90),
+    filter: EvidenceManifestFilter = Query(default="all"),
+    search: str = Query(default="", max_length=200),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> EvidenceLedgerResponse:
+    _require_viewer(context)
+    actions = list(db.execute(select(ActionIntent).where(ActionIntent.project_id == context.tenant_id)).scalars())
+    decisions = list(db.execute(select(RuntimePolicyDecision).where(RuntimePolicyDecision.project_id == context.tenant_id)).scalars())
+    outcomes = list(
+        db.execute(select(OutcomeReconciliationCheck).where(OutcomeReconciliationCheck.project_id == context.tenant_id)).scalars()
+    )
+    now = datetime.now(timezone.utc)
+    scoped = [
+        row
+        for row in _build_manifest_rows(actions=actions, decisions=decisions, outcomes=outcomes)
+        if _in_day_window(row, days, now)
+    ]
+    matching = [row for row in scoped if _matches_filter(row, filter) and _matches_search(row, search)]
+    page = matching[offset : offset + limit]
+    return EvidenceLedgerResponse(
+        counts=EvidenceLedgerCounts(
+            exceptions=sum(1 for row in scoped if _is_exception(row.status)),
+            export_ready=sum(1 for row in scoped if row.exportable and row.status == "matched"),
+            needs_verification=sum(1 for row in scoped if _needs_verification(row.status)),
+            total=len(scoped),
+        ),
+        has_more=offset + len(page) < len(matching),
+        items=[_ledger_record(row) for row in page],
+        limit=limit,
+        offset=offset,
+        total_in_scope=len(scoped),
+        total_matching=len(matching),
+        window_days=days,
+    )
+
+
 @router.get("/manifest", response_model=EvidenceManifestResponse)
 @limiter.limit("60/minute")
 def get_evidence_manifest(
@@ -347,6 +466,7 @@ def get_evidence_manifest(
     search: str = Query(default="", max_length=200),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    days: int | None = Query(default=None, ge=1, le=90),
     dashboard_origin: str | None = Query(default=None, max_length=512),
     context: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
@@ -361,10 +481,14 @@ def get_evidence_manifest(
         db.execute(select(OutcomeReconciliationCheck).where(OutcomeReconciliationCheck.project_id == context.tenant_id)).scalars()
     )
     origin = _dashboard_origin(request, dashboard_origin)
+    now = datetime.now(timezone.utc)
     rows = [
         row
         for row in _build_manifest_rows(actions=actions, decisions=decisions, outcomes=outcomes)
-        if _in_date_scope(row, start_date, end_date) and _matches_filter(row, filter) and _matches_search(row, search)
+        if (days is None or _in_day_window(row, days, now))
+        and _in_date_scope(row, start_date, end_date)
+        and _matches_filter(row, filter)
+        and _matches_search(row, search)
     ]
     public_key_url = str(
         action_receipt_public_key_payload().get("public_key_url") or "/.well-known/zroky/action-receipt-signing-key"
@@ -383,6 +507,7 @@ def get_evidence_manifest(
             total_records=len(rows),
             exportable_records=sum(1 for row in rows if row.exportable),
             non_exportable_records=sum(1 for row in rows if not row.exportable),
+            window_days=days,
         ),
         verification=EvidenceManifestVerification(
             public_key_url=public_key_url,

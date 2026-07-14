@@ -14,6 +14,7 @@ import {
   getActionIntentReceipt,
   getActionIntentTimeline,
   getCustomerRecordConnectorStatus,
+  getEvidenceLedger,
   getLedgerRefundConnectorStatus,
   getMcpUpstreamBinding,
   getRuntimePolicyEvidencePack,
@@ -46,6 +47,36 @@ import {
   testLedgerRefundConnector,
   testPostgresReadConnector,
 } from "@/lib/api";
+
+describe("evidence ledger API", () => {
+  it("sends authoritative timeframe, filter, search, and pagination query values", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      counts: { exceptions: 0, export_ready: 0, needs_verification: 0, total: 0 },
+      has_more: false,
+      items: [],
+      limit: 100,
+      offset: 100,
+      total_in_scope: 0,
+      total_matching: 0,
+      window_days: 30,
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getEvidenceLedger({
+      days: 30,
+      filter: "exceptions",
+      limit: 100,
+      offset: 100,
+      search: "trace 42",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/evidence/ledger?days=30&filter=exceptions&limit=100&offset=100&search=trace+42",
+      expect.objectContaining({ method: "GET" }),
+    );
+    vi.unstubAllGlobals();
+  });
+});
 
 vi.mock("@/lib/auth", () => ({
   clearAuthSession: vi.fn(),

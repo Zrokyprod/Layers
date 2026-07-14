@@ -400,6 +400,42 @@ export interface EvidenceManifestResponse {
   }>;
 }
 
+export interface EvidenceLedgerResponse {
+  counts: {
+    exceptions: number;
+    export_ready: number;
+    needs_verification: number;
+    total: number;
+  };
+  has_more: boolean;
+  items: Array<{
+    action_id: string | null;
+    action_type: string;
+    agent_name: string;
+    call_id: string | null;
+    checked_at: string | null;
+    decision_id: string | null;
+    detail: string;
+    digest: string | null;
+    export_kind: "receipt" | "evidence_pack" | null;
+    exportable: boolean;
+    href: string;
+    id: string;
+    kind: "action_receipt" | "orphan_decision" | "unlinked_outcome";
+    outcome_id: string | null;
+    source_label: string;
+    status: string;
+    system_ref: string | null;
+    title: string;
+    trace_id: string | null;
+  }>;
+  limit: number;
+  offset: number;
+  total_in_scope: number;
+  total_matching: number;
+  window_days: number;
+}
+
 export type ActionIntentStatus =
   | "validated"
   | "deciding"
@@ -5232,10 +5268,27 @@ export function getEvidenceManifest(
     start_date?: string;
     end_date?: string;
     dashboard_origin?: string;
+    days?: number;
   } = {},
   signal?: AbortSignal,
 ): Promise<EvidenceManifestResponse> {
   return request<EvidenceManifestResponse>("/v1/evidence/manifest", {
+    query,
+    signal,
+  });
+}
+
+export function getEvidenceLedger(
+  query: {
+    days: number;
+    filter?: EvidenceManifestFilter;
+    limit?: number;
+    offset?: number;
+    search?: string;
+  },
+  signal?: AbortSignal,
+): Promise<EvidenceLedgerResponse> {
+  return request<EvidenceLedgerResponse>("/v1/evidence/ledger", {
     query,
     signal,
   });

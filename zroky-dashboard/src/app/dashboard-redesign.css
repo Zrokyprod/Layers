@@ -9492,7 +9492,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .ev-ledger-search-row .ev-search-field {
   flex: 1 1 auto !important;
-  min-width: 180px !important;
+  min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-manifest-scope {
@@ -9500,7 +9500,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   grid-template-columns: auto minmax(0, 1fr) !important;
   align-items: center !important;
   gap: 6px !important;
-  min-width: 150px !important;
+  flex: 0 1 150px !important;
+  min-width: 0 !important;
   padding: 0 10px !important;
   border: 1px solid var(--ev-border) !important;
   border-radius: 8px !important;
@@ -9529,6 +9530,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .ev-ledger-list {
   display: grid !important;
   gap: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-load-more {
+  display: flex !important;
+  justify-content: center !important;
+  padding-top: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-ledger-row {
