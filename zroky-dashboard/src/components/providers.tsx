@@ -2,8 +2,10 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { AUTH_SESSION_CHANGED_EVENT } from "@/lib/auth";
+import { useDashboardStore } from "@/lib/store";
 import { ErrorBoundary } from "./error-boundary";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -20,6 +22,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   );
+
+  useEffect(() => {
+    function resetAccountBoundState() {
+      queryClient.clear();
+      useDashboardStore.getState().setSelectedProject(null);
+    }
+
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, resetAccountBoundState);
+    return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, resetAccountBoundState);
+  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -6,6 +6,7 @@ const LS_ACCESS_TOKEN_KEY = "zroky_at";
 const LS_REFRESH_TOKEN_KEY = "zroky_rt";
 const LS_EMAIL_VERIFIED_KEY = "zroky_ev";
 const POST_AUTH_REDIRECT_STORAGE_KEY = "zroky_post_auth_redirect";
+export const AUTH_SESSION_CHANGED_EVENT = "zroky:auth-session-changed";
 const POST_AUTH_REDIRECT_COOKIE_MAX_AGE_SECONDS = 10 * 60;
 const DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 72;
 const DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -43,6 +44,12 @@ function persistSessionMetadata(session: BrowserAuthSession): void {
     refreshTokenExpiresAtEpochSeconds: session.refreshTokenExpiresAtEpochSeconds,
   });
   window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, payload);
+}
+
+function notifyAuthSessionChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
+  }
 }
 
 function readSessionMetadata(): {
@@ -122,6 +129,7 @@ export async function storeAuthSession(tokens: AuthTokenResponse): Promise<void>
     accessTokenExpiresAtEpochSeconds: nowEpochSeconds + accessMaxAgeSeconds,
     refreshTokenExpiresAtEpochSeconds: nowEpochSeconds + refreshMaxAgeSeconds,
   });
+  notifyAuthSessionChanged();
 }
 
 export function storeAccessToken(token: string, maxAgeSeconds = DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS): void {
@@ -151,6 +159,7 @@ export function clearAuthSession(): void {
     clearLegacyStoredTokens();
     window.localStorage.removeItem(LS_EMAIL_VERIFIED_KEY);
   }
+  notifyAuthSessionChanged();
 }
 
 export function clearAccessToken(): void {
