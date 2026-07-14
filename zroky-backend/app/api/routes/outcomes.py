@@ -10,7 +10,7 @@ Surface:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -688,6 +688,7 @@ def list_reconciliation_checks(
     db: Session = Depends(get_db_session),
     tenant_id: str = Depends(require_tenant_id),
     verdict: str | None = Query(default=None),
+    days: int | None = Query(default=None, ge=1, le=365),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> OutcomeReconciliationListResponse:
     """List recent outcome reconciliation checks for the current project."""
@@ -696,7 +697,14 @@ def list_reconciliation_checks(
             status_code=422,
             detail=f"verdict must be one of: {', '.join(sorted(VALID_VERDICTS))}",
         )
-    rows = list_reconciliations(db, project_id=tenant_id, verdict=verdict, limit=limit)
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    rows = list_reconciliations(
+        db,
+        project_id=tenant_id,
+        verdict=verdict,
+        since=since,
+        limit=limit,
+    )
     return OutcomeReconciliationListResponse(
         items=[_serialize_reconciliation(row) for row in rows],
         total_in_page=len(rows),

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  acknowledgeOutcomeMismatchResponse,
   decideActionIntent,
   approveRuntimePolicyDecision,
   activateMcpUpstream,
@@ -23,6 +24,7 @@ import {
   listActionRunners,
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
+  listOutcomeMismatchResponses,
   rejectRuntimePolicyDecision,
   preflightMcpUpstream,
   reconcileSavedConnector,
@@ -30,6 +32,7 @@ import {
   reconcileSavedGenericRest,
   reconcileSavedLedgerRefund,
   reconcileSavedPostgresRead,
+  resolveOutcomeMismatchResponse,
   saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
   saveMcpUpstreamDraft,
@@ -216,7 +219,7 @@ describe("runtime policy API client", () => {
     await expect(listRuntimePolicyApprovals()).resolves.toEqual({ items: [], total_in_page: 0 });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/zroky/v1/runtime-policy/approvals?status=pending_approval",
+      "/api/zroky/v1/runtime-policy/approvals?status=pending_approval&limit=100",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -230,7 +233,7 @@ describe("runtime policy API client", () => {
     await listRuntimePolicyApprovals("all");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/zroky/v1/runtime-policy/approvals?status=all",
+      "/api/zroky/v1/runtime-policy/approvals?status=all&limit=100",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -586,18 +589,64 @@ describe("outcome reconciliation API client", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await listOutcomeReconciliations({ verdict: "mismatched", limit: 25 });
+    await listOutcomeReconciliations({ verdict: "mismatched", days: 14, limit: 25 });
     await listOutcomeReconciliations({ verdict: "all", limit: 50 });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/zroky/v1/outcomes/reconciliation?verdict=mismatched&limit=25",
+      "/api/zroky/v1/outcomes/reconciliation?verdict=mismatched&days=14&limit=25",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/zroky/v1/outcomes/reconciliation?limit=50",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("lists, acknowledges, and resolves mismatch response cases", async () => {
+    const responseCase = {
+      id: "case_1",
+      project_id: "proj_1",
+      reconciliation_check_id: "check_1",
+      status: "OPEN",
+      remediation: {},
+      evidence: {},
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [responseCase], total_in_page: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...responseCase, status: "ACKNOWLEDGED" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...responseCase, status: "RESOLVED" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listOutcomeMismatchResponses("OPEN", 25);
+    await acknowledgeOutcomeMismatchResponse("case_1");
+    await resolveOutcomeMismatchResponse("case_1", {
+      resolution_code: "confirmed_mismatch",
+      resolution_note: "Confirmed against the ledger.",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses?status=OPEN&limit=25",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/acknowledge",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/resolve",
+      expect.objectContaining({
+        body: JSON.stringify({
+          resolution_code: "confirmed_mismatch",
+          resolution_note: "Confirmed against the ledger.",
+        }),
+        method: "POST",
+      }),
     );
   });
 
