@@ -16,16 +16,20 @@ const filters: Array<{ label: string; value: EvidenceLedgerFilter }> = [
 
 type EvidenceLedgerProps = {
   filter: EvidenceLedgerFilter;
+  hasMore: boolean;
   isError: boolean;
   isExporting: boolean;
   isLoading: boolean;
+  isLoadingMore: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
   onExportManifest: () => void;
+  onLoadMore: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
   rows: EvidenceLedgerRow[];
   search: string;
   selectedRowId: string | null;
+  totalMatching: number;
 };
 
 function rowKindLabel(kind: EvidenceLedgerRow["kind"]): string {
@@ -43,16 +47,20 @@ function actionLabel(row: EvidenceLedgerRow): string {
 
 export function EvidenceLedger({
   filter,
+  hasMore,
   isError,
   isExporting,
   isLoading,
+  isLoadingMore,
   onFilterChange,
   onExportManifest,
+  onLoadMore,
   onSearchChange,
   onSelectRow,
   rows,
   search,
   selectedRowId,
+  totalMatching,
 }: EvidenceLedgerProps) {
   const filteredRows = filterEvidenceLedger(rows, filter, search);
   const exportableCount = filteredRows.filter((row) => row.exportable).length;
@@ -65,7 +73,7 @@ export function EvidenceLedger({
           <h2>Proof records</h2>
           <p>Select a proof record to verify, export, or print.</p>
         </div>
-        <strong>{filteredRows.length} shown</strong>
+        <strong>{filteredRows.length} of {totalMatching} shown</strong>
       </header>
 
       <div className="ev-ledger-toolbar">
@@ -130,7 +138,8 @@ export function EvidenceLedger({
       ) : filteredRows.length === 0 ? (
         <div className="ev-empty-state">No records match this filter or search.</div>
       ) : (
-        <div className="ev-ledger-list">
+        <>
+          <div className="ev-ledger-list">
           {filteredRows.map((row) => {
             const selected = row.id === selectedRowId;
             return (
@@ -182,7 +191,15 @@ export function EvidenceLedger({
               </article>
             );
           })}
-        </div>
+          </div>
+          {hasMore ? (
+            <div className="ev-ledger-load-more">
+              <DashboardButton disabled={isLoadingMore} onClick={onLoadMore} variant="soft">
+                {isLoadingMore ? "Loading" : "Load more proof records"}
+              </DashboardButton>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   );

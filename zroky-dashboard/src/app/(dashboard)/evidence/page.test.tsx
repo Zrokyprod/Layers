@@ -11,9 +11,11 @@ import type {
   RuntimePolicyDecisionResponse,
   RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
+import { buildEvidenceLedger, evidenceLedgerCounts } from "@/lib/evidence-ledger";
 
 const api = vi.hoisted(() => ({
   getActionIntentReceipt: vi.fn(),
+  getEvidenceLedger: vi.fn(),
   getEvidenceManifest: vi.fn(),
   getRuntimePolicyEvidencePack: vi.fn(),
   listActionIntents: vi.fn(),
@@ -274,6 +276,54 @@ function evidencePack(overrides: Partial<RuntimePolicyEvidencePackResponse> = {}
   };
 }
 
+function ledgerResponse({
+  decisions = [runtimeDecision()],
+  intents = [actionIntent()],
+  outcomes = [outcome()],
+}: {
+  decisions?: RuntimePolicyDecisionResponse[];
+  intents?: ActionIntentResponse[];
+  outcomes?: OutcomeReconciliationView[];
+} = {}) {
+  const rows = buildEvidenceLedger({ decisions, intents, outcomes });
+  const counts = evidenceLedgerCounts(rows);
+  return {
+    counts: {
+      exceptions: counts.exceptions,
+      export_ready: counts.exportReady,
+      needs_verification: counts.needsVerification,
+      total: counts.total,
+    },
+    has_more: false,
+    items: rows.map((row) => ({
+      action_id: row.actionId,
+      action_type: row.actionType,
+      agent_name: row.agentName,
+      call_id: row.callId,
+      checked_at: row.checkedAt,
+      decision_id: row.decisionId,
+      detail: row.detail,
+      digest: row.digest,
+      export_kind: row.exportKind,
+      exportable: row.exportable,
+      href: row.href,
+      id: row.id,
+      kind: row.kind,
+      outcome_id: row.outcomeId,
+      source_label: row.sourceLabel,
+      status: row.status,
+      system_ref: row.systemRef,
+      title: row.title,
+      trace_id: row.traceId,
+    })),
+    limit: 100,
+    offset: 0,
+    total_in_scope: rows.length,
+    total_matching: rows.length,
+    window_days: 7,
+  };
+}
+
 function renderEvidencePage() {
   const client = new QueryClient({
     defaultOptions: {
@@ -306,9 +356,7 @@ describe("EvidencePage", () => {
       value: vi.fn(),
     });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    api.listActionIntents.mockResolvedValue({ total_in_page: 1, limit: 100, offset: 0, items: [actionIntent()] });
-    api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 1, items: [runtimeDecision()] });
-    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 1, items: [outcome()] });
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse());
     api.getActionIntentReceipt.mockResolvedValue(receipt());
     api.getEvidenceManifest.mockResolvedValue({
       artifact: "zroky.evidence_manifest",
@@ -386,8 +434,43 @@ describe("EvidencePage", () => {
     expect(api.getRuntimePolicyEvidencePack).not.toHaveBeenCalled();
   });
 
+  it("loads additional server pages without changing the evidence scope", async () => {
+    const first = ledgerResponse({
+      decisions: [],
+      outcomes: [],
+      intents: [actionIntent({ action_id: "act_page_1", intent_digest: "sha256:page-1", runtime_policy_decision_id: null })],
+    });
+    const second = ledgerResponse({
+      decisions: [],
+      outcomes: [],
+      intents: [actionIntent({ action_id: "act_page_2", intent_digest: "sha256:page-2", runtime_policy_decision_id: null })],
+    });
+    first.has_more = true;
+    first.total_in_scope = 2;
+    first.total_matching = 2;
+    first.counts.total = 2;
+    first.counts.export_ready = 2;
+    second.offset = 1;
+    second.total_in_scope = 2;
+    second.total_matching = 2;
+    second.counts.total = 2;
+    second.counts.export_ready = 2;
+    api.getEvidenceLedger.mockImplementation(({ offset }: { offset?: number }) => Promise.resolve(offset ? second : first));
+
+    renderEvidencePage();
+
+    expect(await screen.findByText("sha256:page-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more proof records" }));
+    expect(await screen.findByText("sha256:page-2")).toBeInTheDocument();
+    expect(api.getEvidenceLedger).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ days: 7, offset: 1 }),
+      expect.any(AbortSignal),
+    );
+  });
+
   it("shows guard-only runtime decisions as secondary full Evidence Packs", async () => {
-    api.listActionIntents.mockResolvedValue({ total_in_page: 0, limit: 100, offset: 0, items: [] });
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({ intents: [] }));
 
     renderEvidencePage();
 
@@ -421,6 +504,7 @@ describe("EvidencePage", () => {
     await waitFor(() => expect(api.getEvidenceManifest).toHaveBeenCalledWith(
       {
         dashboard_origin: "http://localhost:3000",
+        days: 7,
         end_date: "",
         filter: "all",
         search: "sha256:intent_1",
@@ -443,15 +527,9 @@ describe("EvidencePage", () => {
   });
 
   it("filters exception rows and keeps unlinked outcomes visible but non-exportable", async () => {
-    api.listActionIntents.mockResolvedValue({
-      total_in_page: 1,
-      limit: 100,
-      offset: 0,
-      items: [actionIntent({ action_id: "act_bad", proof_status: "mismatched", intent_digest: "sha256:mismatch" })],
-    });
-    api.listOutcomeReconciliations.mockResolvedValue({
-      total_in_page: 2,
-      items: [
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      intents: [actionIntent({ action_id: "act_bad", proof_status: "mismatched", intent_digest: "sha256:mismatch" })],
+      outcomes: [
         outcome({ id: "check_bad", verdict: "mismatched", reason: "status mismatch", idempotency_key: "idem_act_1" }),
         outcome({
           id: "check_unlinked",
@@ -463,7 +541,7 @@ describe("EvidencePage", () => {
           verdict: "not_verified",
         }),
       ],
-    });
+    }));
 
     renderEvidencePage();
 
@@ -481,17 +559,11 @@ describe("EvidencePage", () => {
   });
 
   it("explains that denied actions do not require receipt proof", async () => {
-    api.listActionIntents.mockResolvedValue({
-      total_in_page: 1,
-      limit: 100,
-      offset: 0,
-      items: [actionIntent({ status: "denied", proof_status: "not_started", receipt_status: "missing" })],
-    });
-    api.listRuntimePolicyApprovals.mockResolvedValue({
-      total_in_page: 1,
-      items: [runtimeDecision({ status: "blocked", decision: "block", allowed: false })],
-    });
-    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 0, items: [] });
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      intents: [actionIntent({ status: "denied", proof_status: "not_started", receipt_status: "missing" })],
+      decisions: [runtimeDecision({ status: "blocked", decision: "block", allowed: false })],
+      outcomes: [],
+    }));
 
     renderEvidencePage();
 
