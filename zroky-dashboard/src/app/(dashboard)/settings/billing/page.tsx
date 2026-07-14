@@ -257,7 +257,12 @@ function formatUsageMeter(meter: BillingUsageMeter | null | undefined): string {
 
 function usageDetail(label: string, meter: BillingUsageMeter | null | undefined): string {
   if (!meter) return `${label} usage is loading.`;
-  if (meter.state === "exceeded") return `${label} limit exceeded by ${(meter.overage ?? 0).toLocaleString()}.`;
+  if (meter.state === "exceeded") {
+    const overage = meter.overage ?? 0;
+    if (overage > 0) return `${label} limit exceeded by ${overage.toLocaleString()}.`;
+    if (!meter.unlimited && meter.limit != null && meter.used >= meter.limit) return `${label} limit reached.`;
+    return `${label} is over its plan limit.`;
+  }
   if (meter.state === "near_limit") return `${label} is near its plan limit.`;
   if (meter.state === "blocked") return `${label} is blocked on this plan.`;
   if (meter.unlimited) return `${label} is unlimited on this plan.`;
@@ -326,6 +331,9 @@ function paymentStatusLabel(billing: BillingMeResponse | null): { label: string;
   }
   if (billing?.payment_request_ref) {
     return { label: "Pending", detail: "Razorpay payment request is waiting for confirmation." };
+  }
+  if ((billing.plan_code ?? "").trim().toLowerCase() === "free") {
+    return { label: "Free plan", detail: "No payment method is required on the Free plan." };
   }
   return { label: "Not requested", detail: "Start a paid plan to create a Razorpay checkout order." };
 }

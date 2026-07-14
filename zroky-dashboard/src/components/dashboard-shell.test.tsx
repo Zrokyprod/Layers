@@ -299,7 +299,7 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.getByRole("navigation", { name: "Primary" }).querySelector('[data-nav-id="issues"]')).toBeNull();
   });
 
-  it("shows Settings child links only while Settings is active", () => {
+  it("keeps Settings child navigation out of the sidebar", () => {
     const { rerender } = render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.queryByRole("group", { name: "Settings sections" })).not.toBeInTheDocument();
@@ -307,15 +307,7 @@ describe("DashboardShell primary navigation", () => {
     navState.pathname = "/settings/workspace";
     rerender(<DashboardShell>content</DashboardShell>);
 
-    const settingsSections = screen.getByRole("group", { name: "Settings sections" });
-    expect(within(settingsSections).queryByRole("link", { name: /Project/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).getByRole("link", { name: /^API Keys$/ }).getAttribute("href")).toBe("/settings/keys");
-    expect(within(settingsSections).queryByRole("link", { name: /Providers/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).queryByRole("link", { name: /Connectors/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).getByRole("link", { name: /Plan & Billing/ }).getAttribute("href")).toBe("/settings/billing");
-    expect(within(settingsSections).getByRole("link", { name: /Members/ }).getAttribute("href")).toBe("/settings/team");
-    expect(within(settingsSections).getByRole("link", { name: /Workspace/ }).getAttribute("href")).toBe("/settings/workspace");
-    expect(within(settingsSections).queryByRole("link", { name: /Evaluation/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Settings sections" })).not.toBeInTheDocument();
   });
 
   it("renders the dashboard logo image without the old text lockup", () => {
@@ -676,6 +668,14 @@ describe("DashboardShell primary navigation", () => {
       to: expect.any(Date),
     });
     expect(queryClientState.invalidateQueries).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the dashboard time window on Settings routes", () => {
+    navState.pathname = "/settings/keys";
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.queryByRole("button", { name: "Choose dashboard time window" })).not.toBeInTheDocument();
   });
 
   it("opens environment status and toggles live refresh", () => {

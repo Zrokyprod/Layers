@@ -133,6 +133,18 @@ describe("BillingPage", () => {
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
 
+  it("describes an exact connector cap as reached instead of exceeded by zero", async () => {
+    api.getBillingUsage.mockResolvedValue({
+      ...(await api.getBillingUsage()),
+      active_connectors: usageMeter(1, 1, "exceeded"),
+    });
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText("System-of-record connectors limit reached.")).toBeInTheDocument();
+    expect(screen.queryByText("System-of-record connectors limit exceeded by 0.")).not.toBeInTheDocument();
+  });
+
   it("maps legacy Plus subscriptions to the Scale catalog card", async () => {
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",

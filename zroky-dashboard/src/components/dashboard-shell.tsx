@@ -15,12 +15,10 @@ import {
   Check,
   ChevronDown,
   Clock3,
-  CreditCard,
   FileJson,
   FolderOpen,
   Gauge,
   Inbox,
-  KeyRound,
   LockKeyhole,
   LogOut,
   Menu,
@@ -140,13 +138,6 @@ const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; itemIds: string[]
   { id: "control", label: "Control", itemIds: ["home", "approvals", "actions", "agents"] },
   { id: "proof", label: "Proof", itemIds: ["outcomes", "evidence"] },
   { id: "configure", label: "Configure", itemIds: ["policies", "connectors"] },
-];
-
-const SETTINGS_CHILD_LINKS = [
-  { href: "/settings/keys", label: "API Keys", Icon: KeyRound },
-  { href: "/settings/team", label: "Members", Icon: UserRound },
-  { href: "/settings/billing", label: "Plan & Billing", Icon: CreditCard },
-  { href: "/settings/workspace", label: "Workspace", Icon: FolderOpen },
 ];
 
 const DATE_PRESETS = [
@@ -692,7 +683,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         : "is-ok";
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
   const currentRoute = getRouteMeta(pathname);
-  const settingsNavActive = pathname === "/settings" || pathname.startsWith("/settings/");
+  const showDashboardTimeWindow = !pathname.startsWith("/settings");
   const sidebarVisible = compactShell ? compactSidebarOpen : sidebarOpen;
 
   const badges: Record<string, number> = {};
@@ -901,25 +892,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               />
             );
           })}
-          {settingsNavActive ? (
-            <div className="settings-subnav" role="group" aria-label="Settings sections">
-              {SETTINGS_CHILD_LINKS.map((item) => {
-                const Icon = item.Icon;
-                const active = item.href === "/settings" ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`settings-subnav-link${active ? " is-active" : ""}`}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon size={13} aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : null}
         </nav>
 
         <div className="sidebar-foot">
@@ -1029,7 +1001,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="topbar-controls">
-            <div className="topbar-menu-wrap" ref={dateMenuRef}>
+            {showDashboardTimeWindow ? <div className="topbar-menu-wrap" ref={dateMenuRef}>
               <button
                 type="button"
                 className="topbar-ctrl-btn"
@@ -1061,7 +1033,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   ))}
                 </div>
               ) : null}
-            </div>
+            </div> : null}
 
             <div className="topbar-menu-wrap" ref={envMenuRef}>
               <button

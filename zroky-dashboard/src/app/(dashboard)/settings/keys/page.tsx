@@ -32,6 +32,11 @@ const defaultKeyName = "Production verified-action key";
 const keyExpiryWarningDays = 14;
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
+function keyAccessLabel(scopes: string[] | null | undefined): string {
+  if (!scopes?.length || scopes.includes("project:member")) return "Full runtime access";
+  return scopes.join(", ");
+}
+
 function keyStatus(key: ApiKeyResponse): "revoked" | "expired" | "active" {
   if (key.revoked) return "revoked";
   if (key.expired) return "expired";
@@ -208,7 +213,7 @@ function ApiKeysContent() {
                 </div>
                 <div className="keys-card-meta">
                   <span className="mono">{key.key_prefix}...</span>
-                  <span>{key.scopes?.join(", ") || "project:member"}</span>
+                  <span>{keyAccessLabel(key.scopes)}</span>
                   <span>Created {formatDateTime(key.created_at)}</span>
                 </div>
                 {expiryWarningLabel(key) ? (
@@ -276,7 +281,7 @@ function ApiKeysContent() {
           <header className="panel-header">
             <div>
               <h2>Create key</h2>
-              <p>Use it for SDK, Gateway, and verified-action calls.</p>
+              <p>Create one credential for one agent runtime.</p>
             </div>
           </header>
 
@@ -318,7 +323,7 @@ function ApiKeysContent() {
 
           <p className="keys-simple-note">
             <KeyRound aria-hidden="true" />
-            Full secret is shown once. Store it in your agent runtime. Blank expiry means no automatic expiry.
+            This key has full project runtime access for SDK, Gateway, and verified-action calls. The secret is shown once.
           </p>
         </article>
 
@@ -441,7 +446,7 @@ function ApiKeysContent() {
                 Current prefix <strong className="mono">{rotateTarget.key_prefix}...</strong>
               </span>
               <span>
-                Scope <strong>{rotateTarget.scopes?.join(", ") || "project:member"}</strong>
+                Access <strong>{keyAccessLabel(rotateTarget.scopes)}</strong>
               </span>
             </div>
             <div className="actions">

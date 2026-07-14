@@ -52,15 +52,15 @@ describe("SettingsLayout", () => {
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
   });
 
-  it("frames settings as the workspace control plane", () => {
+  it("keeps settings navigation compact without a repeated module hero", () => {
     render(
       <SettingsLayout>
         <div>Settings content</div>
       </SettingsLayout>,
     );
 
-    expect(screen.getByRole("heading", { name: "Workspace control plane" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Workspace control plane" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Workspace control loop")).not.toBeInTheDocument();
     expect(screen.queryByText("API access")).not.toBeInTheDocument();
     expect(screen.queryByText("Team access")).not.toBeInTheDocument();

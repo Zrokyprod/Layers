@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -107,7 +107,7 @@ describe("ApiKeysPage", () => {
 
     expect(screen.getByRole("heading", { name: "API keys" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create key" })).toBeInTheDocument();
-    expect(screen.getByText("Full secret is shown once. Store it in your agent runtime. Blank expiry means no automatic expiry.")).toBeInTheDocument();
+    expect(screen.getByText("This key has full project runtime access for SDK, Gateway, and verified-action calls. The secret is shown once.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to run your first verified action.")).toBeInTheDocument();
     expect(screen.queryByText("Runtime access command center")).not.toBeInTheDocument();
     expect(screen.queryByText("Key posture")).not.toBeInTheDocument();
@@ -192,7 +192,9 @@ describe("ApiKeysPage", () => {
     render(<ApiKeysPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Rotate" }));
-    expect(screen.getByRole("dialog", { name: "Rotate API key" })).toBeInTheDocument();
+    const rotateDialog = screen.getByRole("dialog", { name: "Rotate API key" });
+    expect(rotateDialog).toBeInTheDocument();
+    expect(within(rotateDialog).getByText("Full runtime access")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Rotate and show replacement" }));
 
     await waitFor(() => expect(rotateMutateAsync).toHaveBeenCalledWith({ projectId: "proj_1", keyId: "key_1" }));
