@@ -67,7 +67,7 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
   }
 
   const selectedProjectId = request.headers.get("x-project-id")?.trim();
-  const projectId = selectedProjectId || process.env.ZROKY_PROJECT_ID;
+  const projectId = selectedProjectId || (cookieToken ? undefined : process.env.ZROKY_PROJECT_ID);
 
   if (projectId) {
     headers.set("x-project-id", projectId);

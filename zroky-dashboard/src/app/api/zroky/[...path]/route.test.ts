@@ -222,6 +222,29 @@ describe("/api/zroky proxy route", () => {
     expect((init.headers as Headers).get("x-project-id")).toBe("proj_env");
   });
 
+  it("does not inject the env project into an authenticated dashboard session", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    vi.stubEnv("ZROKY_PROJECT_ID", "proj_env");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/settings/project", {
+      headers: {
+        cookie: "zroky_access_token=session-token",
+      },
+    });
+    await GET(request, context(["v1", "settings", "project"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("authorization")).toBe("Bearer session-token");
+    expect((init.headers as Headers).get("x-project-id")).toBeNull();
+  });
+
   it("returns clean JSON when the backend is unavailable", async () => {
     vi.stubEnv("ZROKY_API_BASE_URL", "http://127.0.0.1:8999");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("connect ECONNREFUSED")));
