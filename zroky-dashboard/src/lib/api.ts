@@ -3669,6 +3669,40 @@ export interface OutcomeReconciliationListResponse {
   total_in_page: number;
 }
 
+export type OutcomeMismatchResponseStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+
+export interface OutcomeMismatchResponseView {
+  id: string;
+  project_id: string;
+  reconciliation_check_id: string;
+  action_intent_id: string | null;
+  action_receipt_id: string | null;
+  receipt_digest: string | null;
+  alert_id: string | null;
+  status: OutcomeMismatchResponseStatus;
+  resolution_code: string | null;
+  resolution_note: string | null;
+  remediation: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  acknowledged_by_subject: string | null;
+  acknowledged_at: string | null;
+  resolved_by_subject: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutcomeMismatchResponseListResponse {
+  items: OutcomeMismatchResponseView[];
+  total_in_page: number;
+}
+
+export type OutcomeMismatchResolutionCode =
+  | "confirmed_mismatch"
+  | "expected_change"
+  | "false_positive"
+  | "unresolved";
+
 export interface OutcomeReconciliationSummaryResponse {
   window_days: number;
   total: number;
@@ -4004,6 +4038,7 @@ export function getActionsLifecycleSummary(
 export function listOutcomeReconciliations(
   params: {
     verdict?: OutcomeReconciliationVerdict | "all";
+    days?: number;
     limit?: number;
   } = {},
   signal?: AbortSignal,
@@ -4012,10 +4047,44 @@ export function listOutcomeReconciliations(
   return request<OutcomeReconciliationListResponse>("/v1/outcomes/reconciliation", {
     query: {
       ...(verdict ? { verdict } : {}),
+      days: params.days == null ? undefined : String(params.days),
       limit: String(params.limit ?? 50),
     },
     signal,
   });
+}
+
+export function listOutcomeMismatchResponses(
+  status: OutcomeMismatchResponseStatus | "all" = "all",
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<OutcomeMismatchResponseListResponse> {
+  return request<OutcomeMismatchResponseListResponse>("/v1/outcomes/reconciliation/mismatch-responses", {
+    query: {
+      status: status === "all" ? undefined : status,
+      limit: String(limit),
+    },
+    signal,
+  });
+}
+
+export function acknowledgeOutcomeMismatchResponse(
+  responseId: string,
+): Promise<OutcomeMismatchResponseView> {
+  return request<OutcomeMismatchResponseView>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}/acknowledge`,
+    { method: "POST" },
+  );
+}
+
+export function resolveOutcomeMismatchResponse(
+  responseId: string,
+  body: { resolution_code: OutcomeMismatchResolutionCode; resolution_note?: string | null },
+): Promise<OutcomeMismatchResponseView> {
+  return request<OutcomeMismatchResponseView>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}/resolve`,
+    { method: "POST", body },
+  );
 }
 
 export function getOutcomeReconciliation(

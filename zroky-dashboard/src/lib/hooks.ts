@@ -16,6 +16,7 @@ import {
   getOutcomeSummary,
   getOutcomeReconciliationSummary,
   listOutcomeReconciliations,
+  listOutcomeMismatchResponses,
   getSourceMutationSummary,
   listUnreceiptedSourceMutations,
   getReplaySavings,
@@ -36,6 +37,8 @@ import {
   type OutcomeReconciliationListResponse,
   type OutcomeReconciliationSummaryResponse,
   type OutcomeReconciliationVerdict,
+  type OutcomeMismatchResponseListResponse,
+  type OutcomeMismatchResponseStatus,
   type SourceMutationListResponse,
   type SourceMutationSummaryResponse,
   type ReplaySavingsResponse,
@@ -841,13 +844,28 @@ export function useOutcomeReconciliationSummary(
 export function useOutcomeReconciliations(
   verdict: OutcomeReconciliationVerdict | "all" = "all",
   limit = 50,
+  days?: number,
   options?: Partial<UseQueryOptions<OutcomeReconciliationListResponse, Error>>,
 ) {
   return useQuery<OutcomeReconciliationListResponse, Error>({
-    queryKey: ["outcomes", "reconciliation", "list", verdict, limit],
-    queryFn: ({ signal }) => listOutcomeReconciliations({ verdict, limit }, signal),
+    queryKey: ["outcomes", "reconciliation", "list", verdict, limit, days],
+    queryFn: ({ signal }) => listOutcomeReconciliations({ verdict, limit, days }, signal),
     staleTime: 15_000,
     refetchInterval: verdict === "mismatched" || verdict === "not_verified" ? 15_000 : 30_000,
+    ...options,
+  });
+}
+
+export function useOutcomeMismatchResponses(
+  status: OutcomeMismatchResponseStatus | "all" = "all",
+  limit = 100,
+  options?: Partial<UseQueryOptions<OutcomeMismatchResponseListResponse, Error>>,
+) {
+  return useQuery<OutcomeMismatchResponseListResponse, Error>({
+    queryKey: ["outcomes", "reconciliation", "mismatch-responses", status, limit],
+    queryFn: ({ signal }) => listOutcomeMismatchResponses(status, limit, signal),
+    staleTime: 15_000,
+    refetchInterval: status === "RESOLVED" ? 30_000 : 15_000,
     ...options,
   });
 }

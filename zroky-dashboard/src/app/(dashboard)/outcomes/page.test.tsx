@@ -6,12 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OutcomesPage from "./page";
 
 const apiState = vi.hoisted(() => ({
+  acknowledgeOutcomeMismatchResponse: vi.fn(),
   reconcileSavedConnector: vi.fn(),
+  resolveOutcomeMismatchResponse: vi.fn(),
 }));
 
 const hookState = vi.hoisted(() => ({
   summaryRefetch: vi.fn(),
   checksRefetch: vi.fn(),
+  mismatchCasesRefetch: vi.fn(),
   sourceMutationSummaryRefetch: vi.fn(),
   unreceiptedMutationsRefetch: vi.fn(),
   summary: {
@@ -133,6 +136,30 @@ const hookState = vi.hoisted(() => ({
       created_at: "2026-06-20T09:02:00Z",
     },
   ],
+  mismatchCases: [
+    {
+      id: "case_mismatch_1",
+      project_id: "proj_1",
+      reconciliation_check_id: "check_mismatch",
+      action_intent_id: "action_1",
+      action_receipt_id: "receipt_1",
+      receipt_digest: "digest_1",
+      alert_id: "alert_1",
+      status: "OPEN",
+      resolution_code: null,
+      resolution_note: null,
+      remediation: {
+        safety_boundary: "A rollback is a new protected action. Zroky will not execute it automatically.",
+      },
+      evidence: { mismatched_fields: ["amount_usd"] },
+      acknowledged_by_subject: null,
+      acknowledged_at: null,
+      resolved_by_subject: null,
+      resolved_at: null,
+      created_at: "2026-06-20T09:00:00Z",
+      updated_at: "2026-06-20T09:00:00Z",
+    },
+  ],
 }));
 
 vi.mock("next/link", () => ({
@@ -155,11 +182,17 @@ vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
+    acknowledgeOutcomeMismatchResponse: apiState.acknowledgeOutcomeMismatchResponse,
     reconcileSavedConnector: apiState.reconcileSavedConnector,
+    resolveOutcomeMismatchResponse: apiState.resolveOutcomeMismatchResponse,
   };
 });
 
 vi.mock("@/lib/hooks", () => ({
+  useMyProjects: () => ({
+    data: [{ project_id: "proj_1", project_name: "Project", role: "owner", is_active: true }],
+    isLoading: false,
+  }),
   useOutcomeReconciliationSummary: () => ({
     data: hookState.summary,
     isLoading: false,
@@ -175,6 +208,14 @@ vi.mock("@/lib/hooks", () => ({
     error: null,
     isFetching: false,
     refetch: hookState.checksRefetch,
+  }),
+  useOutcomeMismatchResponses: () => ({
+    data: { items: hookState.mismatchCases, total_in_page: hookState.mismatchCases.length },
+    isLoading: false,
+    isError: false,
+    error: null,
+    isFetching: false,
+    refetch: hookState.mismatchCasesRefetch,
   }),
   useSourceMutationSummary: () => ({
     data: hookState.sourceMutationSummary,
@@ -219,10 +260,23 @@ function renderOutcomesPage() {
 
 describe("OutcomesPage", () => {
   beforeEach(() => {
+    apiState.acknowledgeOutcomeMismatchResponse.mockReset();
     apiState.reconcileSavedConnector.mockReset();
+    apiState.resolveOutcomeMismatchResponse.mockReset();
+    apiState.acknowledgeOutcomeMismatchResponse.mockResolvedValue({
+      ...hookState.mismatchCases[0],
+      status: "ACKNOWLEDGED",
+    });
     apiState.reconcileSavedConnector.mockResolvedValue(hookState.checks[0]);
+    apiState.resolveOutcomeMismatchResponse.mockResolvedValue({
+      ...hookState.mismatchCases[0],
+      status: "RESOLVED",
+      resolution_code: "confirmed_mismatch",
+      resolution_note: "Confirmed against the ledger.",
+    });
     hookState.summaryRefetch.mockClear();
     hookState.checksRefetch.mockClear();
+    hookState.mismatchCasesRefetch.mockClear();
     hookState.sourceMutationSummaryRefetch.mockClear();
     hookState.unreceiptedMutationsRefetch.mockClear();
   });
@@ -249,6 +303,8 @@ describe("OutcomesPage", () => {
     expect(screen.getByRole("region", { name: "Selected outcome check" })).toBeInTheDocument();
     expect(screen.getAllByText("Refund id rf_999").length).toBeGreaterThan(0);
     expect(screen.getByText("refund-agent / Refund")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Mismatch response case" })).toBeInTheDocument();
+    expect(screen.getByText("Needs an operator")).toBeInTheDocument();
   });
 
   it("does not report bypass risk clear without source mutation coverage", () => {
@@ -321,6 +377,7 @@ describe("OutcomesPage", () => {
 
     expect(hookState.summaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.checksRefetch).toHaveBeenCalledTimes(1);
+    expect(hookState.mismatchCasesRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.sourceMutationSummaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.unreceiptedMutationsRefetch).toHaveBeenCalledTimes(1);
   });
@@ -345,5 +402,39 @@ describe("OutcomesPage", () => {
       expect(hookState.checksRefetch).toHaveBeenCalled();
     });
     expect(screen.getByText("Re-check created: Mismatched.")).toBeInTheDocument();
+  });
+
+  it("acknowledges a mismatch response case", async () => {
+    renderOutcomesPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge case" }));
+
+    await waitFor(() => {
+      expect(apiState.acknowledgeOutcomeMismatchResponse).toHaveBeenCalledWith("case_mismatch_1");
+    });
+    expect(await screen.findByText("Case acknowledged. Investigation ownership is recorded.")).toBeInTheDocument();
+  });
+
+  it("records an owner resolution without mutating the source system", async () => {
+    renderOutcomesPage();
+
+    fireEvent.change(screen.getByLabelText("Owner resolution"), {
+      target: { value: "confirmed_mismatch" },
+    });
+    fireEvent.change(screen.getByLabelText("Resolution note"), {
+      target: { value: "Confirmed against the ledger." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve case" }));
+
+    await waitFor(() => {
+      expect(apiState.resolveOutcomeMismatchResponse).toHaveBeenCalledWith(
+        "case_mismatch_1",
+        {
+          resolution_code: "confirmed_mismatch",
+          resolution_note: "Confirmed against the ledger.",
+        },
+      );
+    });
+    expect(await screen.findByText("Case resolution recorded in the audit trail.")).toBeInTheDocument();
   });
 });

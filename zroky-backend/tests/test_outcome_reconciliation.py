@@ -707,6 +707,13 @@ def test_reconciliation_api_creates_mismatch_and_lists_by_call(tmp_path: Path) -
             assert body["comparison"]["mismatches"][0]["field"] == "amount_usd"
             assert body["reverify_connector"] is None
 
+            recent = client.get("/v1/outcomes/reconciliation?days=14")
+            assert recent.status_code == 200
+            assert recent.json()["items"][0]["id"] == body["id"]
+
+            invalid_window = client.get("/v1/outcomes/reconciliation?days=366")
+            assert invalid_window.status_code == 422
+
             by_call = client.get("/v1/outcomes/reconciliation/by-call/call_refund_api")
             assert by_call.status_code == 200
             assert by_call.json()["items"][0]["id"] == body["id"]

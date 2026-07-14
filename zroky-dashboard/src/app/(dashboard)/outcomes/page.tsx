@@ -19,11 +19,16 @@ import { DashboardMetricStrip, DashboardVerdictHero, DashboardWorkspace, type Da
 import { StatusPill } from "@/components/status-pill";
 import { statusLabel, type StatusTone } from "@/lib/action-status";
 import {
+  acknowledgeOutcomeMismatchResponse,
   reconcileSavedConnector,
+  resolveOutcomeMismatchResponse,
+  type OutcomeMismatchResolutionCode,
+  type OutcomeMismatchResponseView,
   type OutcomeReconciliationView,
   type SavedConnectorReconciliationConnector,
   type SavedConnectorReconciliationPayload,
 } from "@/lib/api";
+import { dashboardWindowDays } from "@/lib/dashboard-window";
 import { compactJson, field, formatCount, formatDateTime, timeSince } from "@/lib/format";
 import {
   buildClaimedActualDiff,
@@ -36,9 +41,14 @@ import {
 import {
   useOutcomeReconciliationSummary,
   useOutcomeReconciliations,
+  useOutcomeMismatchResponses,
+  useMyProjects,
   useSourceMutationSummary,
   useUnreceiptedSourceMutations,
 } from "@/lib/hooks";
+import { useDashboardStore } from "@/lib/store";
+
+import { MismatchCasePanel, type OutcomeMismatchCaseNotice } from "./mismatch-case-panel";
 
 const FILTERS: Array<{ id: OutcomeLedgerFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -340,12 +350,30 @@ function DiffTable({ rows }: { rows: OutcomeDiffRow[] }) {
 }
 
 function OutcomeInspector({
+  caseBusy,
+  caseNotice,
+  canAcknowledgeCase,
+  canResolveCase,
+  mismatchCase,
+  onAcknowledgeCase,
   onReverify,
+  onResolveCase,
   reverifyLoadingId,
   reverifyNotice,
   row,
 }: {
+  caseBusy: boolean;
+  caseNotice: OutcomeMismatchCaseNotice | null;
+  canAcknowledgeCase: boolean;
+  canResolveCase: boolean;
+  mismatchCase: OutcomeMismatchResponseView | null;
+  onAcknowledgeCase: (responseCase: OutcomeMismatchResponseView) => void;
   onReverify: (row: OutcomeLedgerRow) => void;
+  onResolveCase: (
+    responseCase: OutcomeMismatchResponseView,
+    resolutionCode: OutcomeMismatchResolutionCode,
+    resolutionNote: string,
+  ) => void;
   reverifyLoadingId: string | null;
   reverifyNotice: ReverifyNotice | null;
   row: OutcomeLedgerRow | null;
@@ -461,6 +489,18 @@ function OutcomeInspector({
         </div>
       </section>
 
+      {row.verdict === "mismatched" ? (
+        <MismatchCasePanel
+          busy={caseBusy}
+          canAcknowledge={canAcknowledgeCase}
+          canResolve={canResolveCase}
+          notice={caseNotice}
+          onAcknowledge={onAcknowledgeCase}
+          onResolve={onResolveCase}
+          responseCase={mismatchCase}
+        />
+      ) : null}
+
       <div className="outcomes-inspector-actions">
         {row.evidenceHref ? (
           <DashboardButtonLink href={row.evidenceHref} variant="primary" icon={<ExternalLink size={14} />}>
@@ -570,14 +610,20 @@ function BypassStrip({
 }
 
 export default function OutcomesPage() {
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
+  const windowDays = useMemo(() => dashboardWindowDays(dateRange, 30), [dateRange]);
+  const [caseNotice, setCaseNotice] = useState<OutcomeMismatchCaseNotice | null>(null);
   const [filter, setFilter] = useState<OutcomeLedgerFilter>("all");
   const [reverifyLoadingId, setReverifyLoadingId] = useState<string | null>(null);
   const [reverifyNotice, setReverifyNotice] = useState<ReverifyNotice | null>(null);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => initialCheckId());
 
-  const summaryQuery = useOutcomeReconciliationSummary(30);
-  const checksQuery = useOutcomeReconciliations("all", RECONCILIATION_CHECK_LIMIT);
+  const summaryQuery = useOutcomeReconciliationSummary(windowDays);
+  const checksQuery = useOutcomeReconciliations("all", RECONCILIATION_CHECK_LIMIT, windowDays);
+  const mismatchCasesQuery = useOutcomeMismatchResponses("all", RECONCILIATION_CHECK_LIMIT);
+  const projectsQuery = useMyProjects();
   const sourceMutationSummaryQuery = useSourceMutationSummary();
   const unreceiptedMutationsQuery = useUnreceiptedSourceMutations(50);
 
@@ -586,6 +632,21 @@ export default function OutcomesPage() {
     () => unreceiptedMutationsQuery.data?.items ?? [],
     [unreceiptedMutationsQuery.data?.items],
   );
+  const mismatchCasesByCheckId = useMemo(
+    () => new Map(
+      (mismatchCasesQuery.data?.items ?? []).map((item) => [item.reconciliation_check_id, item]),
+    ),
+    [mismatchCasesQuery.data?.items],
+  );
+  const currentMembership = useMemo(
+    () => (projectsQuery.data ?? []).find((item) => item.project_id === selectedProject)
+      ?? (projectsQuery.data ?? []).find((item) => item.is_active)
+      ?? null,
+    [projectsQuery.data, selectedProject],
+  );
+  const currentRole = currentMembership?.role?.trim().toLowerCase() ?? "viewer";
+  const canAcknowledgeCase = currentRole === "member" || currentRole === "admin" || currentRole === "owner";
+  const canResolveCase = currentRole === "owner";
   const ledger = useMemo(
     () => buildOutcomeLedger({
       checks,
@@ -599,6 +660,9 @@ export default function OutcomesPage() {
     () => ledger.rows.find((row) => row.id === selectedId) ?? ledger.rows[0] ?? null,
     [ledger.rows, selectedId],
   );
+  const selectedMismatchCase = selectedRow
+    ? mismatchCasesByCheckId.get(selectedRow.id) ?? null
+    : null;
 
   useEffect(() => {
     if (ledger.rows.length === 0) {
@@ -623,12 +687,14 @@ export default function OutcomesPage() {
     checksQuery.isFetching ||
     summaryQuery.isFetching ||
     sourceMutationSummaryQuery.isFetching ||
-    unreceiptedMutationsQuery.isFetching;
+    unreceiptedMutationsQuery.isFetching ||
+    mismatchCasesQuery.isFetching;
   const isError =
     checksQuery.isError ||
     summaryQuery.isError ||
     sourceMutationSummaryQuery.isError ||
-    unreceiptedMutationsQuery.isError;
+    unreceiptedMutationsQuery.isError ||
+    mismatchCasesQuery.isError;
   const verdict = verdictFor({
     bypass: bypassCount,
     isError,
@@ -643,6 +709,7 @@ export default function OutcomesPage() {
     void summaryQuery.refetch();
     void sourceMutationSummaryQuery.refetch();
     void unreceiptedMutationsQuery.refetch();
+    void mismatchCasesQuery.refetch();
   }
 
   const reverifyMutation = useMutation({
@@ -667,7 +734,41 @@ export default function OutcomesPage() {
         text: `Re-check created: ${statusLabel(result.verdict, "proof")}.`,
         tone: "success",
       });
+      setSelectedId(result.id);
       refresh();
+    },
+  });
+
+  const acknowledgeCaseMutation = useMutation({
+    mutationFn: (responseCase: OutcomeMismatchResponseView) => acknowledgeOutcomeMismatchResponse(responseCase.id),
+    onError: (error, responseCase) => {
+      setCaseNotice({ caseId: responseCase.id, text: mutationMessage(error), tone: "danger" });
+    },
+    onSuccess: (result) => {
+      setCaseNotice({ caseId: result.id, text: "Case acknowledged. Investigation ownership is recorded.", tone: "success" });
+      void mismatchCasesQuery.refetch();
+    },
+  });
+
+  const resolveCaseMutation = useMutation({
+    mutationFn: ({
+      responseCase,
+      resolutionCode,
+      resolutionNote,
+    }: {
+      responseCase: OutcomeMismatchResponseView;
+      resolutionCode: OutcomeMismatchResolutionCode;
+      resolutionNote: string;
+    }) => resolveOutcomeMismatchResponse(responseCase.id, {
+      resolution_code: resolutionCode,
+      resolution_note: resolutionNote,
+    }),
+    onError: (error, variables) => {
+      setCaseNotice({ caseId: variables.responseCase.id, text: mutationMessage(error), tone: "danger" });
+    },
+    onSuccess: (result) => {
+      setCaseNotice({ caseId: result.id, text: "Case resolution recorded in the audit trail.", tone: "success" });
+      void mismatchCasesQuery.refetch();
     },
   });
 
@@ -745,7 +846,19 @@ export default function OutcomesPage() {
         }
         right={
           <OutcomeInspector
+            key={selectedRow?.id ?? "empty"}
+            caseBusy={acknowledgeCaseMutation.isPending || resolveCaseMutation.isPending}
+            caseNotice={caseNotice}
+            canAcknowledgeCase={canAcknowledgeCase}
+            canResolveCase={canResolveCase}
+            mismatchCase={selectedMismatchCase}
+            onAcknowledgeCase={(responseCase) => acknowledgeCaseMutation.mutate(responseCase)}
             onReverify={(row) => reverifyMutation.mutate(row)}
+            onResolveCase={(responseCase, resolutionCode, resolutionNote) => resolveCaseMutation.mutate({
+              responseCase,
+              resolutionCode,
+              resolutionNote,
+            })}
             reverifyLoadingId={reverifyLoadingId}
             reverifyNotice={reverifyNotice}
             row={selectedRow}
