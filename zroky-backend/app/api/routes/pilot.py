@@ -182,6 +182,13 @@ class PilotPolicyPayload(BaseModel):
     runtime_changed_recipient_deny: bool = Field(
         default=DEFAULT_POLICY["runtime_changed_recipient_deny"]
     )
+    runtime_sequence_risk_enabled: bool = Field(
+        default=DEFAULT_POLICY["runtime_sequence_risk_enabled"]
+    )
+    runtime_action_decision: str = Field(
+        default=DEFAULT_POLICY["runtime_action_decision"],
+        pattern="^(inherit|allow|require_approval|require_two_approvals|deny)$",
+    )
 
 
 class PilotPolicyUpdatePayload(PilotPolicyPayload):

@@ -90,6 +90,20 @@ def evaluate_runtime_policy(
 
     reasons.extend(_first_launch_block_reasons(payload, policy))
 
+    resolution = policy.get("_runtime_policy_resolution")
+    action_decision_source = (
+        resolution.get("action_decision_source_rule_id")
+        if isinstance(resolution, dict)
+        else None
+    )
+    action_decision = (
+        str(policy.get("runtime_action_decision") or "inherit").strip().lower()
+        if action_decision_source
+        else "inherit"
+    )
+    if action_decision == "deny":
+        reasons.append("matched policy rule denies this action")
+
     if reasons:
         return make_result(
             decision="block",
@@ -99,10 +113,23 @@ def evaluate_runtime_policy(
             requires_approval=False,
         )
 
-    approval_reasons = _first_launch_approval_reasons(payload, policy)
-    if _is_sensitive_action(payload, policy) and policy.get("runtime_sensitive_actions_require_approval") is True:
-        approval_reasons.insert(0, "sensitive action requires human approval before execution")
-    required_approval_count = _required_approval_count(payload, policy, approval_reasons)
+    if action_decision == "allow":
+        approval_reasons = []
+    elif action_decision in {"require_approval", "require_two_approvals"}:
+        approval_reasons = [
+            "matched policy rule requires two distinct approvals before execution"
+            if action_decision == "require_two_approvals"
+            else "matched policy rule requires human approval before execution"
+        ]
+    else:
+        approval_reasons = _first_launch_approval_reasons(payload, policy)
+        if _is_sensitive_action(payload, policy) and policy.get("runtime_sensitive_actions_require_approval") is True:
+            approval_reasons.insert(0, "sensitive action requires human approval before execution")
+    required_approval_count = (
+        2
+        if action_decision == "require_two_approvals"
+        else _required_approval_count(payload, policy, approval_reasons)
+    )
 
     settings = get_settings()
     if (

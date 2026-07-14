@@ -259,6 +259,106 @@ def test_kill_switch_blocks_every_runtime_action(client: TestClient) -> None:
     assert "project kill switch is enabled" in response.json()["reasons"]
 
 
+@pytest.mark.parametrize(
+    ("outcome", "expected_status", "approval_count"),
+    [
+        ("deny", "blocked", 0),
+        ("require_approval", "pending_approval", 1),
+        ("require_two_approvals", "pending_approval", 2),
+    ],
+)
+def test_scoped_rule_enforces_explicit_action_outcome(
+    client: TestClient,
+    outcome: str,
+    expected_status: str,
+    approval_count: int,
+) -> None:
+    created = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": f"Campaign action {outcome}",
+            "action_type": "publish_campaign",
+            "environment": "production",
+            "policy_patch": {"runtime_action_decision": outcome},
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": f"trace-campaign-{outcome}",
+            "action_type": "publish_campaign",
+            "tool_name": "campaign.publish",
+            "environment": "production",
+            "external_action": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == expected_status
+    assert body["required_approval_count"] == approval_count
+    assert body["policy_snapshot"]["_runtime_policy_resolution"]["matched_rules"][0]["id"] == created.json()["id"]
+    assert body["policy_snapshot"]["_runtime_policy_resolution"]["action_decision_source_rule_id"] == created.json()["id"]
+
+
+def test_scoped_allow_skips_approval_but_keeps_hard_safety_blocks(client: TestClient) -> None:
+    created = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": "Allow bounded email action",
+            "action_type": "email_send",
+            "policy_patch": {"runtime_action_decision": "allow"},
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    allowed = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-scoped-email-allow",
+            "action_type": "email_send",
+            "tool_name": "send_email",
+            "external_action": True,
+            "tool_args": {"template": "renewal_notice"},
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "allowed"
+
+    blocked = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-scoped-email-pii",
+            "action_type": "email_send",
+            "tool_name": "send_email",
+            "external_action": True,
+            "pii_detected": True,
+        },
+    )
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+    assert "PII" in " ".join(blocked.json()["reasons"])
+
+
+def test_explicit_action_outcome_is_ignored_without_a_matched_scoped_rule(client: TestClient) -> None:
+    _set_policy(client, "proj_runtime_a", runtime_action_decision="allow")
+
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-baseline-allow-ignored",
+            "action_type": "email_send",
+            "tool_name": "send_email",
+            "external_action": True,
+            "tool_args": {"template": "renewal_notice"},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending_approval"
+    assert response.json()["requires_approval"] is True
+
+
 def test_refund_amount_threshold_requires_approval_then_allows_after_bound_approval(client: TestClient) -> None:
     pending = client.post(
         "/v1/runtime-policy/check",

@@ -448,14 +448,11 @@ describe("PoliciesPage mandate control", () => {
     );
   });
 
-  it("surfaces scoped rules, effective policy, and per-agent dry-run", async () => {
+  it("surfaces agent policies, effective policy, and per-agent dry-run", async () => {
     renderPoliciesPage();
 
-    expect(await screen.findByRole("heading", { name: "Scoped policy rules" })).toBeInTheDocument();
-    const rules = screen.getByLabelText("Scoped policy rules");
-    expect(within(rules).getByText("Refund Agent strict threshold")).toBeInTheDocument();
-    expect(within(rules).getByText("Refund Agent / Refund / env:production")).toBeInTheDocument();
-    expect(within(rules).getByText(/match #1/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create a clear WHEN / IN / THEN rule" })).toBeInTheDocument();
+    expect(screen.getAllByText("Refund Agent strict threshold").length).toBeGreaterThan(0);
 
     const effective = screen.getByLabelText("Effective policy preview");
     expect(within(effective).getByText("1 scoped rule matched.")).toBeInTheDocument();
@@ -475,60 +472,54 @@ describe("PoliciesPage mandate control", () => {
     expect(await within(effective).findByText("amount exceeds approval threshold $100.00")).toBeInTheDocument();
   });
 
-  it("creates scoped rules from the editor as partial patches", async () => {
+  it("creates an enforceable agent policy from the no-code builder", async () => {
     renderPoliciesPage();
 
-    await screen.findByRole("heading", { name: "Scoped policy rules" });
-    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
-    const editor = screen.getByLabelText("Scoped rule editor");
-    fireEvent.change(within(editor).getByLabelText("Rule name"), {
-      target: { value: "Deploy approval rule" },
-    });
-    fireEvent.change(within(editor).getByLabelText("Action type"), {
+    const builderHeading = await screen.findByRole("heading", { name: "Create a clear WHEN / IN / THEN rule" });
+    const builder = builderHeading.closest("section");
+    expect(builder).not.toBeNull();
+    fireEvent.change(within(builder!).getByLabelText("Agent"), { target: { value: "agent_refund" } });
+    fireEvent.change(within(builder!).getByLabelText("Action"), {
       target: { value: "deploy_change" },
     });
-    fireEvent.change(within(editor).getByLabelText("Approval threshold (USD)"), {
-      target: { value: "10" },
-    });
-    fireEvent.click(within(editor).getByRole("button", { name: "Create rule" }));
+    fireEvent.change(within(builder!).getByLabelText("Environment"), { target: { value: "production" } });
+    fireEvent.click(within(builder!).getByRole("button", { name: /^Two approvals/ }));
+    fireEvent.click(within(builder!).getByRole("button", { name: "Create policy rule" }));
 
     await waitFor(() => expect(api.createRuntimePolicyRule).toHaveBeenCalledTimes(1));
     expect(api.createRuntimePolicyRule.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        name: "Deploy approval rule",
+        agent_id: "agent_refund",
         action_type: "deploy_change",
+        environment: "production",
         policy_patch: {
-          runtime_amount_approval_threshold_usd: 10,
+          runtime_enabled: true,
+          runtime_action_decision: "require_two_approvals",
+          runtime_approval_ttl_minutes: 30,
         },
       }),
     );
   });
 
-  it("keeps explicit empty list overrides when editing a scoped rule", async () => {
-    mockPolicies({
-      rules: [
-        scopedRule({
-          policy_patch: {
-            runtime_allowed_tools: ["ledger.lookup"],
-          },
-        }),
-      ],
-    });
+  it("supports custom action names for agents outside the built-in templates", async () => {
     renderPoliciesPage();
 
-    await screen.findByRole("heading", { name: "Scoped policy rules" });
-    fireEvent.click(screen.getByRole("button", { name: /Refund Agent strict threshold/ }));
-    const editor = screen.getByLabelText("Scoped rule editor");
-    fireEvent.change(within(editor).getByLabelText("Allowed tools override"), {
-      target: { value: "" },
-    });
-    fireEvent.click(within(editor).getByRole("button", { name: "Save rule" }));
+    const builderHeading = await screen.findByRole("heading", { name: "Create a clear WHEN / IN / THEN rule" });
+    const builder = builderHeading.closest("section");
+    expect(builder).not.toBeNull();
+    fireEvent.change(within(builder!).getByLabelText("Action"), { target: { value: "__custom__" } });
+    fireEvent.change(within(builder!).getByLabelText("Custom action name"), { target: { value: "Publish Campaign" } });
+    fireEvent.click(within(builder!).getByRole("button", { name: /^Deny/ }));
+    fireEvent.click(within(builder!).getByRole("button", { name: "Create policy rule" }));
 
-    await waitFor(() => expect(api.updateRuntimePolicyRule).toHaveBeenCalledTimes(1));
-    expect(api.updateRuntimePolicyRule.mock.calls[0]?.[1]).toEqual(
+    await waitFor(() => expect(api.createRuntimePolicyRule).toHaveBeenCalledTimes(1));
+    expect(api.createRuntimePolicyRule.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
+        action_type: "publish_campaign",
         policy_patch: {
-          runtime_allowed_tools: [],
+          runtime_enabled: true,
+          runtime_action_decision: "deny",
+          runtime_approval_ttl_minutes: 30,
         },
       }),
     );

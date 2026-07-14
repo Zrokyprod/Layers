@@ -761,6 +761,7 @@ export interface PilotPolicyPayload {
   runtime_production_deploys_require_approval: boolean;
   runtime_changed_recipient_deny: boolean;
   runtime_sequence_risk_enabled: boolean;
+  runtime_action_decision?: "inherit" | "allow" | "require_approval" | "require_two_approvals" | "deny";
 }
 
 export interface PilotPolicyResponse {
