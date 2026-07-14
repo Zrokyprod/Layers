@@ -199,6 +199,7 @@ def list_mismatch_responses(
     *,
     project_id: str,
     status: str | None = None,
+    since: datetime | None = None,
     limit: int = 50,
 ) -> list[OutcomeMismatchResponse]:
     query = select(OutcomeMismatchResponse).where(OutcomeMismatchResponse.project_id == project_id)
@@ -207,6 +208,8 @@ def list_mismatch_responses(
         if normalized not in {MISMATCH_RESPONSE_OPEN, MISMATCH_RESPONSE_ACKNOWLEDGED, MISMATCH_RESPONSE_RESOLVED}:
             raise ValueError("status must be one of: OPEN, ACKNOWLEDGED, RESOLVED")
         query = query.where(OutcomeMismatchResponse.status == normalized)
+    if since is not None:
+        query = query.where(OutcomeMismatchResponse.created_at >= since)
     return list(
         db.execute(
             query.order_by(OutcomeMismatchResponse.created_at.desc(), OutcomeMismatchResponse.id.desc()).limit(limit)
@@ -282,6 +285,49 @@ def resolve_mismatch_response(
     db.add(response)
     db.commit()
     db.refresh(response)
+    return response
+
+
+def link_corrective_action(
+    db: Session,
+    *,
+    response: OutcomeMismatchResponse,
+    corrective_action_intent_id: str,
+    decision_status: str,
+    actor: str | None,
+) -> OutcomeMismatchResponse:
+    remediation = _loads(response.remediation_json, {})
+    existing_action_id = remediation.get("corrective_action_intent_id")
+    if existing_action_id and existing_action_id != corrective_action_intent_id:
+        raise ValueError("Mismatch response already has a different corrective action.")
+    changed = (
+        existing_action_id != corrective_action_intent_id
+        or remediation.get("status") != "proposed"
+        or remediation.get("decision_status") != decision_status
+    )
+    remediation.update(
+        {
+            "status": "proposed",
+            "execution_state": "not_started",
+            "corrective_action_intent_id": corrective_action_intent_id,
+            "decision_status": decision_status,
+            "proposed_by": actor,
+            "proposed_at": _now().isoformat(),
+        }
+    )
+    response.remediation_json = _dumps(remediation)
+    db.add(response)
+    if changed:
+        _record_timeline(
+            db,
+            response=response,
+            event_type="outcome_correction_proposed",
+            actor=actor,
+            extra={
+                "corrective_action_intent_id": corrective_action_intent_id,
+                "decision_status": decision_status,
+            },
+        )
     return response
 
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.base import Base
 from app.db.models import (
+    ActionContractVersion,
     ActionIntent,
     ActionReceipt,
     ActionTimelineEvent,
@@ -109,6 +110,15 @@ def test_confirmed_mismatch_creates_one_evidence_case_and_one_alert(tmp_path: Pa
                 action_intent_id=intent.id,
                 event_type="outcome_mismatch_detected",
             ).count() == 1
+
+            response.created_at = datetime.now(timezone.utc) - timedelta(days=45)
+            session.add(response)
+            session.commit()
+            assert list_mismatch_responses(
+                session,
+                project_id="proj-mismatch",
+                since=datetime.now(timezone.utc) - timedelta(days=30),
+            ) == []
 
             receipt = ActionReceipt(
                 id="receipt-mismatch",
@@ -266,6 +276,21 @@ def test_mismatch_response_api_is_tenant_scoped_and_owner_resolved(tmp_path: Pat
 
     try:
         with factory() as session:
+            session.add(ActionContractVersion(
+                id="contract-correction",
+                project_id="proj-mismatch",
+                contract_key="customer.refund.transfer",
+                version="1.0",
+                action_type="refund",
+                operation_kind="TRANSFER",
+                domain_family="customer_operations",
+                schema_digest="sha256:correction-schema",
+                schema_json='{"type":"object"}',
+                risk_class="R3",
+                verification_profile_json="{}",
+                connector_family="ledger_refund",
+            ))
+            session.commit()
             reconcile_outcome(
                 session,
                 project_id="proj-mismatch",
@@ -297,6 +322,50 @@ def test_mismatch_response_api_is_tenant_scoped_and_owner_resolved(tmp_path: Pat
                 },
             )
             assert blocked.status_code == 403
+
+            role = "member"
+            correction = client.post(
+                f"/v1/outcomes/reconciliation/mismatch-responses/{response_id}/corrective-action",
+                headers={"Idempotency-Key": "correction-case-api-1"},
+                json={
+                    "contract_version": "customer.refund.transfer/1.0",
+                    "action_type": "refund",
+                    "operation_kind": "TRANSFER",
+                    "environment": "production",
+                    "resource": {"refund_id": "re_api"},
+                    "parameters": {"amount_minor": 5000, "currency": "USD"},
+                },
+            )
+            assert correction.status_code == 201, correction.text
+            correction_action_id = correction.json()["action_id"]
+            retried = client.post(
+                f"/v1/outcomes/reconciliation/mismatch-responses/{response_id}/corrective-action",
+                headers={"Idempotency-Key": "correction-case-api-1"},
+                json={
+                    "contract_version": "customer.refund.transfer/1.0",
+                    "action_type": "refund",
+                    "operation_kind": "TRANSFER",
+                    "environment": "production",
+                    "resource": {"refund_id": "re_api"},
+                    "parameters": {"amount_minor": 5000, "currency": "USD"},
+                },
+            )
+            assert retried.status_code == 201, retried.text
+            assert retried.json()["action_id"] == correction_action_id
+            with factory() as session:
+                action = session.get(ActionIntent, correction_action_id)
+                assert action is not None
+                assert '"id":"owner@example.com"' in action.principal_json
+                response = get_mismatch_response(
+                    session,
+                    project_id="proj-mismatch",
+                    response_id=response_id,
+                )
+                assert response is not None
+                rendered = mismatch_response_to_dict(session, response)
+                assert rendered["remediation"]["corrective_action_intent_id"] == correction_action_id
+                assert rendered["remediation"]["status"] == "proposed"
+                assert session.query(ActionIntent).filter_by(project_id="proj-mismatch").count() == 1
 
             role = "owner"
             resolved = client.post(

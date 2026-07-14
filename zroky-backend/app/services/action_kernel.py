@@ -338,6 +338,29 @@ def get_action_contract(
     return row
 
 
+def list_action_contracts(
+    db: Session,
+    *,
+    project_id: str,
+    status: str = "active",
+    limit: int = 100,
+) -> list[ActionContractVersion]:
+    """List project-scoped action contracts available to protected-action clients."""
+
+    query = select(ActionContractVersion).where(
+        ActionContractVersion.project_id == project_id,
+        ActionContractVersion.status == status,
+    )
+    return list(
+        db.execute(
+            query.order_by(
+                ActionContractVersion.action_type.asc(),
+                ActionContractVersion.created_at.desc(),
+            ).limit(limit)
+        ).scalars()
+    )
+
+
 def split_contract_version(contract_version: str) -> tuple[str, str]:
     contract_version = contract_version.strip()
     if "/" not in contract_version:

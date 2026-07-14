@@ -622,7 +622,7 @@ export default function OutcomesPage() {
 
   const summaryQuery = useOutcomeReconciliationSummary(windowDays);
   const checksQuery = useOutcomeReconciliations("all", RECONCILIATION_CHECK_LIMIT, windowDays);
-  const mismatchCasesQuery = useOutcomeMismatchResponses("all", RECONCILIATION_CHECK_LIMIT);
+  const mismatchCasesQuery = useOutcomeMismatchResponses("all", RECONCILIATION_CHECK_LIMIT, windowDays);
   const projectsQuery = useMyProjects();
   const sourceMutationSummaryQuery = useSourceMutationSummary();
   const unreceiptedMutationsQuery = useUnreceiptedSourceMutations(50);

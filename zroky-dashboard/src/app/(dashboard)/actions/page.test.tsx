@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,10 +6,13 @@ import { actionLifecycleCounts, buildActionLifecycle } from "@/lib/action-lifecy
 import ActionsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  createOutcomeCorrectiveAction: vi.fn(),
   getActionsLifecycleSummary: vi.fn(),
   getActionIntentTimeline: vi.fn(),
   listActionExecutionAttempts: vi.fn(),
 }));
+
+const routerState = vi.hoisted(() => ({ push: vi.fn() }));
 
 const queryState = vi.hoisted(() => ({
   attempts: [] as Record<string, unknown>[],
@@ -30,6 +33,8 @@ const queryState = vi.hoisted(() => ({
   refetch: vi.fn(),
   queryKeys: [] as string[],
   makeFeed: null as null | (() => Record<string, unknown>),
+  correctionCase: null as Record<string, unknown> | null,
+  contracts: [] as Record<string, unknown>[],
   sources: {
     lifecycle_summary: true,
     intents: true,
@@ -94,6 +99,15 @@ vi.mock("@tanstack/react-query", () => ({
         refetch: queryState.refetch,
       };
     }
+    if (key === "outcomes:mismatch-response:case_1") {
+      return { data: queryState.correctionCase, isLoading: false, isError: false, refetch: queryState.refetch };
+    }
+    if (key === "action-contracts:corrective-composer:100") {
+      return { data: { items: queryState.contracts, total_in_page: queryState.contracts.length }, isLoading: false, isError: false, refetch: queryState.refetch };
+    }
+    if (key === "me:projects") {
+      return { data: [{ project_id: "proj_1", role: "member" }], isLoading: false, isError: false, refetch: queryState.refetch };
+    }
     if (key === "action-intent:act_1:timeline:actions-page") {
       return {
         data: { items: queryState.timeline },
@@ -135,6 +149,10 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => routerState,
+}));
+
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
@@ -144,11 +162,12 @@ vi.mock("@/lib/api", async () => {
 });
 
 vi.mock("@/lib/store", () => ({
-  useDashboardStore: <T,>(selector: (state: { dateRange: { from: Date; to: Date } }) => T) => selector({
+  useDashboardStore: <T,>(selector: (state: { dateRange: { from: Date; to: Date }; selectedProject: string }) => T) => selector({
     dateRange: {
       from: new Date("2026-06-13T00:00:00Z"),
       to: new Date("2026-06-20T00:00:00Z"),
     },
+    selectedProject: "proj_1",
   }),
 }));
 
@@ -363,6 +382,9 @@ function renderActionsPage() {
 
 describe("ActionsPage", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/actions");
+    routerState.push.mockReset();
+    api.createOutcomeCorrectiveAction.mockReset();
     vi.clearAllMocks();
     queryState.isLoading = false;
     queryState.isError = false;
@@ -423,9 +445,61 @@ describe("ActionsPage", () => {
     };
     queryState.staleAttempts = [];
     queryState.timeline = [];
+    queryState.correctionCase = null;
+    queryState.contracts = [];
     queryState.unreceiptedMutations = [sourceMutation()];
     api.getActionIntentTimeline.mockResolvedValue({ items: [] });
     api.listActionExecutionAttempts.mockResolvedValue({ items: [] });
+  });
+
+  it("submits a mismatch correction through policy and routes pending decisions to Approvals", async () => {
+    window.history.replaceState({}, "", "/actions?correction_case=case_1");
+    queryState.correctionCase = {
+      id: "case_1",
+      reconciliation_check_id: "check_1",
+      action_intent_id: "act_original",
+      status: "OPEN",
+      remediation: {},
+      evidence: {
+        action_type: "refund",
+        system_ref: "rf_123",
+        claimed: { refund_id: "rf_123", amount_minor: 5000, currency: "USD" },
+        actual: { refund_id: "rf_123", amount_minor: 0, currency: "USD" },
+      },
+    };
+    queryState.contracts = [{
+      id: "contract_1",
+      contract_version: "customer.refund.transfer/1.0",
+      action_type: "refund",
+      operation_kind: "TRANSFER",
+      risk_class: "R3",
+      schema: {
+        properties: {
+          resource: { required: ["refund_id"], properties: { refund_id: { type: "string" } } },
+          parameters: {
+            required: ["amount_minor", "currency"],
+            properties: { amount_minor: { type: "integer" }, currency: { type: "string" } },
+          },
+        },
+      },
+    }];
+    api.createOutcomeCorrectiveAction.mockResolvedValue({
+      action_id: "act_correction",
+      requires_approval: true,
+      runtime_policy_decision_id: "decision_correction",
+    });
+
+    renderActionsPage();
+    const dialog = await screen.findByRole("dialog", { name: "Corrective action composer" });
+    await screen.findByLabelText(/Refund id/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit to policy" }));
+
+    await waitFor(() => expect(api.createOutcomeCorrectiveAction).toHaveBeenCalledWith(
+      "case_1",
+      expect.objectContaining({ action_type: "refund" }),
+      expect.stringContaining("outcome-correction:case_1:"),
+    ));
+    expect(routerState.push).toHaveBeenCalledWith("/approvals?decision_id=decision_correction");
   });
 
   it("shows lifecycle metrics, quota, intent rows, and bypass as a first-class queue filter", async () => {

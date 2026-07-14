@@ -2,14 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import { ActionInspector } from "./ActionInspector";
 import { ActionLifecycleQueue } from "./ActionLifecycleQueue";
 import { ActionsMetricStrip } from "./ActionsMetricStrip";
 import { ActionsVerdictHero } from "./ActionsVerdictHero";
+import { CorrectiveActionComposer, type CorrectionSubmission } from "./CorrectiveActionComposer";
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
+  createOutcomeCorrectiveAction,
+  getOutcomeMismatchResponse,
   getActionIntentTimeline,
+  listActionContracts,
   listActionExecutionAttempts,
 } from "@/lib/api";
 import {
@@ -22,6 +27,7 @@ import { loadActionsLifecycleFeed } from "@/lib/actions-lifecycle-feed";
 import { dashboardWindowDays } from "@/lib/dashboard-window";
 import { formatCount, timeSince } from "@/lib/format";
 import { useDashboardStore } from "@/lib/store";
+import { useMyProjects } from "@/lib/hooks";
 
 const ACTION_FILTERS = new Set<ActionLifecycleFilter>([
   "all",
@@ -196,6 +202,7 @@ function initialDeepLink(rows: ActionLifecycleRow[], search: URLSearchParams): s
 }
 
 export default function ActionsPage() {
+  const router = useRouter();
   const search = useMemo(
     () => new URLSearchParams(typeof window === "undefined" ? "" : window.location.search),
     [],
@@ -203,8 +210,32 @@ export default function ActionsPage() {
   const [filter, setFilter] = useState<ActionLifecycleFilter>(() => initialFilter(search));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
   const dateRange = useDashboardStore((state) => state.dateRange);
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const windowDays = useMemo(() => dashboardWindowDays(dateRange), [dateRange]);
+  const correctionCaseId = search.get("correction_case");
+
+  const projectsQuery = useMyProjects();
+  const currentMembership = (projectsQuery.data ?? []).find((item) => item.project_id === selectedProject);
+  const currentRole = currentMembership?.role?.trim().toLowerCase() ?? "viewer";
+  const canCreateCorrection = currentRole === "member" || currentRole === "admin" || currentRole === "owner";
+
+  const correctionCaseQuery = useQuery({
+    queryKey: ["outcomes", "mismatch-response", correctionCaseId],
+    enabled: Boolean(correctionCaseId),
+    queryFn: ({ signal }) => getOutcomeMismatchResponse(correctionCaseId ?? "", signal),
+    staleTime: 15_000,
+    retry: false,
+  });
+  const contractsQuery = useQuery({
+    queryKey: ["action-contracts", "corrective-composer", 100],
+    enabled: Boolean(correctionCaseId),
+    queryFn: ({ signal }) => listActionContracts(100, signal),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const lifecycleQuery = useQuery({
     queryKey: ["actions", "lifecycle-summary", windowDays, 200],
@@ -339,6 +370,24 @@ export default function ActionsPage() {
     ]);
   }
 
+  async function submitCorrection({ idempotencyKey, payload }: CorrectionSubmission) {
+    setCorrectionBusy(true);
+    setCorrectionError(null);
+    try {
+      if (!correctionCaseId) throw new Error("Mismatch case is missing from the correction request.");
+      const decision = await createOutcomeCorrectiveAction(correctionCaseId, payload, idempotencyKey);
+      if (decision.requires_approval && decision.runtime_policy_decision_id) {
+        router.push(`/approvals?decision_id=${encodeURIComponent(decision.runtime_policy_decision_id)}`);
+        return;
+      }
+      router.push(`/actions?action_id=${encodeURIComponent(decision.action_id)}`);
+    } catch (error) {
+      setCorrectionError(error instanceof Error ? error.message : "Corrective action could not be submitted.");
+    } finally {
+      setCorrectionBusy(false);
+    }
+  }
+
   return (
     <main className="actions-lifecycle-page">
       <ActionsVerdictHero
@@ -351,6 +400,23 @@ export default function ActionsPage() {
         updatedLabel={updatedLabel}
         onRefresh={refreshAll}
       />
+
+      {correctionCaseId ? (
+        <div className="corrective-composer-backdrop">
+          <CorrectiveActionComposer
+            busy={correctionBusy}
+            canCreate={canCreateCorrection}
+            contracts={contractsQuery.data?.items ?? []}
+            error={correctionError ?? (correctionCaseQuery.isError || contractsQuery.isError
+              ? "Correction context did not load cleanly. Refresh before submitting."
+              : null)}
+            loading={correctionCaseQuery.isLoading || contractsQuery.isLoading || projectsQuery.isLoading}
+            onClose={() => router.push("/actions")}
+            onSubmit={submitCorrection}
+            responseCase={correctionCaseQuery.data ?? null}
+          />
+        </div>
+      ) : null}
 
       <ActionsMetricStrip
         protectedActions={formatCount(protectedActions)}

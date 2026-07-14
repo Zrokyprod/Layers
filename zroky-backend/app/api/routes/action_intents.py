@@ -17,6 +17,7 @@ from app.services.action_kernel import (
     create_action_intent,
     decide_action_intent,
     get_action_intent,
+    list_action_contracts,
     list_action_intents,
     register_action_contract,
 )
@@ -363,6 +364,26 @@ def register_contract(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     db.commit()
     return _contract_response(result.row)
+
+
+@router.get("/v1/action-contracts", response_model=ActionContractListResponse)
+@limiter.limit("120/minute")
+def list_contracts(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=100),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> ActionContractListResponse:
+    _require_role(context, "viewer")
+    rows = list_action_contracts(
+        db,
+        project_id=context.tenant_id,
+        limit=limit,
+    )
+    return ActionContractListResponse(
+        items=[_contract_response(row) for row in rows],
+        total_in_page=len(rows),
+    )
 
 
 @router.post("/v1/action-intents", response_model=ActionIntentResponse, status_code=status.HTTP_201_CREATED)

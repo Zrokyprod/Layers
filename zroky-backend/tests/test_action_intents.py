@@ -482,6 +482,25 @@ def test_action_intent_create_is_digest_bound_and_idempotent(client: TestClient)
     assert second.json()["intent_digest"] == body["intent_digest"]
 
 
+def test_action_contract_list_is_active_and_project_scoped(client: TestClient) -> None:
+    project_id = "proj_action_contract_catalog"
+    other_project_id = "proj_action_contract_catalog_other"
+    _seed_project(client, project_id)
+    _seed_project(client, other_project_id)
+    expected = _register_contract(client, project_id)
+    _register_contract(client, other_project_id)
+
+    listed = client.get(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+    )
+
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["total_in_page"] == 1
+    assert [item["id"] for item in listed.json()["items"]] == [expected["id"]]
+    assert listed.json()["items"][0]["contract_version"] == "customer.refund.transfer/1.0"
+
+
 def test_action_intent_list_filters_and_paginates(client: TestClient) -> None:
     project_id = "proj_action_kernel_list"
     _seed_project(client, project_id)

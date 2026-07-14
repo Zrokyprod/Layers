@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { DashboardButton } from "@/components/dashboard-button";
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
 import { statusLabel } from "@/lib/action-status";
 import type {
@@ -108,6 +108,15 @@ export function MismatchCasePanel({
         </dl>
       ) : (
         <div className="outcomes-case-actions">
+          {canAcknowledge ? (
+            <DashboardButtonLink
+              href={`/actions?correction_case=${encodeURIComponent(responseCase.id)}`}
+              size="sm"
+              variant="primary"
+            >
+              Create corrective action
+            </DashboardButtonLink>
+          ) : null}
           {responseCase.status === "OPEN" ? (
             <DashboardButton
               disabled={busy || !canAcknowledge}

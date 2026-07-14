@@ -859,11 +859,12 @@ export function useOutcomeReconciliations(
 export function useOutcomeMismatchResponses(
   status: OutcomeMismatchResponseStatus | "all" = "all",
   limit = 100,
+  days?: number,
   options?: Partial<UseQueryOptions<OutcomeMismatchResponseListResponse, Error>>,
 ) {
   return useQuery<OutcomeMismatchResponseListResponse, Error>({
-    queryKey: ["outcomes", "reconciliation", "mismatch-responses", status, limit],
-    queryFn: ({ signal }) => listOutcomeMismatchResponses(status, limit, signal),
+    queryKey: ["outcomes", "reconciliation", "mismatch-responses", status, limit, days],
+    queryFn: ({ signal }) => listOutcomeMismatchResponses(status, limit, days, signal),
     staleTime: 15_000,
     refetchInterval: status === "RESOLVED" ? 30_000 : 15_000,
     ...options,

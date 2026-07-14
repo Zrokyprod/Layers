@@ -26099,3 +26099,148 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-column: 1 / -1 !important;
   }
 }
+.corrective-composer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(20 24 28 / 52%);
+  overflow-y: auto;
+}
+
+.corrective-composer {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border: 1px solid var(--dash-border);
+  border-radius: 8px;
+  background: var(--dash-surface);
+  box-shadow: 0 24px 70px rgb(15 23 42 / 28%);
+  padding: 24px;
+}
+
+.corrective-composer-head,
+.corrective-submit-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.corrective-composer h2 {
+  margin: 4px 0 6px;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.corrective-composer p,
+.corrective-composer small {
+  color: var(--dash-text-muted);
+}
+
+.corrective-context {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 20px 0;
+  border: 1px solid var(--dash-border);
+  background: var(--dash-border);
+}
+
+.corrective-context > div {
+  min-width: 0;
+  padding: 12px;
+  background: var(--dash-surface-subtle);
+}
+
+.corrective-context dt,
+.corrective-form label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--dash-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.corrective-context dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+
+.corrective-form,
+.corrective-contract-field,
+.corrective-fields,
+.corrective-fields label,
+.corrective-empty {
+  display: grid;
+  gap: 10px;
+}
+
+.corrective-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 8px 0;
+}
+
+.corrective-form input,
+.corrective-form select,
+.corrective-form textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--dash-border);
+  border-radius: 6px;
+  background: var(--dash-surface);
+  color: var(--dash-text);
+  padding: 9px 10px;
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.corrective-form textarea {
+  resize: vertical;
+}
+
+.corrective-submit-row {
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dash-border);
+}
+
+.corrective-submit-row p {
+  max-width: 480px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.corrective-error {
+  margin: 14px 0 0;
+  color: var(--dash-red) !important;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+@media (max-width: 640px) {
+  .corrective-composer-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .corrective-composer {
+    max-height: 92vh;
+    border-radius: 8px 8px 0 0;
+    padding: 18px;
+  }
+
+  .corrective-context,
+  .corrective-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .corrective-submit-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
