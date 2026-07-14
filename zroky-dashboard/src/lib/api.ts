@@ -102,6 +102,7 @@ type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
 type RequestOptions = {
   method?: Method;
+  headers?: Record<string, string>;
   query?: Record<string, string | number | undefined | null>;
   body?: unknown;
   signal?: AbortSignal;
@@ -660,6 +661,28 @@ export interface ActionContractResponse {
   created_at: string;
 }
 
+export interface ActionContractListResponse {
+  items: ActionContractResponse[];
+  total_in_page: number;
+}
+
+export interface ActionIntentCreatePayload {
+  agent_id?: string | null;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  environment?: string;
+  principal?: Record<string, unknown>;
+  actor_chain?: Array<Record<string, unknown>>;
+  purpose?: Record<string, unknown>;
+  resource?: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
+  execution_request?: Record<string, unknown> | null;
+  verification_profile?: string | null;
+  deadline?: string | null;
+  trace_context?: Record<string, unknown> | null;
+}
+
 export interface AgentProfileCreatePayload {
   display_name: string;
   description?: string | null;
@@ -961,7 +984,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const performRequest = async (): Promise<Response> => {
     const requestSignal = createRequestSignal(options.signal, options.timeoutMs);
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...(options.headers ?? {}) };
     if (options.body != null) {
       headers["content-type"] = "application/json";
     }
@@ -4057,15 +4080,42 @@ export function listOutcomeReconciliations(
 export function listOutcomeMismatchResponses(
   status: OutcomeMismatchResponseStatus | "all" = "all",
   limit = 100,
+  days?: number,
   signal?: AbortSignal,
 ): Promise<OutcomeMismatchResponseListResponse> {
   return request<OutcomeMismatchResponseListResponse>("/v1/outcomes/reconciliation/mismatch-responses", {
     query: {
       status: status === "all" ? undefined : status,
       limit: String(limit),
+      days: days == null ? undefined : String(days),
     },
     signal,
   });
+}
+
+export function getOutcomeMismatchResponse(
+  responseId: string,
+  signal?: AbortSignal,
+): Promise<OutcomeMismatchResponseView> {
+  return request<OutcomeMismatchResponseView>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}`,
+    { signal },
+  );
+}
+
+export function createOutcomeCorrectiveAction(
+  responseId: string,
+  payload: ActionIntentCreatePayload,
+  idempotencyKey: string,
+): Promise<ActionIntentDecisionResponse> {
+  return request<ActionIntentDecisionResponse>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}/corrective-action`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: payload,
+    },
+  );
 }
 
 export function acknowledgeOutcomeMismatchResponse(
@@ -4990,6 +5040,27 @@ export function updatePilotPolicy(policy: PilotPolicyUpdatePayload): Promise<Pil
 }
 
 // ── Verified Action Control Plane ───────────────────────────────────────────
+
+export function listActionContracts(
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<ActionContractListResponse> {
+  return request<ActionContractListResponse>("/v1/action-contracts", {
+    query: { limit },
+    signal,
+  });
+}
+
+export function createActionIntent(
+  payload: ActionIntentCreatePayload,
+  idempotencyKey: string,
+): Promise<ActionIntentResponse> {
+  return request<ActionIntentResponse>("/v1/action-intents", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: payload,
+  });
+}
 
 export function listActionIntents(
   query: {

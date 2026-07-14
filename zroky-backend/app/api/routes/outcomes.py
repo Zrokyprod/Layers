@@ -56,6 +56,7 @@ from app.api.routes.outcome_saved_reconciliation import (
     _create_saved_zendesk_ticket_reconciliation,
     _create_saved_zoho_crm_reconciliation,
 )
+from app.api.routes import outcome_corrective_actions
 from app.schemas.outcomes import (
     CustomerRecordReconciliationIngest,
     LedgerRefundReconciliationIngest,
@@ -142,6 +143,7 @@ from app.services.source_mutations import (
     source_mutation_summary,
 )
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
+router.include_router(outcome_corrective_actions.router)
 logger = logging.getLogger(__name__)
 
 
@@ -745,6 +747,7 @@ def get_reconciliation_kpis(
 def list_mismatch_response_cases(
     request: Request,
     response_status: str | None = Query(default=None, alias="status"),
+    days: int | None = Query(default=None, ge=1, le=365),
     limit: int = Query(default=50, ge=1, le=100),
     context: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
@@ -755,6 +758,7 @@ def list_mismatch_response_cases(
             db,
             project_id=context.tenant_id,
             status=response_status,
+            since=datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None,
             limit=limit,
         )
     except ValueError as exc:

@@ -54,6 +54,11 @@ class ActionContractResponse(BaseModel):
     created_at: datetime
 
 
+class ActionContractListResponse(BaseModel):
+    items: list[ActionContractResponse]
+    total_in_page: int
+
+
 class ActionIntentCreateRequest(BaseModel):
     agent_id: str | None = Field(default=None, max_length=36)
     contract_version: str = Field(min_length=5, max_length=200)

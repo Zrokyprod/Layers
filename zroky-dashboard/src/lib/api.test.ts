@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   acknowledgeOutcomeMismatchResponse,
+  createActionIntent,
+  createOutcomeCorrectiveAction,
   decideActionIntent,
   approveRuntimePolicyDecision,
   activateMcpUpstream,
@@ -16,9 +18,11 @@ import {
   getMcpUpstreamBinding,
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
+  getOutcomeMismatchResponse,
   getOutcomeReconciliationSummary,
   getPostgresReadConnectorStatus,
   listActionExecutionAttempts,
+  listActionContracts,
   listActionIntents,
   listProjectActionExecutionAttempts,
   listActionRunners,
@@ -382,6 +386,37 @@ describe("verified action API client", () => {
     );
   });
 
+  it("lists contracts and creates an idempotent protected intent", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ action_id: "action_correction" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listActionContracts(100);
+    await createActionIntent({
+      contract_version: "ticket.reopen/1.0",
+      action_type: "ticket.reopen",
+      operation_kind: "UPDATE",
+      resource: { ticket_id: "KAN-1" },
+      parameters: { status: "In Progress" },
+    }, "outcome-correction:case_1:attempt_1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/action-contracts?limit=100",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/action-intents",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": "outcome-correction:case_1:attempt_1" }),
+      }),
+    );
+  });
+
   it("loads the aggregate actions lifecycle summary", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -616,11 +651,13 @@ describe("outcome reconciliation API client", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ items: [responseCase], total_in_page: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseCase), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...responseCase, status: "ACKNOWLEDGED" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...responseCase, status: "RESOLVED" }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await listOutcomeMismatchResponses("OPEN", 25);
+    await listOutcomeMismatchResponses("OPEN", 25, 14);
+    await getOutcomeMismatchResponse("case_1");
     await acknowledgeOutcomeMismatchResponse("case_1");
     await resolveOutcomeMismatchResponse("case_1", {
       resolution_code: "confirmed_mismatch",
@@ -629,16 +666,21 @@ describe("outcome reconciliation API client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses?status=OPEN&limit=25",
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses?status=OPEN&limit=25&days=14",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/acknowledge",
       expect.objectContaining({ method: "POST" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/resolve",
       expect.objectContaining({
         body: JSON.stringify({
@@ -646,6 +688,29 @@ describe("outcome reconciliation API client", () => {
           resolution_note: "Confirmed against the ledger.",
         }),
         method: "POST",
+      }),
+    );
+  });
+
+  it("submits a mismatch correction through its tenant-scoped case endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ action_id: "action_correction", requires_approval: true }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createOutcomeCorrectiveAction("case_1", {
+      contract_version: "ticket.reopen/1.0",
+      action_type: "ticket.reopen",
+      operation_kind: "UPDATE",
+      resource: { ticket_id: "KAN-1" },
+      parameters: { status: "In Progress" },
+    }, "outcome-correction:case_1:attempt_1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/corrective-action",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": "outcome-correction:case_1:attempt_1" }),
       }),
     );
   });

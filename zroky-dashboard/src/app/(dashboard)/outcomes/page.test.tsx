@@ -305,6 +305,9 @@ describe("OutcomesPage", () => {
     expect(screen.getByText("refund-agent / Refund")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Mismatch response case" })).toBeInTheDocument();
     expect(screen.getByText("Needs an operator")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create corrective action" }).getAttribute("href")).toBe(
+      "/actions?correction_case=case_mismatch_1",
+    );
   });
 
   it("does not report bypass risk clear without source mutation coverage", () => {
