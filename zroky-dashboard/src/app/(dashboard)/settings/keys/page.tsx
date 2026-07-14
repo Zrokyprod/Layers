@@ -20,13 +20,13 @@ import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/lib/format";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 import {
-  useProjectSettings,
   useListProjectApiKeys,
   useCreateProjectApiKey,
   useRevokeProjectApiKey,
   useRotateProjectApiKey,
 } from "@/lib/hooks";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
+import { useDashboardStore } from "@/lib/store";
 
 const defaultKeyName = "Production verified-action key";
 const keyExpiryWarningDays = 14;
@@ -74,8 +74,7 @@ function expiryWarningLabel(key: ApiKeyResponse): string | null {
 }
 
 function ApiKeysContent() {
-  const projectQuery = useProjectSettings();
-  const projectId = projectQuery.data?.project_id ?? "";
+  const projectId = useDashboardStore((state) => state.selectedProject) ?? "";
   const keysQuery = useListProjectApiKeys(projectId);
 
   const createMutation = useCreateProjectApiKey();
@@ -177,8 +176,8 @@ function ApiKeysContent() {
   }
 
   const keys = keysQuery.data ?? [];
-  const loading = projectQuery.isLoading || keysQuery.isLoading;
-  const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
+  const loading = keysQuery.isLoading;
+  const error = keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";

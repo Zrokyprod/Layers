@@ -5,11 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApiKeysPage from "./page";
 
 const hooks = vi.hoisted(() => ({
-  useProjectSettings: vi.fn(),
   useListProjectApiKeys: vi.fn(),
   useCreateProjectApiKey: vi.fn(),
   useRevokeProjectApiKey: vi.fn(),
   useRotateProjectApiKey: vi.fn(),
+}));
+
+const dashboardStore = vi.hoisted(() => ({
+  selectedProject: "proj_1" as string | null,
 }));
 
 vi.mock("next/link", () => ({
@@ -29,6 +32,9 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/lib/hooks", () => hooks);
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: typeof dashboardStore) => T) => selector(dashboardStore),
+}));
 
 const now = "2026-05-29T10:00:00.000Z";
 
@@ -72,17 +78,13 @@ const clipboardWrite = vi.fn();
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dashboardStore.selectedProject = "proj_1";
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
     });
     clipboardWrite.mockResolvedValue(undefined);
 
-    hooks.useProjectSettings.mockReturnValue({
-      data: { project_id: "proj_1" },
-      isLoading: false,
-      error: null,
-    });
     hooks.useListProjectApiKeys.mockReturnValue({
       data: [],
       isLoading: false,
@@ -105,6 +107,8 @@ describe("ApiKeysPage", () => {
   it("renders a minimal API key management page and empty state", () => {
     render(<ApiKeysPage />);
 
+    expect(hooks.useListProjectApiKeys).toHaveBeenCalledWith("proj_1");
+
     expect(screen.getByRole("heading", { name: "API keys" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create key" })).toBeInTheDocument();
     expect(screen.getByText("This key has full project runtime access for SDK, Gateway, and verified-action calls. The secret is shown once.")).toBeInTheDocument();
@@ -123,6 +127,15 @@ describe("ApiKeysPage", () => {
     expect(screen.queryByText((content) => content.includes("captureToolCall"))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("wrap("))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("zroky.trace_run"))).not.toBeInTheDocument();
+  });
+
+  it("does not request another project's keys before project selection is ready", () => {
+    dashboardStore.selectedProject = null;
+
+    render(<ApiKeysPage />);
+
+    expect(hooks.useListProjectApiKeys).toHaveBeenCalledWith("");
+    expect(screen.getByRole("button", { name: "Create key" }).getAttribute("disabled")).not.toBeNull();
   });
 
   it("keeps agent configuration out of API Keys even with setup query params", () => {
