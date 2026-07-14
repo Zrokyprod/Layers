@@ -8,6 +8,31 @@ const themeProviderState = vi.hoisted(() => ({
   props: vi.fn(),
 }));
 
+const storeState = vi.hoisted(() => ({
+  setSelectedProject: vi.fn(),
+}));
+
+const queryState = vi.hoisted(() => ({
+  clear: vi.fn(),
+}));
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: {
+    getState: () => ({ setSelectedProject: storeState.setSelectedProject }),
+  },
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  class TestQueryClient extends actual.QueryClient {
+    clear() {
+      queryState.clear();
+      super.clear();
+    }
+  }
+  return { ...actual, QueryClient: TestQueryClient };
+});
+
 vi.mock("next-themes", () => ({
   ThemeProvider: ({
     attribute,
@@ -57,5 +82,18 @@ describe("Providers", () => {
       forcedTheme: "light",
       enableSystem: false,
     });
+  });
+
+  it("clears account-bound project and query state when the auth session changes", () => {
+    render(
+      <Providers>
+        <span>dashboard content</span>
+      </Providers>,
+    );
+
+    window.dispatchEvent(new Event("zroky:auth-session-changed"));
+
+    expect(queryState.clear).toHaveBeenCalledTimes(1);
+    expect(storeState.setSelectedProject).toHaveBeenCalledWith(null);
   });
 });
