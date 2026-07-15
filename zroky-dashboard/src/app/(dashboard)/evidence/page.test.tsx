@@ -420,7 +420,7 @@ describe("EvidencePage", () => {
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
     expect(within(ledger).getByRole("button", { name: "Export manifest" })).toBeInTheDocument();
-    expect(within(ledger).getByLabelText("Manifest scope").textContent).toContain("1exportable record in view");
+    expect(within(ledger).getByLabelText("Manifest scope: 1 exportable record in view").textContent).toContain("1exportable");
     expect(screen.getByRole("region", { name: "Independent verification material" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open public key" }).getAttribute("href")).toBe(
       "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",

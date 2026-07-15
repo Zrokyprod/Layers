@@ -120,9 +120,12 @@ export function EvidenceLedger({
             placeholder="Search proof records..."
           />
         </label>
-        <div className="ev-manifest-scope" aria-label="Manifest scope">
+        <div
+          className="ev-manifest-scope"
+          aria-label={`Manifest scope: ${exportableCount} exportable record${exportableCount === 1 ? "" : "s"} in view`}
+        >
           <strong>{exportableCount}</strong>
-          <span>exportable record{exportableCount === 1 ? "" : "s"} in view</span>
+          <span>exportable</span>
         </div>
       </div>
 
