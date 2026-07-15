@@ -524,7 +524,7 @@ describe("Mission Control Home", () => {
     expect(within(proofChecks).getByText(/deleted flag was still false/i)).toBeInTheDocument();
   });
 
-  it("shows protected agent count without repeating runner status", async () => {
+  it("counts only recent agents with a compatible online runner as protected", async () => {
     mockHomeData({
       profiles: [
         profile(),
@@ -540,7 +540,18 @@ describe("Mission Control Home", () => {
         runner(),
         runner({ runner_id: "runner_offline", name: "Offline runner", status: "offline" }),
       ],
-      intents: [intent({ action_id: "act_approval", runtime_policy_decision_id: "decision_1" })],
+      intents: [intent({
+        action_id: "act_approval",
+        agent_id: "agent_profile_inventory",
+        agent_profile: {
+          id: "agent_profile_inventory",
+          display_name: "Inventory Agent",
+          slug: "inventory-agent",
+          runtime_path: "sdk",
+          environment: "production",
+        },
+        runtime_policy_decision_id: "decision_1",
+      })],
       approvals: [approval()],
     });
 
@@ -549,8 +560,77 @@ describe("Mission Control Home", () => {
     const proofMetrics = await screen.findByLabelText("Proof metrics");
     const agentsCard = within(proofMetrics).getByText("Agents protected").closest(".mc-proof-card") as HTMLElement;
     expect(agentsCard).toBeInTheDocument();
-    expect(within(agentsCard).getByText("2")).toBeInTheDocument();
+    expect(within(agentsCard).getByText("1")).toBeInTheDocument();
+    expect(within(agentsCard).getByText("Recent agents with an online runner")).toBeInTheDocument();
     expect(screen.queryByLabelText("Agent fleet context")).not.toBeInTheDocument();
+  });
+
+  it("does not call active profiles protected when their runners are offline", async () => {
+    mockHomeData({
+      profiles: [profile()],
+      activeAgentCount: 1,
+      runners: [runner({ status: "offline" })],
+      intents: [intent({ agent_id: "agent_profile_inventory" })],
+    });
+
+    render(<HomePage />);
+
+    const agentsCard = within(await screen.findByLabelText("Proof metrics"))
+      .getByText("Agents protected")
+      .closest(".mc-proof-card") as HTMLElement;
+    expect(within(agentsCard).getByText("0")).toBeInTheDocument();
+    expect(within(agentsCard).getByText("Managed agents need an online runner")).toBeInTheDocument();
+  });
+
+  it("uses lifecycle status and exact outcome links in recent activity", async () => {
+    mockHomeData({
+      profiles: [profile()],
+      runners: [runner({ status: "offline" })],
+      intents: [intent({
+        action_id: "act_authorized",
+        status: "authorized",
+        runtime_policy_decision_id: null,
+      })],
+      outcomes: [outcome({ id: "check_exact" })],
+    });
+
+    render(<HomePage />);
+
+    const actions = await screen.findByLabelText("Recent protected actions");
+    expect(within(actions).getByText("Awaiting runner")).toBeInTheDocument();
+    const proof = screen.getByLabelText("Recent proof checks");
+    expect(within(proof).getByText("sku_123").closest("a")?.getAttribute("href")).toBe(
+      "/outcomes?check_id=check_exact",
+    );
+  });
+
+  it("labels a one-day dashboard window as Last 24 hours", async () => {
+    const oneDaySummary = homeSummary(
+      { controlled_actions: 1, receipts_generated: 1 },
+      {
+        intents: [intent()],
+        approvals: [],
+        outcomes: [],
+        outcome_summary: outcomeSummary(),
+        source_summary: sourceSummary(),
+        mutations: [],
+        stale_attempts: [],
+        agent_profiles: [],
+        agent_profile_meta: { active_count: 0, max_active_agents: -1, limit_reached: false },
+        action_runners: [],
+        api_keys: [apiKey()],
+        billing_usage: billingUsage(),
+      },
+    );
+    oneDaySummary.window_days = 1;
+    mockHomeData({ homeSummary: oneDaySummary });
+
+    render(<HomePage />);
+
+    const proofMetrics = await screen.findByLabelText("Proof metrics");
+    expect(within(proofMetrics).getByText("Last 24 hours")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Receipts generated, last 24 hours")).toBeInTheDocument();
+    expect(within(proofMetrics).queryByText(/Last 1 days/i)).not.toBeInTheDocument();
   });
 
   it("rebuilds the graph from the dashboard time window", async () => {

@@ -191,18 +191,69 @@ function homeWindowDays(dateRange: { from: Date | null; to: Date | null }): numb
   return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
 }
 
-function proofMetrics(data: MissionData, availability: MissionAvailability, protectedAgentCount: number): ProofMetric[] {
+function homeWindowLabel(windowDays: number): string {
+  return windowDays <= 1 ? "Last 24 hours" : `Last ${windowDays} days`;
+}
+
+function normalized(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function protectedAgentCount(data: MissionData): number {
+  const activeProfileIds = new Set(
+    data.agentProfiles.filter((profile) => profile.is_active).map((profile) => profile.id),
+  );
+  const onlineRunners = data.actionRunners.filter((runner) => normalized(runner.status) === "online");
+  if (activeProfileIds.size === 0 || onlineRunners.length === 0) return 0;
+
+  const protectedProfileIds = new Set<string>();
+  for (const intent of data.intents) {
+    const profileId = intent.agent_profile?.id ?? intent.agent_id;
+    if (!profileId || !activeProfileIds.has(profileId)) continue;
+
+    const intentEnvironment = normalized(intent.agent_profile?.environment ?? intent.environment);
+    const operationKind = normalized(intent.operation_kind);
+    const hasCompatibleRunner = onlineRunners.some((runner) => {
+      const runnerEnvironment = normalized(runner.environment);
+      if (
+        intentEnvironment &&
+        runnerEnvironment &&
+        runnerEnvironment !== "all" &&
+        runnerEnvironment !== intentEnvironment
+      ) {
+        return false;
+      }
+      const supportedKinds = runner.supported_operation_kinds.map(normalized).filter(Boolean);
+      return supportedKinds.length === 0 || supportedKinds.includes(operationKind);
+    });
+    if (hasCompatibleRunner) protectedProfileIds.add(profileId);
+  }
+  return protectedProfileIds.size;
+}
+
+function protectedAgentDetail(protectedCount: number, activeCount: number): string {
+  if (protectedCount > 0) return "Recent agents with an online runner";
+  if (activeCount > 0) return "Managed agents need an online runner";
+  return "No active agents yet";
+}
+
+function proofMetrics(
+  data: MissionData,
+  availability: MissionAvailability,
+  protectedCount: number,
+  activeCount: number,
+): ProofMetric[] {
   const summary = data.homeSummary;
   if (!availability.homeSummary || !summary) {
     return [
-      availability.agentProfiles
+      availability.agentProfiles && availability.actionRunners
         ? {
             id: "agents-protected",
             label: "Agents protected",
-            value: formatCount(protectedAgentCount),
-            detail: protectedAgentCount > 0 ? "Active managed agents" : "No agents protected yet",
+            value: formatCount(protectedCount),
+            detail: protectedAgentDetail(protectedCount, activeCount),
             href: "/agents",
-            tone: protectedAgentCount > 0 ? "success" : "warning",
+            tone: protectedCount > 0 ? "success" : "warning",
           }
         : unavailableProofMetric("agents-protected", "Agents protected", "Agent data unavailable", "/agents"),
       unavailableProofMetric("controlled-actions", "Actions controlled", "Home summary unavailable", "/actions"),
@@ -211,16 +262,16 @@ function proofMetrics(data: MissionData, availability: MissionAvailability, prot
     ];
   }
   const receiptsGenerated = summary?.metrics.receipts_generated ?? 0;
-  const windowLabel = summary ? `Last ${summary.window_days} days` : "Summary unavailable";
+  const windowLabel = summary ? homeWindowLabel(summary.window_days) : "Summary unavailable";
 
   return [
     {
       id: "agents-protected",
       label: "Agents protected",
-      value: formatCount(protectedAgentCount),
-      detail: protectedAgentCount > 0 ? "Active managed agents" : "No agents protected yet",
+      value: formatCount(protectedCount),
+      detail: protectedAgentDetail(protectedCount, activeCount),
       href: "/agents",
-      tone: protectedAgentCount > 0 ? "success" : "warning",
+      tone: protectedCount > 0 ? "success" : "warning",
     },
     {
       id: "controlled-actions",
@@ -365,8 +416,9 @@ export default function HomePage() {
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
   const verdict = homeVerdictForQueue(rows, homeUnlocked);
-  const protectedAgentCount = data.agentProfileMeta?.active_count ?? data.agentProfiles.filter((profile) => profile.is_active).length;
-  const metrics = proofMetrics(data, availability, protectedAgentCount);
+  const activeAgentCount = data.agentProfileMeta?.active_count ?? data.agentProfiles.filter((profile) => profile.is_active).length;
+  const protectedCount = protectedAgentCount(data);
+  const metrics = proofMetrics(data, availability, protectedCount, activeAgentCount);
   const healthWindow = useMemo(() => {
     const generatedAt = data.homeSummary?.generated_at ?? lastLoadedAt ?? new Date().toISOString();
     const generatedAtMs = new Date(generatedAt).getTime();
@@ -435,6 +487,7 @@ export default function HomePage() {
           intents={data.intents}
           approvals={data.approvals}
           outcomes={data.outcomes}
+          staleAttempts={data.staleAttempts}
           loading={initialLoading}
         />
 

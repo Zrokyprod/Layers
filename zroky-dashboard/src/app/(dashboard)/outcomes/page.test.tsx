@@ -260,6 +260,7 @@ function renderOutcomesPage() {
 
 describe("OutcomesPage", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/outcomes");
     apiState.acknowledgeOutcomeMismatchResponse.mockReset();
     apiState.reconcileSavedConnector.mockReset();
     apiState.resolveOutcomeMismatchResponse.mockReset();
@@ -308,6 +309,17 @@ describe("OutcomesPage", () => {
     expect(screen.getByRole("link", { name: "Create corrective action" }).getAttribute("href")).toBe(
       "/actions?correction_case=case_mismatch_1",
     );
+  });
+
+  it("selects the exact outcome check from canonical and legacy deep links", () => {
+    window.history.replaceState({}, "", "/outcomes?check_id=check_matched");
+    const canonical = renderOutcomesPage();
+    expect(within(screen.getByRole("region", { name: "Selected outcome check" })).getByText("email:msg_1")).toBeInTheDocument();
+
+    canonical.unmount();
+    window.history.replaceState({}, "", "/outcomes?outcome_id=check_matched");
+    renderOutcomesPage();
+    expect(within(screen.getByRole("region", { name: "Selected outcome check" })).getByText("email:msg_1")).toBeInTheDocument();
   });
 
   it("does not report bypass risk clear without source mutation coverage", () => {
