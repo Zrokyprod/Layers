@@ -89,7 +89,18 @@ function unavailableCopy(row: EvidenceLedgerRow | null): string {
 function unavailableTitle(row: EvidenceLedgerRow): string {
   return ["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)
     ? "Receipt not expected"
-    : "Not linked / not exportable";
+    : row.kind === "unlinked_outcome"
+      ? "Not linked / not exportable"
+      : "Receipt unavailable";
+}
+
+function exportLabel(row: EvidenceLedgerRow): string {
+  if (!row.exportable) {
+    if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "not required";
+    return row.kind === "unlinked_outcome" ? "not linked" : "not available";
+  }
+  if (row.exportKind === "receipt") return "Action receipt JSON";
+  return "Evidence Pack JSON";
 }
 
 function verificationSummary({
@@ -128,9 +139,9 @@ function verificationSummary({
       algorithm: "sha256",
       digest: row.digest,
       fingerprint: row.digest,
-      label: row.sourceLabel,
-      status: "Digest available",
-      tone: row.tone,
+      label: "Action intent",
+      status: "Intent fingerprint only",
+      tone: "warning",
     };
   }
   return null;
@@ -337,11 +348,20 @@ export function FocusedProofPanel({
             Print
           </DashboardButton>
           <DashboardButton icon={<Download />} disabled={!canExport} onClick={onExport} variant="primary">
-            {isExporting ? "Exporting" : row?.exportKind === "receipt" ? "Export receipt JSON" : "Export proof JSON"}
+            {isExporting
+              ? "Exporting"
+              : !row?.exportable
+                ? "Export unavailable"
+                : row.exportKind === "receipt"
+                  ? "Export receipt JSON"
+                  : "Export proof JSON"}
           </DashboardButton>
         </div>
         {verification ? (
-          <section className="ev-external-verify" aria-label="Independent verification material">
+          <section
+            className="ev-external-verify"
+            aria-label={loaded ? "Independent verification material" : "Recorded intent fingerprint"}
+          >
             <div>
               <ShieldCheck size={16} aria-hidden="true" />
               <span>
@@ -372,11 +392,11 @@ export function FocusedProofPanel({
           <dl className="ev-focused-meta">
             <div>
               <dt>System</dt>
-              <dd>{row.systemRef ?? "-"}</dd>
+              <dd>{row.systemRef ?? "Not linked"}</dd>
             </div>
             <div>
               <dt>Export</dt>
-              <dd>{row.exportable ? row.exportKind : "not exportable"}</dd>
+              <dd>{exportLabel(row)}</dd>
             </div>
             <div>
               <dt>Checked</dt>

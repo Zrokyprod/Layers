@@ -410,8 +410,8 @@ describe("EvidencePage", () => {
     const ledger = screen.getByLabelText("Evidence ledger");
     const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
     expect(row).not.toBeNull();
-    expect(within(row).getByText("Action receipt")).toBeInTheDocument();
-    expect(within(row).getByText("Digest")).toBeInTheDocument();
+    expect(within(row).getByText("Signed receipt")).toBeInTheDocument();
+    expect(within(row).getByText("Intent digest")).toBeInTheDocument();
     expect(within(row).getByText("sha256:intent_1")).toBeInTheDocument();
     expect(within(row).getByText("ticket:T-1001")).toBeInTheDocument();
     expect(within(row).getByText("Matched")).toBeInTheDocument();
@@ -420,7 +420,7 @@ describe("EvidencePage", () => {
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
     expect(within(ledger).getByRole("button", { name: "Export manifest" })).toBeInTheDocument();
-    expect(within(ledger).getByLabelText("Manifest scope").textContent).toContain("1exportable in view");
+    expect(within(ledger).getByLabelText("Manifest scope").textContent).toContain("1exportable record in view");
     expect(screen.getByRole("region", { name: "Independent verification material" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open public key" }).getAttribute("href")).toBe(
       "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
@@ -567,9 +567,37 @@ describe("EvidencePage", () => {
 
     renderEvidencePage();
 
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    expect(await within(ledger).findByText("Blocked action audit")).toBeInTheDocument();
+    expect(within(ledger).getByText("not required")).toBeInTheDocument();
     expect(await screen.findByText("Receipt not expected")).toBeInTheDocument();
     expect(screen.getByText("Policy stopped execution; receipt and outcome proof are not expected.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review 1 pending" })).not.toBeInTheDocument();
+  });
+
+  it("presents a missing receipt as an intent record without overstating its proof", async () => {
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      intents: [actionIntent({ proof_status: "not_verified", receipt_status: "missing" })],
+      outcomes: [],
+    }));
+
+    renderEvidencePage();
+
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
+    expect(within(row).getByText("Protected action record")).toBeInTheDocument();
+    expect(within(row).getByText("Intent digest")).toBeInTheDocument();
+    expect(within(row).getByText("receipt not available")).toBeInTheDocument();
+
+    const panel = screen.getByLabelText("Focused proof panel");
+    expect(within(panel).getByText("Protected action record / Ticket.close")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("Recorded intent fingerprint")).toBeInTheDocument();
+    expect(within(panel).getByText("Intent fingerprint only")).toBeInTheDocument();
+    expect(within(panel).getByText("Action intent / sha256")).toBeInTheDocument();
+    expect(within(panel).getByText("not available")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Export unavailable" }).hasAttribute("disabled")).toBe(true);
+    expect(within(panel).getByText("Receipt unavailable")).toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Independent verification material")).not.toBeInTheDocument();
   });
 
   it("resolves action deep links to the matching ledger row", async () => {

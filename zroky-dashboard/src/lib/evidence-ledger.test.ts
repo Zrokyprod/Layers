@@ -133,6 +133,7 @@ describe("buildEvidenceLedger", () => {
       href: "/evidence?action_id=act_ready",
     });
     expect(ready?.systemRef).not.toBe(ready?.digest);
+    expect(rows.find((row) => row.actionId === "act_missing")?.sourceLabel).toBe("Protected action record");
   });
 
   it("keeps guard-only runtime decisions as secondary Evidence Pack rows", () => {

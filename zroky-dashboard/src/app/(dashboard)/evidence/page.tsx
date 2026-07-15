@@ -224,7 +224,7 @@ function buildVerdict({
 function metricsForCounts(counts: EvidenceLedgerCounts): EvidenceProofMetric[] {
   return [
     {
-      detail: "matched + generated receipt",
+      detail: "matched signed receipts",
       href: "/evidence?filter=matched",
       label: "Export-ready",
       tone: "success",
@@ -245,7 +245,7 @@ function metricsForCounts(counts: EvidenceLedgerCounts): EvidenceProofMetric[] {
       value: String(counts.exceptions),
     },
     {
-      detail: "receipts, guard decisions, and unlinked outcomes",
+      detail: "action records, guard decisions, and outcomes",
       href: "/evidence?filter=all",
       label: "Total proof records",
       tone: "neutral",
