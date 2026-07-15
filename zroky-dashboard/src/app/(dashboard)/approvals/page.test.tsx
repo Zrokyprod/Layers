@@ -298,7 +298,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(within(selected).getByText(/Business mutation: Refund payment rf_100/)).toBeInTheDocument();
     expect(within(selected).getByText("0/1 approvals recorded")).toBeInTheDocument();
     expect(within(selected).getByText("No approval recorded yet. The action remains held at the runtime gate.")).toBeInTheDocument();
-    expect(within(selected).getByRole("link", { name: "Slack route" }).getAttribute("href")).toBe("/integrations/slack");
+    expect(within(selected).getByText("Any project admin can decide")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Slack escalation" }).getAttribute("href")).toBe("/integrations/slack");
     expect(screen.getByText("act_1")).toBeInTheDocument();
     expect(screen.getByText("intent_digest_1")).toBeInTheDocument();
     expect(within(selected).getByRole("navigation", { name: "Proof chain" })).toBeInTheDocument();
@@ -371,6 +372,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(screen.getByText("Why it was released")).toBeInTheDocument();
     expect(screen.getByText("Human approval completed")).toBeInTheDocument();
     expect(screen.getByText("Approval completed")).toBeInTheDocument();
+    expect(screen.getByText("Approved, waiting for a runner")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Check runner" }).getAttribute("href")).toBe("/agents");
     expect(screen.getByText("Google account ...571267")).toBeInTheDocument();
     expect(screen.queryByText("Why policy stopped it")).not.toBeInTheDocument();
     expect(screen.queryByText("Expired")).not.toBeInTheDocument();

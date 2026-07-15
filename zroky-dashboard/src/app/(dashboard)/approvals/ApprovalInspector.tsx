@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, FileText, MessageSquare, X } from "lucide-react";
+import { Check, CircleAlert, FileText, MessageSquare, PlugZap, Users, X } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { EvidencePackView } from "@/components/evidence-pack-view";
@@ -318,6 +318,69 @@ function CompactEvidence({
   );
 }
 
+function executionWaitingForRunner(row: ApprovalQueueRow): boolean {
+  const execution = row.proofChain.find((step) => step.step === "execution");
+  if (row.status !== "approved" || row.kind !== "action_intent_hold" || !execution) return false;
+  const terminalStatuses = ["succeeded", "completed", "failed", "prevented"];
+  return !terminalStatuses.includes(execution.status.toLowerCase());
+}
+
+function OperationalHandoff({ row }: { row: ApprovalQueueRow }) {
+  const isPending = row.status === "pending_approval";
+  const waitingForRunner = executionWaitingForRunner(row);
+  if (!isPending && !waitingForRunner && row.agentIdentityKnown) return null;
+
+  return (
+    <section className="approval-v2-operational" aria-label="Approval operational handoff">
+      {isPending ? (
+        <div className="approval-v2-operational-row">
+          <Users aria-hidden="true" size={17} />
+          <div>
+            <span className="approval-v2-eyebrow">Decision ownership</span>
+            <strong>Any project admin can decide</strong>
+            <p>
+              {row.expiresAt
+                ? `Decision window ${timeUntil(row.expiresAt)}. Escalate before the hold expires.`
+                : "No approval deadline was returned. Keep this hold under active review."}
+            </p>
+          </div>
+          <DashboardButtonLink href="/integrations/slack" icon={<MessageSquare />} variant="soft">
+            Slack escalation
+          </DashboardButtonLink>
+        </div>
+      ) : null}
+
+      {waitingForRunner ? (
+        <div className="approval-v2-operational-row approval-v2-operational-runner">
+          <PlugZap aria-hidden="true" size={17} />
+          <div>
+            <span className="approval-v2-eyebrow">Execution handoff</span>
+            <strong>Approved, waiting for a runner</strong>
+            <p>Approval authorized this action, but no protected execution has started yet.</p>
+          </div>
+          <DashboardButtonLink href="/agents" icon={<PlugZap />} variant="primary">
+            Check runner
+          </DashboardButtonLink>
+        </div>
+      ) : null}
+
+      {!row.agentIdentityKnown ? (
+        <div className="approval-v2-operational-row approval-v2-operational-warning" role="note">
+          <CircleAlert aria-hidden="true" size={17} />
+          <div>
+            <span className="approval-v2-eyebrow">Runtime identity</span>
+            <strong>Agent identity was not reported</strong>
+            <p>The decision remains digest-bound, but this runtime should be registered before release is trusted.</p>
+          </div>
+          <DashboardButtonLink href="/agents" icon={<Users />} variant="soft">
+            Review agents
+          </DashboardButtonLink>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function ApprovalInspector({
   busy,
   canDecide,
@@ -465,11 +528,6 @@ export function ApprovalInspector({
             <span className="approval-v2-eyebrow">{consoleState.previewLabel}</span>
             <strong>{row.approvalAction}</strong>
           </div>
-          {canResolve ? (
-            <DashboardButtonLink href="/integrations/slack" icon={<MessageSquare />} variant="soft">
-              Slack route
-            </DashboardButtonLink>
-          ) : null}
           <p>{consoleState.previewCopy}</p>
         </div>
         {canResolve ? (
@@ -510,6 +568,8 @@ export function ApprovalInspector({
           </div>
         ) : null}
       </section>
+
+      <OperationalHandoff row={row} />
 
       <section className="approval-v2-tabs" aria-label="Approval detail tabs">
         <div className="approval-v2-tab-list" role="tablist" aria-label="Approval details">
