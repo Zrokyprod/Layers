@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, CheckCircle2, Clock, FileCheck2, TriangleAlert } from "lucide-react";
+import { Activity, CalendarRange, CheckCircle2, Clock, FileCheck2, TriangleAlert } from "lucide-react";
 
 import type {
   ActionExecutionAttemptResponse,
@@ -25,6 +25,8 @@ type ActivitySeriesInput = {
 
 export type AgentHealthBucket = {
   id: string;
+  startMs: number;
+  endMs: number;
   axisLabel: string;
   label: string;
   protectedActions: number;
@@ -68,7 +70,7 @@ function parseTime(value: string | null | undefined): number | null {
 }
 
 function bucketCount(windowDays: number): number {
-  if (windowDays <= 1) return 8;
+  if (windowDays <= 1) return 12;
   if (windowDays <= 7) return 7;
   if (windowDays <= 14) return 7;
   if (windowDays <= 31) return 10;
@@ -83,45 +85,23 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 
 const timeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
-  minute: "2-digit",
   timeZone: "UTC",
 });
 
 function bucketLabels(startMs: number, endMs: number, windowDays: number): Pick<AgentHealthBucket, "axisLabel" | "label"> {
-  const safeEndMs = Math.max(startMs, endMs - 1);
   if (windowDays <= 1) {
     return {
-      axisLabel: timeFormatter.format(new Date(startMs)),
-      label: `${dateFormatter.format(new Date(startMs))}, ${timeFormatter.format(new Date(startMs))} - ${timeFormatter.format(new Date(safeEndMs))} UTC`,
+      axisLabel: timeFormatter.format(new Date(endMs)),
+      label: `${dateFormatter.format(new Date(startMs))}, ${timeFormatter.format(new Date(startMs))} - ${timeFormatter.format(new Date(endMs))} UTC`,
     };
   }
-  if (windowDays <= 7) {
-    const label = dateFormatter.format(new Date(startMs));
-    return { axisLabel: label, label };
-  }
   return {
-    axisLabel: dateFormatter.format(new Date(startMs)),
-    label: `${dateFormatter.format(new Date(startMs))} - ${dateFormatter.format(new Date(safeEndMs))}`,
+    axisLabel: dateFormatter.format(new Date(endMs)),
+    label: `${dateFormatter.format(new Date(startMs))}, ${timeFormatter.format(new Date(startMs))} - ${dateFormatter.format(new Date(endMs))}, ${timeFormatter.format(new Date(endMs))} UTC`,
   };
 }
 
-function nextUtcMidnight(time: number): number {
-  const date = new Date(time);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
-}
-
 function bucketBoundaries(startMs: number, endMs: number, windowDays: number): number[] {
-  if (windowDays <= 7 && windowDays > 1) {
-    const boundaries = [startMs];
-    let boundary = nextUtcMidnight(startMs);
-    while (boundary < endMs) {
-      boundaries.push(boundary);
-      boundary += MS_PER_DAY;
-    }
-    boundaries.push(endMs);
-    return boundaries;
-  }
-
   const count = bucketCount(windowDays);
   const spanMs = Math.max(1, endMs - startMs);
   return Array.from({ length: count + 1 }, (_, index) => startMs + (spanMs * index) / count);
@@ -163,12 +143,27 @@ function attentionWork(bucket: Pick<AgentHealthBucket, "holds" | "riskSignals" |
   return bucket.holds + bucket.riskSignals + bucket.stalled;
 }
 
+function completionRate(actions: number, completed: number): number | null {
+  if (actions === 0) return null;
+  return Math.round((completed / actions) * 100);
+}
+
+function intervalLabel(windowDays: number): string {
+  if (windowDays <= 1) return "2-hour intervals";
+  if (windowDays <= 7) return "Daily intervals";
+  if (windowDays <= 14) return "2-day intervals";
+  if (windowDays <= 31) return "3-day intervals";
+  return "Trend intervals";
+}
+
 export function buildAgentHealthBuckets(input: ActivitySeriesInput): AgentHealthBucket[] {
   const endMs = parseTime(input.generatedAt) ?? Date.now();
-  const startMs = parseTime(input.windowStart) ?? endMs - input.windowDays * 86_400_000;
+  const startMs = parseTime(input.windowStart) ?? endMs - input.windowDays * MS_PER_DAY;
   const boundaries = bucketBoundaries(startMs, endMs, input.windowDays);
   const buckets = Array.from({ length: boundaries.length - 1 }, (_, index) => ({
     id: `activity-${index}`,
+    startMs: boundaries[index],
+    endMs: boundaries[index + 1],
     ...bucketLabels(boundaries[index], boundaries[index + 1], input.windowDays),
     protectedActions: 0,
     completed: 0,
@@ -318,6 +313,7 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
     0,
   );
   const status = workingStatus(actionsTotal, completedTotal, attentionTotal, totalSignals);
+  const overallCompletionRate = completionRate(actionsTotal, completedTotal);
   const lastActive = relativeTimeLabel(latestActivityTime(buckets, input), input.generatedAt);
   const innerWidth = CHART_WIDTH - CHART_PAD.left - CHART_PAD.right;
   const innerHeight = CHART_HEIGHT - CHART_PAD.top - CHART_PAD.bottom;
@@ -328,18 +324,17 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
   );
   const chartMax = Math.max(2, Math.ceil(rawMax / 2) * 2);
   const yFor = (value: number) => CHART_PAD.top + innerHeight - (value / chartMax) * innerHeight;
-  const xFor = (index: number) => buckets.length === 1
-    ? CHART_PAD.left + innerWidth / 2
-    : CHART_PAD.left + (index / (buckets.length - 1)) * innerWidth;
+  const bucketWidth = innerWidth / Math.max(1, buckets.length);
+  const xFor = (index: number) => CHART_PAD.left + bucketWidth * (index + 0.5);
   const actionPoints = buckets.map((bucket, index) => ({ x: xFor(index), y: yFor(bucket.protectedActions) }));
   const completedPoints = buckets.map((bucket, index) => ({ x: xFor(index), y: yFor(completedWork(bucket)) }));
   const attentionPoints = buckets.map((bucket, index) => ({ x: xFor(index), y: yFor(attentionWork(bucket)) }));
   const yTicks = [0, chartMax / 2, chartMax];
   const activeBucket = activeIndex == null ? null : buckets[activeIndex];
   const activeX = activeIndex == null ? 0 : xFor(activeIndex);
-  const tooltipWidth = 176;
+  const tooltipWidth = 232;
   const tooltipX = clamp(activeX - tooltipWidth / 2, CHART_PAD.left, CHART_WIDTH - CHART_PAD.right - tooltipWidth);
-  const hitWidth = innerWidth / Math.max(1, buckets.length - 1);
+  const hitWidth = bucketWidth;
 
   return (
     <section
@@ -356,6 +351,7 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
           </div>
         </div>
         <div className="mc-agent-chart-legend" aria-label="Chart totals">
+          <span className="mc-agent-chart-interval"><CalendarRange aria-hidden="true" size={13} />{intervalLabel(input.windowDays)}</span>
           <span data-series="actions"><i aria-hidden="true" />Agent actions <strong>{formatCount(actionsTotal)}</strong></span>
           <span data-series="completed"><i aria-hidden="true" />Completed <strong>{formatCount(completedTotal)}</strong></span>
           <span data-series="attention"><i aria-hidden="true" />Needs attention <strong>{formatCount(attentionTotal)}</strong></span>
@@ -374,6 +370,9 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
               <stop offset="0%" stopColor="#2f5f66" stopOpacity="0.22" />
               <stop offset="100%" stopColor="#2f5f66" stopOpacity="0.01" />
             </linearGradient>
+            <filter id="agent-line-glow" x="-20%" y="-40%" width="140%" height="180%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#2f5f66" floodOpacity="0.18" />
+            </filter>
           </defs>
 
           {yTicks.map((tick) => {
@@ -385,6 +384,17 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
               </g>
             );
           })}
+
+          {activeBucket ? (
+            <rect
+              className="mc-agent-chart-focus-band"
+              x={activeX - hitWidth / 2}
+              y={CHART_PAD.top}
+              width={hitWidth}
+              height={innerHeight}
+              rx={6}
+            />
+          ) : null}
 
           <path className="mc-agent-actions-area" d={areaPath(actionPoints, baseline)} />
           <path className="mc-agent-series-line" data-series="actions" d={smoothPath(actionPoints)} />
@@ -399,10 +409,10 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
             const showLabel = buckets.length <= 8 || index === 0 || index === buckets.length - 1 || index % 2 === 0;
             return (
               <g key={bucket.id}>
-                {showLabel ? <text className="mc-health-axis mc-health-x-axis" x={x} y={CHART_HEIGHT - 10}>{bucket.axisLabel}</text> : null}
-                <circle className="mc-agent-series-dot" data-series="actions" cx={x} cy={actionsY} r={activeIndex === index ? 5 : 3.5} />
-                <circle className="mc-agent-series-dot" data-series="completed" cx={x} cy={completedY} r={activeIndex === index ? 4.5 : 3} />
-                <circle className="mc-agent-series-dot" data-series="attention" cx={x} cy={attentionY} r={activeIndex === index ? 4.5 : 3} />
+                {showLabel ? <text className="mc-health-axis mc-health-x-axis" data-current={index === buckets.length - 1} x={x} y={CHART_HEIGHT - 10}>{bucket.axisLabel}</text> : null}
+                {bucket.protectedActions > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="actions" cx={x} cy={actionsY} r={activeIndex === index ? 5 : 3.5} /> : null}
+                {completedWork(bucket) > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="completed" cx={x} cy={completedY} r={activeIndex === index ? 4.5 : 3} /> : null}
+                {attentionWork(bucket) > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="attention" cx={x} cy={attentionY} r={activeIndex === index ? 4.5 : 3} /> : null}
                 <rect
                   className="mc-agent-chart-hitbox"
                   x={x - hitWidth / 2}
@@ -419,14 +429,22 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
           {activeBucket ? (
             <g className="mc-agent-chart-tooltip" aria-hidden="true">
               <line x1={activeX} x2={activeX} y1={CHART_PAD.top} y2={baseline} />
-              <rect x={tooltipX} y={8} width={tooltipWidth} height={92} rx={7} />
-              <text x={tooltipX + 12} y={29} data-row="title">{activeBucket.label}</text>
-              <text x={tooltipX + 12} y={49}>Agent actions</text>
-              <text x={tooltipX + tooltipWidth - 12} y={49} textAnchor="end">{activeBucket.protectedActions}</text>
-              <text x={tooltipX + 12} y={68}>Completed</text>
-              <text x={tooltipX + tooltipWidth - 12} y={68} textAnchor="end">{completedWork(activeBucket)}</text>
-              <text x={tooltipX + 12} y={87}>Needs attention</text>
-              <text x={tooltipX + tooltipWidth - 12} y={87} textAnchor="end">{attentionWork(activeBucket)}</text>
+              <rect x={tooltipX} y={7} width={tooltipWidth} height={136} rx={8} />
+              <text x={tooltipX + 13} y={28} data-row="title">Window ending {activeBucket.axisLabel}</text>
+              <text x={tooltipX + 13} y={46} data-row="range">{activeBucket.label}</text>
+              <line className="mc-agent-chart-tooltip-divider" x1={tooltipX + 13} x2={tooltipX + tooltipWidth - 13} y1={57} y2={57} />
+              <text x={tooltipX + 13} y={76}>Agent actions</text>
+              <text x={tooltipX + tooltipWidth - 13} y={76} textAnchor="end">{activeBucket.protectedActions}</text>
+              <text x={tooltipX + 13} y={95}>Completed</text>
+              <text x={tooltipX + tooltipWidth - 13} y={95} textAnchor="end">{completedWork(activeBucket)}</text>
+              <text x={tooltipX + 13} y={114}>Needs attention</text>
+              <text x={tooltipX + tooltipWidth - 13} y={114} textAnchor="end">{attentionWork(activeBucket)}</text>
+              <text x={tooltipX + 13} y={133}>Completion rate</text>
+              <text x={tooltipX + tooltipWidth - 13} y={133} textAnchor="end">
+                {completionRate(activeBucket.protectedActions, completedWork(activeBucket)) == null
+                  ? "--"
+                  : `${completionRate(activeBucket.protectedActions, completedWork(activeBucket))}%`}
+              </text>
             </g>
           ) : null}
         </svg>
@@ -435,6 +453,9 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
       </div>
 
       <div className="mc-agent-chart-meta">
+        <span data-tone={overallCompletionRate == null ? "neutral" : overallCompletionRate >= 90 ? "success" : "warning"}>
+          <CheckCircle2 aria-hidden="true" size={14} />Completion <strong>{overallCompletionRate == null ? "--" : `${overallCompletionRate}%`}</strong>
+        </span>
         <span><Clock aria-hidden="true" size={14} />Last active <strong>{lastActive}</strong></span>
         <span><FileCheck2 aria-hidden="true" size={14} />Proof generated <strong>{formatCount(receiptTotal)}</strong></span>
         <span><Activity aria-hidden="true" size={14} />Actions <strong>{formatCount(actionsTotal)}</strong></span>
