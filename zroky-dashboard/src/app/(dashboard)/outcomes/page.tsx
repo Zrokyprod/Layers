@@ -149,8 +149,9 @@ function verdictFor({
     };
   }
   if (mismatched > 0) {
+    const checkedLabel = `${formatCount(total)} action${total === 1 ? "" : "s"} checked`;
     return {
-      copy: `${formatCount(total)} actions checked, ${formatCount(mismatched)} mismatched against the real system. Inspect the selected diff before trusting the action.`,
+      copy: `${checkedLabel}, ${formatCount(mismatched)} mismatched against the real system. Inspect the selected diff before trusting the action.`,
       pill: `${formatCount(mismatched)} mismatch${mismatched === 1 ? "" : "es"}`,
       title: "Verified action mismatch",
       tone: "danger",
@@ -188,7 +189,7 @@ function verdictFor({
   };
 }
 
-function metricsFor(ledger: OutcomeLedger): DashboardMetric[] {
+function metricsFor(ledger: OutcomeLedger, mutationCoverageAvailable: boolean): DashboardMetric[] {
   return [
     {
       helper: "Claim equals actual record",
@@ -215,12 +216,16 @@ function metricsFor(ledger: OutcomeLedger): DashboardMetric[] {
       value: formatCount(ledger.counts.notVerified),
     },
     {
-      helper: "System changes with no receipt",
+      helper: mutationCoverageAvailable
+        ? "System changes with no receipt"
+        : "A successful source mutation sync is required before bypass risk can be ruled out.",
       icon: <ShieldAlert size={16} />,
       id: "bypass",
       label: "Bypass risk",
-      tone: ledger.counts.bypass > 0 ? "danger" : "neutral",
-      value: formatCount(ledger.counts.bypass),
+      tone: ledger.counts.bypass > 0 ? "danger" : mutationCoverageAvailable ? "neutral" : "warning",
+      value: ledger.counts.bypass > 0 || mutationCoverageAvailable
+        ? formatCount(ledger.counts.bypass)
+        : "Not covered",
     },
     {
       helper: "Matched / total checks",
@@ -417,7 +422,7 @@ function OutcomeInspector({
                 : "The connector confirmed the claim against the actual record."}
           </p>
         </div>
-        <strong>{row.amountLabel}</strong>
+        {check.amount_usd != null ? <strong>{row.amountLabel}</strong> : null}
       </div>
 
       <dl className="outcomes-fact-grid">
@@ -467,7 +472,9 @@ function OutcomeInspector({
           </strong>
           <p>
             {row.verdict === "mismatched"
-              ? "Compare the field diff, open signed evidence, then re-check the saved connector before escalating."
+              ? row.evidenceHref
+                ? "Compare the field diff, open signed evidence, then re-check the saved connector before escalating."
+                : "Compare the field diff, re-check the saved connector, and link future checks to a protected action before escalating."
               : row.verdict === "not_verified"
                 ? canReverify
                   ? "Retry the source-of-record verifier after connector credentials, scope, or record availability recover."
@@ -680,8 +687,6 @@ export default function OutcomesPage() {
   const verifiedRate = summaryTotal > 0 ? Math.round((summaryMatched / summaryTotal) * 100) : 0;
   const bypassCount = sourceMutationSummaryQuery.data?.unreceipted ?? ledger.counts.bypass;
   const mutationCoverageAvailable =
-    (sourceMutationSummaryQuery.data?.total ?? 0) > 0 ||
-    (sourceMutationSummaryQuery.data?.connected_feeds ?? 0) > 0 ||
     (sourceMutationSummaryQuery.data?.successful_pollers ?? 0) > 0;
   const loading = checksQuery.isLoading || summaryQuery.isLoading;
   const fetching =
@@ -810,7 +815,7 @@ export default function OutcomesPage() {
             total: summaryTotal,
             verifiedRate,
           },
-        })}
+        }, mutationCoverageAvailable)}
         onMetricClick={(metric) => {
           if (metric.id === "matched" || metric.id === "mismatched" || metric.id === "not_verified") {
             setFilter(metric.id);
