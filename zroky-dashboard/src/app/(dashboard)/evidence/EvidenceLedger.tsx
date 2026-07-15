@@ -32,10 +32,20 @@ type EvidenceLedgerProps = {
   totalMatching: number;
 };
 
-function rowKindLabel(kind: EvidenceLedgerRow["kind"]): string {
-  if (kind === "action_receipt") return "Action receipt";
-  if (kind === "orphan_decision") return "Guard-only evidence";
+function rowKindLabel(row: EvidenceLedgerRow): string {
+  if (row.kind === "action_receipt") {
+    if (row.sourceLabel === "Blocked action audit") return "Blocked action audit";
+    return row.exportable ? "Signed receipt" : "Protected action record";
+  }
+  if (row.kind === "orphan_decision") return "Guard-only evidence";
   return "Unlinked outcome";
+}
+
+function exportLabel(row: EvidenceLedgerRow): string {
+  if (row.exportable) return row.sourceLabel;
+  if (row.kind === "unlinked_outcome") return "not linked / not exportable";
+  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "not required";
+  return "receipt not available";
 }
 
 function actionLabel(row: EvidenceLedgerRow): string {
@@ -112,7 +122,7 @@ export function EvidenceLedger({
         </label>
         <div className="ev-manifest-scope" aria-label="Manifest scope">
           <strong>{exportableCount}</strong>
-          <span>exportable in view</span>
+          <span>exportable record{exportableCount === 1 ? "" : "s"} in view</span>
         </div>
       </div>
 
@@ -154,7 +164,7 @@ export function EvidenceLedger({
                 <div className="ev-ledger-main">
                   <div className="ev-ledger-titleline">
                     <div>
-                      <span className="ev-row-kind">{rowKindLabel(row.kind)}</span>
+                      <span className="ev-row-kind">{rowKindLabel(row)}</span>
                       <h3>{row.title}</h3>
                     </div>
                     <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} />
@@ -163,7 +173,7 @@ export function EvidenceLedger({
                   <dl className="ev-row-meta">
                     {row.digest ? (
                       <div>
-                        <dt>Digest</dt>
+                        <dt>{row.kind === "action_receipt" ? "Intent digest" : "Digest"}</dt>
                         <dd>
                           <code>{row.digest}</code>
                         </dd>
@@ -175,7 +185,7 @@ export function EvidenceLedger({
                     </div>
                     <div>
                       <dt>Export</dt>
-                      <dd>{row.exportable ? row.sourceLabel : "not linked / not exportable"}</dd>
+                      <dd>{exportLabel(row)}</dd>
                     </div>
                   </dl>
                   <small>{row.systemRef ?? row.detail}</small>

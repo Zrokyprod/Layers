@@ -194,6 +194,7 @@ def test_evidence_manifest_filters_by_date_and_status_on_server(client: TestClie
     assert payload["scope"]["total_records"] == 1
     assert payload["records"][0]["id"] == "action:act_pending"
     assert payload["records"][0]["status"] == "not_verified"
+    assert payload["records"][0]["source_label"] == "Protected action record"
 
 
 def test_evidence_ledger_is_paginated_time_scoped_and_tenant_scoped(client: TestClient) -> None:

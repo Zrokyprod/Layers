@@ -244,7 +244,11 @@ export function buildEvidenceLedger({
       ...rowStatus(status),
       digest: intent.intent_digest,
       systemRef: outcome?.system_ref ?? view.systemRef,
-      sourceLabel: expectedBlock ? "Blocked action audit" : "Action Receipt",
+      sourceLabel: expectedBlock
+        ? "Blocked action audit"
+        : intent.receipt_status === "generated"
+          ? "Action Receipt"
+          : "Protected action record",
       checkedAt: outcome?.checked_at ?? intent.created_at,
       href: actionHref(intent.action_id),
       exportable: intent.receipt_status === "generated",

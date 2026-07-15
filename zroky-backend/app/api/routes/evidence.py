@@ -270,7 +270,13 @@ def _build_manifest_rows(
                 id=f"action:{intent.id}",
                 kind="action_receipt",
                 outcome_id=outcome.id if outcome else None,
-                source_label="Blocked action audit" if expected_block else "Action Receipt",
+                source_label=(
+                    "Blocked action audit"
+                    if expected_block
+                    else "Action Receipt"
+                    if intent.receipt_status == "generated"
+                    else "Protected action record"
+                ),
                 status=status_value,
                 system_ref=outcome.system_ref if outcome else None,
                 title=title,
