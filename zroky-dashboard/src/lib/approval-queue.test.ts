@@ -151,6 +151,18 @@ describe("buildApprovalQueue", () => {
     });
   });
 
+  it("marks missing runtime identity explicitly instead of presenting unknown-agent as a real agent", () => {
+    const rows = buildApprovalQueue({
+      decisions: [decision({ agent_name: "unknown-agent" })],
+      intents: [intent({ canonical_intent: { trace_context: { agent_name: "unknown-agent" } } })],
+    });
+
+    expect(rows[0]).toMatchObject({
+      agentName: "Unidentified runtime",
+      agentIdentityKnown: false,
+    });
+  });
+
   it("prioritizes expiring, sequence-risk, and money-touching holds without keyword guessing", () => {
     const rows = buildApprovalQueue({
       decisions: [

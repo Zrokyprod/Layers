@@ -22,6 +22,7 @@ export type ApprovalQueueRow = {
   actionId: string | null;
   title: string;
   agentName: string;
+  agentIdentityKnown: boolean;
   actionType: string;
   operationKind: string | null;
   environment: string | null;
@@ -136,6 +137,22 @@ function riskLabelForDecision(decision: RuntimePolicyDecisionResponse): string {
 
 function actionTypeForDecision(decision: RuntimePolicyDecisionResponse): string {
   return humanize(decision.action_type ?? decision.tool_name, "Agent action");
+}
+
+function agentIdentity(value: string | null | undefined): { known: boolean; name: string } {
+  const raw = stringFrom(value);
+  const unknownNames = [
+    "unknown",
+    "unknown agent",
+    "unknown-agent",
+    "unknown_agent",
+    "unidentified",
+    "unidentified runtime",
+  ];
+  if (!raw || unknownNames.includes(raw.toLowerCase())) {
+    return { known: false, name: "Unidentified runtime" };
+  }
+  return { known: true, name: raw };
 }
 
 function impactLabel(decision: RuntimePolicyDecisionResponse, amount: number | null): string {
@@ -353,6 +370,7 @@ export function buildApprovalQueue({
     const priority = priorityForDecision(decision, amount, nowMs);
     const status = decision.status;
     const view = intent ? buildActionView(intent, { decision }) : null;
+    const agent = agentIdentity(view?.agentName ?? decision.agent_name);
     const requiredCount = requiredApprovals(decision);
     const recordedCount = approvalCount(decision);
     return {
@@ -361,7 +379,8 @@ export function buildApprovalQueue({
       decisionId: decision.id,
       actionId: intent?.action_id ?? null,
       title: view?.title ?? titleForDecision(decision),
-      agentName: view?.agentName ?? decision.agent_name ?? "Unknown agent",
+      agentName: agent.name,
+      agentIdentityKnown: agent.known,
       actionType: view?.actionType ?? actionTypeForDecision(decision),
       operationKind: view?.operationKind ?? null,
       environment: view?.environment ?? null,
