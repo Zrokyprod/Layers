@@ -72,9 +72,9 @@ function parseTime(value: string | null | undefined): number | null {
 function bucketCount(windowDays: number): number {
   if (windowDays <= 1) return 12;
   if (windowDays <= 7) return 7;
-  if (windowDays <= 14) return 7;
-  if (windowDays <= 31) return 10;
-  return 12;
+  if (windowDays <= 14) return 14;
+  if (windowDays <= 31) return 30;
+  return Math.min(90, Math.max(1, Math.round(windowDays)));
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -149,11 +149,14 @@ function completionRate(actions: number, completed: number): number | null {
 }
 
 function intervalLabel(windowDays: number): string {
-  if (windowDays <= 1) return "2-hour intervals";
-  if (windowDays <= 7) return "Daily intervals";
-  if (windowDays <= 14) return "2-day intervals";
-  if (windowDays <= 31) return "3-day intervals";
-  return "Trend intervals";
+  if (windowDays <= 1) return "2-hour, 12 points";
+  return `Daily, ${bucketCount(windowDays)} points`;
+}
+
+function showAxisLabel(index: number, count: number): boolean {
+  if (count <= 8) return true;
+  const stride = count <= 14 ? 2 : 5;
+  return index === 0 || index === count - 1 || (index + 1) % stride === 0;
 }
 
 export function buildAgentHealthBuckets(input: ActivitySeriesInput): AgentHealthBucket[] {
@@ -406,9 +409,10 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
             const actionsY = yFor(bucket.protectedActions);
             const completedY = yFor(completedWork(bucket));
             const attentionY = yFor(attentionWork(bucket));
-            const showLabel = buckets.length <= 8 || index === 0 || index === buckets.length - 1 || index % 2 === 0;
+            const showLabel = showAxisLabel(index, buckets.length);
             return (
               <g key={bucket.id}>
+                <line className="mc-health-x-tick" x1={x} x2={x} y1={baseline} y2={baseline + 4} />
                 {showLabel ? <text className="mc-health-axis mc-health-x-axis" data-current={index === buckets.length - 1} x={x} y={CHART_HEIGHT - 10}>{bucket.axisLabel}</text> : null}
                 {bucket.protectedActions > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="actions" cx={x} cy={actionsY} r={activeIndex === index ? 5 : 3.5} /> : null}
                 {completedWork(bucket) > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="completed" cx={x} cy={completedY} r={activeIndex === index ? 4.5 : 3} /> : null}

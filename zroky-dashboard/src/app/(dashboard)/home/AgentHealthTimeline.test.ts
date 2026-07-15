@@ -73,27 +73,27 @@ describe("buildAgentHealthBuckets", () => {
     expect(buckets.find((bucket) => bucket.protectedActions === 1)?.axisLabel).toBe("Jul 11");
   });
 
-  it("describes multi-day buckets with an exact range", () => {
+  it("uses fourteen daily buckets with exact ranges", () => {
     const buckets = series({
       windowDays: 14,
       windowStart: "2026-07-01T09:00:00.000Z",
       generatedAt: "2026-07-15T09:00:00.000Z",
     });
 
-    expect(buckets).toHaveLength(7);
-    expect(buckets[0].axisLabel).toBe("Jul 3");
-    expect(buckets[0].label).toBe("Jul 1, 9 AM - Jul 3, 9 AM UTC");
+    expect(buckets).toHaveLength(14);
+    expect(buckets[0].axisLabel).toBe("Jul 2");
+    expect(buckets[0].label).toBe("Jul 1, 9 AM - Jul 2, 9 AM UTC");
   });
 
-  it("uses ten three-day buckets for a thirty-day window", () => {
+  it("uses thirty daily buckets for a thirty-day window", () => {
     const buckets = series({
       windowDays: 30,
       windowStart: "2026-06-15T09:00:00.000Z",
       generatedAt: "2026-07-15T09:00:00.000Z",
     });
 
-    expect(buckets).toHaveLength(10);
-    expect(buckets[0].axisLabel).toBe("Jun 18");
-    expect(buckets[9].axisLabel).toBe("Jul 15");
+    expect(buckets).toHaveLength(30);
+    expect(buckets[0].axisLabel).toBe("Jun 16");
+    expect(buckets[29].axisLabel).toBe("Jul 15");
   });
 });

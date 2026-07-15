@@ -15,6 +15,29 @@ function intent(createdAt: string): ActionIntentResponse {
 }
 
 describe("AgentHealthTimeline", () => {
+  it.each([
+    { windowDays: 14, windowStart: "2026-07-01T09:00:00.000Z", points: 14 },
+    { windowDays: 30, windowStart: "2026-06-15T09:00:00.000Z", points: 30 },
+  ])("renders $points independent daily points for a $windowDays-day window", ({ windowDays, windowStart, points }) => {
+    const { container } = render(
+      <AgentHealthTimeline
+        loading={false}
+        windowDays={windowDays}
+        windowStart={windowStart}
+        generatedAt="2026-07-15T09:00:00.000Z"
+        intents={[]}
+        approvals={[]}
+        outcomes={[]}
+        mutations={[]}
+        staleAttempts={[]}
+      />,
+    );
+
+    expect(screen.getByText(`Daily, ${points} points`)).toBeInTheDocument();
+    expect(container.querySelectorAll(".mc-agent-chart-hitbox")).toHaveLength(points);
+    expect(container.querySelectorAll(".mc-health-x-tick")).toHaveLength(points);
+  });
+
   it("shows the selected interval and a detailed interactive tooltip", () => {
     const { container } = render(
       <AgentHealthTimeline
@@ -30,7 +53,7 @@ describe("AgentHealthTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("Daily intervals")).toBeInTheDocument();
+    expect(screen.getByText("Daily, 7 points")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
 
     const hitboxes = container.querySelectorAll(".mc-agent-chart-hitbox");
