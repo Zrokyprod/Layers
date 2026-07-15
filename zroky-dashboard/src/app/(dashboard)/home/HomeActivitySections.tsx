@@ -5,11 +5,12 @@ import type { ReactNode } from "react";
 import { ArrowUpRight, CheckCircle2, ClipboardCheck, ShieldCheck } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import { buildActionView } from "@/lib/action-view";
+import { buildActionLifecycle } from "@/lib/action-lifecycle";
 import type { StatusTone } from "@/lib/action-status";
 import { field, formatDateTime, humanize } from "@/lib/format";
 import type {
   ActionIntentResponse,
+  ActionExecutionAttemptResponse,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
 } from "@/lib/api";
@@ -18,6 +19,7 @@ type HomeActivitySectionsProps = {
   intents: ActionIntentResponse[];
   approvals: RuntimePolicyDecisionResponse[];
   outcomes: OutcomeReconciliationView[];
+  staleAttempts: ActionExecutionAttemptResponse[];
   loading: boolean;
 };
 
@@ -134,16 +136,28 @@ export function HomeActivitySections({
   intents,
   approvals,
   outcomes,
+  staleAttempts,
   loading,
 }: HomeActivitySectionsProps) {
+  const lifecycleByActionId = new Map(
+    buildActionLifecycle({
+      intents,
+      decisions: approvals,
+      outcomes,
+      attempts: staleAttempts,
+      staleAttemptIds: staleAttempts.map((attempt) => attempt.attempt_id),
+    })
+      .filter((row) => row.actionId)
+      .map((row) => [row.actionId, row]),
+  );
   const protectedActions = byRecent(intents).slice(0, 4).map((intent): ActivityRow => {
-    const view = buildActionView(intent);
+    const lifecycle = lifecycleByActionId.get(intent.action_id);
     return {
       id: intent.action_id,
-      title: view.title,
-      meta: view.agentName,
-      status: view.statusLabel,
-      tone: view.statusTone,
+      title: lifecycle?.title ?? humanize(intent.action_type),
+      meta: lifecycle?.agentName ?? intent.agent_profile?.display_name ?? "Unknown agent",
+      status: lifecycle?.stage.label ?? humanize(intent.status),
+      tone: lifecycle?.stage.tone ?? "neutral",
       href: `/actions?action_id=${encodeURIComponent(intent.action_id)}`,
       createdAt: intent.created_at,
     };
@@ -163,7 +177,7 @@ export function HomeActivitySections({
     meta: outcome.reason ? humanize(outcome.reason) : humanize(outcome.connector_type),
     status: outcome.verdict ?? outcome.verification_status ?? "not_verified",
     tone: outcomeTone(outcome),
-    href: "/outcomes",
+    href: `/outcomes?check_id=${encodeURIComponent(outcome.id)}`,
     createdAt: outcome.checked_at ?? outcome.created_at,
   }));
 
