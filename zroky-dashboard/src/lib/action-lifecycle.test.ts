@@ -188,6 +188,26 @@ describe("buildActionLifecycle", () => {
     });
   });
 
+  it("marks missing runtime identity instead of presenting unknown-agent as a real agent", () => {
+    const rows = buildActionLifecycle({
+      intents: [
+        intent({
+          canonical_intent: {
+            trace_context: { agent_name: "unknown-agent" },
+            purpose: { summary: "Update inventory item" },
+          },
+        }),
+      ],
+      decisions: [decision({ agent_name: "unknown-agent" })],
+      outcomes: [],
+    });
+
+    expect(rows[0]).toMatchObject({
+      agentName: "Unidentified runtime",
+      agentIdentityKnown: false,
+    });
+  });
+
   it("keeps guard-only decisions visible as secondary partial chains", () => {
     const rows = buildActionLifecycle({
       intents: [],

@@ -23331,7 +23331,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .al-empty-state p,
-.app-shell[data-dashboard-system="control-v1"] .al-stage-summary p,
 .app-shell[data-dashboard-system="control-v1"] .al-truth-card p,
 .app-shell[data-dashboard-system="control-v1"] .al-quota-gauge p,
 .app-shell[data-dashboard-system="control-v1"] .al-alert p {
@@ -23621,18 +23620,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text-tertiary);
 }
 
-.app-shell[data-dashboard-system="control-v1"] .al-stage-summary {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
-  border: 1px solid var(--mc-border);
-  border-left: 3px solid var(--mc-border-strong);
-  border-radius: 8px;
-  background: var(--mc-soft);
-}
-
 .app-shell[data-dashboard-system="control-v1"] .al-truth-card {
   display: grid;
   gap: 12px;
@@ -23717,12 +23704,82 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-weight: 600;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .al-stage-summary strong {
+.app-shell[data-dashboard-system="control-v1"] .al-operational,
+.app-shell[data-dashboard-system="control-v1"] .al-tab-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-operational-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--mc-border);
+  border-left: 3px solid var(--mc-border-strong);
+  border-radius: 8px;
+  background: var(--mc-card);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-operational-item strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   color: var(--mc-text);
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-operational-item p {
+  margin: 0;
+  color: var(--mc-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-tabs {
+  overflow: hidden;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: var(--mc-card);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-tab-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--mc-border);
+  background: var(--mc-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-tab {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mc-text-secondary);
+  font-family: inherit;
+  font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-tab.is-active {
+  border-color: var(--mc-border);
+  background: var(--mc-card);
+  color: var(--mc-accent);
+  box-shadow: var(--mc-shadow-rest);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-tab:focus-visible {
+  outline: 2px solid var(--mc-accent);
+  outline-offset: 1px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .al-tab-panel {
+  padding: 10px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .al-status-stack,
@@ -23893,7 +23950,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 820px) {
-  .app-shell[data-dashboard-system="control-v1"] .al-stage-summary,
+  .app-shell[data-dashboard-system="control-v1"] .al-operational-item,
   .app-shell[data-dashboard-system="control-v1"] .al-truth-card-head,
   .app-shell[data-dashboard-system="control-v1"] .al-quota-gauge,
   .app-shell[data-dashboard-system="control-v1"] .al-inspector-header,

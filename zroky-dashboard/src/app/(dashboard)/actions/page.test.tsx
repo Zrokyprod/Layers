@@ -542,11 +542,13 @@ describe("ActionsPage", () => {
 
     const selected = screen.getByRole("region", { name: "Selected action lifecycle" });
     expect(within(selected).getByRole("heading", { name: "Refund RF-1001" })).toBeInTheDocument();
-    expect(within(selected).getByText((content) => content.includes("ledger:RF-1001"))).toBeInTheDocument();
     expect(within(selected).getByRole("navigation", { name: "Proof chain" })).toBeInTheDocument();
     expect(within(selected).getByRole("link", { name: "Open Evidence Pack" }).getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
     );
+    expect(within(selected).queryByText((content) => content.includes("ledger:RF-1001"))).not.toBeInTheDocument();
+    fireEvent.click(within(selected).getByRole("tab", { name: "Developer" }));
+    expect(within(selected).getByText((content) => content.includes("ledger:RF-1001"))).toBeInTheDocument();
 
     fireEvent.click(within(queue).getByRole("button", { name: /Bypass: stripe:rf_bypass/ }));
     const bypass = screen.getByRole("region", { name: "Bypass risk detail" });
@@ -642,19 +644,29 @@ describe("ActionsPage", () => {
     expect(within(selected).getByRole("button", { name: /Action: Authorized/i })).toBeInTheDocument();
     expect(within(selected).getByRole("button", { name: /Verification: Matched/i })).toBeInTheDocument();
     expect(within(selected).getByRole("button", { name: /Receipt: Generated/i })).toBeInTheDocument();
-    expect(within(selected).getByText("Action timeline")).toBeInTheDocument();
-    expect(within(selected).getByText("Intent")).toBeInTheDocument();
-    expect(document.querySelectorAll(".al-json-section[open]")).toHaveLength(0);
-    expect(within(selected).getAllByText("Authorized").length).toBeGreaterThan(0);
-    expect(within(selected).getByText("Execution attempts")).toBeInTheDocument();
-    expect(within(selected).getByText("runner_1")).toBeInTheDocument();
-    expect(within(selected).getByRole("link", { name: "Open Action Receipt" }).getAttribute("href")).toBe(
+    expect(within(selected).getByRole("link", { name: "Open receipt" }).getAttribute("href")).toBe(
       "/evidence?action_id=act_1",
     );
+    expect(within(selected).queryByText("Action timeline")).not.toBeInTheDocument();
+    fireEvent.click(within(selected).getByRole("tab", { name: "Execution" }));
+    expect(within(selected).getByText("Action timeline")).toBeInTheDocument();
+    expect(within(selected).getByText("Execution attempts")).toBeInTheDocument();
+    expect(within(selected).getByText("runner_1")).toBeInTheDocument();
+    fireEvent.click(within(selected).getByRole("tab", { name: "Developer" }));
+    expect(within(selected).getByText("Intent")).toBeInTheDocument();
+    expect(document.querySelectorAll(".al-json-section[open]")).toHaveLength(0);
   });
 
   it("does not call an authorized action controlled while it is awaiting a runner", async () => {
-    queryState.intents = [actionIntent({ proof_status: "not_started", receipt_status: "missing" })];
+    queryState.intents = [actionIntent({
+      proof_status: "not_started",
+      receipt_status: "missing",
+      canonical_intent: {
+        principal: { id: "unknown-agent" },
+        purpose: { summary: "Close ticket T-1001" },
+        resource: { id: "T-1001" },
+      },
+    })];
     queryState.decisions = [];
     queryState.outcomes = [];
     queryState.outcomeSummary = {
@@ -688,6 +700,16 @@ describe("ActionsPage", () => {
     const selected = screen.getByRole("region", { name: "Selected action lifecycle" });
     expect(within(selected).getByRole("button", { name: /Verification: Not started/i })).toBeInTheDocument();
     expect(within(selected).getByRole("button", { name: /Receipt: Not generated/i })).toBeInTheDocument();
+    expect(within(selected).getByText("Connect a runner to continue")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Check runner" }).getAttribute("href")).toBe("/agents");
+    expect(within(selected).queryByRole("link", { name: /receipt/i })).not.toBeInTheDocument();
+    const selectedHeader = within(selected)
+      .getByRole("heading", { name: "Close ticket T-1001" })
+      .closest("header");
+    expect(selectedHeader).not.toBeNull();
+    expect(within(selectedHeader as HTMLElement).getByText(/Unidentified runtime/)).toBeInTheDocument();
+    expect(within(selected).getByText("Agent identity was not reported")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Review agents" }).getAttribute("href")).toBe("/agents");
   });
 
   it("surfaces verification mismatches without opening raw JSON", async () => {
@@ -732,6 +754,7 @@ describe("ActionsPage", () => {
     expect(within(diff).getByText("amount_usd")).toBeInTheDocument();
     expect(within(diff).getByText("42.5")).toBeInTheDocument();
     expect(within(diff).getByText("0")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Review proof" })).toBeInTheDocument();
   });
 
   it("renders a ready state when no protected action data exists yet", async () => {
