@@ -15,6 +15,7 @@ class ProjectInvitationResponse(BaseModel):
     accepted_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
+    email_sent: bool | None = None
 
 
 class ProjectInvitationCreateRequest(BaseModel):

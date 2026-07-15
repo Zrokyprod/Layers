@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getBillingMe: vi.fn(),
   listProjectInvitations: vi.fn(),
   listProjectMembers: vi.fn(),
+  resendProjectInvitation: vi.fn(),
   revokeProjectInvitation: vi.fn(),
   upsertProjectMember: vi.fn(),
 }));
@@ -224,5 +225,57 @@ describe("TeamPage", () => {
     expect(screen.getByRole("combobox", { name: "Change role for member@example.com" })).toHaveProperty("disabled", true);
     expect(screen.getAllByRole("button", { name: "Remove" })[0]).toHaveProperty("disabled", true);
     expect(api.upsertProjectMember).not.toHaveBeenCalled();
+  });
+
+  it("confirms email delivery after creating an invitation", async () => {
+    api.createProjectInvitation.mockResolvedValue({
+      invitation_id: "inv_1",
+      project_id: "proj_1",
+      email: "new@example.com",
+      role: "member",
+      invited_by_subject: "user:owner@example.com",
+      expires_at: now,
+      accepted_at: null,
+      revoked_at: null,
+      created_at: now,
+      email_sent: true,
+    });
+
+    renderTeamPage();
+
+    await screen.findByText("owner@example.com");
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send invite" }));
+
+    expect(await screen.findByText("Invitation email sent to new@example.com.")).toBeInTheDocument();
+    expect(api.createProjectInvitation).toHaveBeenCalledWith("proj_1", {
+      email: "new@example.com",
+      role: "member",
+    });
+  });
+
+  it("resends a pending invitation with a fresh token", async () => {
+    const invitation = {
+      invitation_id: "inv_1",
+      project_id: "proj_1",
+      email: "pending@example.com",
+      role: "viewer",
+      invited_by_subject: "user:owner@example.com",
+      expires_at: now,
+      accepted_at: null,
+      revoked_at: null,
+      created_at: now,
+      email_sent: null,
+    };
+    api.listProjectInvitations.mockResolvedValue([invitation]);
+    api.resendProjectInvitation.mockResolvedValue({ ...invitation, email_sent: true });
+
+    renderTeamPage();
+
+    expect(await screen.findByText("pending@example.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resend" }));
+
+    expect(await screen.findByText("Invitation email resent to pending@example.com.")).toBeInTheDocument();
+    expect(api.resendProjectInvitation).toHaveBeenCalledWith("proj_1", "inv_1");
   });
 });

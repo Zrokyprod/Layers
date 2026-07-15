@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Clock3,
   RefreshCw,
+  Send,
   Users,
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ import { useMyProjects, useProjectSettings, useTeamMembers } from "@/lib/hooks";
 import {
   createProjectInvitation,
   listProjectInvitations,
+  resendProjectInvitation,
   revokeProjectInvitation,
 } from "@/lib/api";
 import { upsertProjectMember } from "@/lib/api";
@@ -76,7 +78,9 @@ export default function TeamPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
+  const [busyInvitationId, setBusyInvitationId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [localNotice, setLocalNotice] = useState<string | null>(null);
   const [roleChangeTarget, setRoleChangeTarget] = useState<{
     member: ProjectMembershipResponse;
     role: string;
@@ -88,6 +92,7 @@ export default function TeamPage() {
 
   const refreshTeamData = async () => {
     setLocalError(null);
+    setLocalNotice(null);
     await Promise.all([
       membersQuery.refetch(),
       invitationsQuery.refetch(),
@@ -107,6 +112,13 @@ export default function TeamPage() {
 
   const revokeInvitationMutation = useMutation({
     mutationFn: (invitationId: string) => revokeProjectInvitation(projectId as string, invitationId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["project-invitations", projectId] });
+    },
+  });
+
+  const resendInvitationMutation = useMutation({
+    mutationFn: (invitationId: string) => resendProjectInvitation(projectId as string, invitationId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["project-invitations", projectId] });
     },
@@ -145,12 +157,18 @@ export default function TeamPage() {
       return;
     }
     setLocalError(null);
+    setLocalNotice(null);
     const email = inviteEmail.trim();
     try {
-      await inviteMutation.mutateAsync({
+      const invitation = await inviteMutation.mutateAsync({
         email,
         role: inviteRole,
       });
+      setLocalNotice(
+        invitation.email_sent
+          ? `Invitation email sent to ${email}.`
+          : `Invitation created for ${email}, but email delivery failed. Use Resend to try again.`,
+      );
       setInviteEmail("");
       setInviteRole("member");
     } catch (e: unknown) {
@@ -167,10 +185,35 @@ export default function TeamPage() {
     }
     try {
       setLocalError(null);
+      setLocalNotice(null);
       await revokeInvitationMutation.mutateAsync(invitationId);
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
       setLocalError(msg || "Failed to revoke invitation.");
+    }
+  }
+
+  async function onResend(invitation: ProjectInvitationItem) {
+    if (!projectId) return;
+    if (!canManageAccess) {
+      setLocalError(readOnlyAccessCopy);
+      return;
+    }
+    setBusyInvitationId(invitation.invitation_id);
+    setLocalError(null);
+    setLocalNotice(null);
+    try {
+      const result = await resendInvitationMutation.mutateAsync(invitation.invitation_id);
+      if (result.email_sent) {
+        setLocalNotice(`Invitation email resent to ${invitation.email}.`);
+      } else {
+        setLocalError(`Invitation email to ${invitation.email} could not be delivered. Retry after checking email delivery settings.`);
+      }
+    } catch (e: unknown) {
+      const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
+      setLocalError(msg || "Failed to resend invitation email.");
+    } finally {
+      setBusyInvitationId(null);
     }
   }
 
@@ -285,6 +328,7 @@ export default function TeamPage() {
           </p>
         ) : null}
         {error && <p className="notif-error team-error">{error}</p>}
+        {localNotice && <p className="notice team-error">{localNotice}</p>}
 
         <form onSubmit={onInvite} className="team-invite-form">
           <div className="team-invite-fields">
@@ -412,7 +456,7 @@ export default function TeamPage() {
         id="pending-invitations"
         eyebrow="Invitations"
         title="Pending invites"
-        copy="Revoke invites that should not become access."
+        copy="Resend or revoke invitations that have not been accepted."
         className="team-list-section"
       >
 
@@ -441,10 +485,22 @@ export default function TeamPage() {
                   <DashboardButton
                     type="button"
                     size="sm"
+                    variant="soft"
+                    icon={<Send />}
+                    title="Resend invitation email"
+                    onClick={() => void onResend(inv)}
+                    loading={busyInvitationId === inv.invitation_id}
+                    disabled={!canManageAccess || busyInvitationId === inv.invitation_id}
+                  >
+                    Resend
+                  </DashboardButton>
+                  <DashboardButton
+                    type="button"
+                    size="sm"
                     variant="danger"
                     title="Revoke invitation"
                     onClick={() => void onRevoke(inv.invitation_id)}
-                    disabled={!canManageAccess}
+                    disabled={!canManageAccess || busyInvitationId === inv.invitation_id}
                   >
                     Revoke
                   </DashboardButton>

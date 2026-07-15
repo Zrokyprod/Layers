@@ -5,6 +5,8 @@ invitations via a secure token link.
 """
 import secrets
 from datetime import UTC, datetime, timedelta
+from html import escape
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -13,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.authorization import require_project_role
 from app.api.dependencies.tenant import require_tenant_context, TenantContext
 from app.core.limiter import limiter
+from app.core.config import get_settings
 from app.db.models import (
     Project,
     ProjectInvitation,
@@ -28,6 +31,7 @@ from app.schemas.invitation import (
     ProjectInvitationResponse,
 )
 from app.services.membership import normalize_project_role, upsert_project_membership
+from app.services.email_sender import send_email
 from app.services.security import hash_api_key
 
 router = APIRouter(prefix="/v1/invitations")
@@ -40,7 +44,11 @@ def _hash_token(token: str) -> str:
     return hash_api_key(token)
 
 
-def _invitation_to_response(invitation: ProjectInvitation) -> ProjectInvitationResponse:
+def _invitation_to_response(
+    invitation: ProjectInvitation,
+    *,
+    email_sent: bool | None = None,
+) -> ProjectInvitationResponse:
     return ProjectInvitationResponse(
         invitation_id=invitation.id,
         project_id=invitation.project_id,
@@ -51,6 +59,39 @@ def _invitation_to_response(invitation: ProjectInvitation) -> ProjectInvitationR
         accepted_at=invitation.accepted_at,
         revoked_at=invitation.revoked_at,
         created_at=invitation.created_at,
+        email_sent=email_sent,
+    )
+
+
+def _send_invitation_email(
+    *,
+    invitation: ProjectInvitation,
+    project: Project,
+    raw_token: str,
+) -> bool:
+    settings = get_settings()
+    accept_url = (
+        f"{settings.FRONTEND_URL.rstrip('/')}/invite/accept"
+        f"?token={quote(raw_token, safe='')}"
+    )
+    project_name = escape(project.name)
+    role = escape(invitation.role)
+    return send_email(
+        to=[invitation.email],
+        subject=f"You're invited to join {project.name} on Zroky",
+        html_body=(
+            "<p>Hi,</p>"
+            f"<p>You've been invited to join <strong>{project_name}</strong> "
+            f"on Zroky as <strong>{role}</strong>.</p>"
+            f'<p><a href="{accept_url}">Accept invitation</a></p>'
+            f"<p>This invitation expires in {_INVITATION_EXPIRE_DAYS} days.</p>"
+            "<p>If you were not expecting this invitation, you can ignore this email.</p>"
+        ),
+        plain_body=(
+            f"You've been invited to join '{project.name}' on Zroky as {invitation.role}.\n\n"
+            f"Accept invitation: {accept_url}\n\n"
+            f"This invitation expires in {_INVITATION_EXPIRE_DAYS} days."
+        ),
     )
 
 
@@ -123,7 +164,12 @@ def create_invitation(
     db.commit()
     db.refresh(invitation)
 
-    return _invitation_to_response(invitation)
+    email_sent = _send_invitation_email(
+        invitation=invitation,
+        project=project,
+        raw_token=raw_token,
+    )
+    return _invitation_to_response(invitation, email_sent=email_sent)
 
 
 @router.get(
@@ -180,6 +226,50 @@ def revoke_invitation(
 
 
 @router.post(
+    "/projects/{project_id}/invitations/{invitation_id}/resend",
+    response_model=ProjectInvitationResponse,
+    dependencies=[Depends(require_project_role("admin"))],
+)
+@limiter.limit("10/minute")
+def resend_invitation(
+    request: Request,
+    project_id: str,
+    invitation_id: str,
+    db: Session = Depends(get_db_session),
+) -> ProjectInvitationResponse:
+    """Issue a fresh token and resend a pending invitation email."""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    invitation = db.execute(
+        select(ProjectInvitation).where(
+            ProjectInvitation.id == invitation_id,
+            ProjectInvitation.project_id == project_id,
+        )
+    ).scalar_one_or_none()
+    if invitation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    if invitation.accepted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invitation already accepted")
+    if invitation.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invitation has been revoked")
+
+    raw_token = secrets.token_urlsafe(_INVITATION_TOKEN_BYTES)
+    invitation.token_hash = _hash_token(raw_token)
+    invitation.expires_at = datetime.now(UTC) + timedelta(days=_INVITATION_EXPIRE_DAYS)
+    db.commit()
+    db.refresh(invitation)
+
+    email_sent = _send_invitation_email(
+        invitation=invitation,
+        project=project,
+        raw_token=raw_token,
+    )
+    return _invitation_to_response(invitation, email_sent=email_sent)
+
+
+@router.post(
     "/accept",
     response_model=AcceptInvitationResponse,
 )
@@ -215,6 +305,11 @@ def accept_invitation(
     ).scalar_one_or_none()
     if user is None:
         return AcceptInvitationResponse(success=False, message="User identity not found.")
+    if not user.email or user.email.strip().lower() != invitation.email:
+        return AcceptInvitationResponse(
+            success=False,
+            message="Sign in with the email address that received this invitation.",
+        )
 
     # Create or update membership
     membership = upsert_project_membership(

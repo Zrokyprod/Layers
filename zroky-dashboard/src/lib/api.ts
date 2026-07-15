@@ -3236,6 +3236,13 @@ export function revokeProjectInvitation(projectId: string, invitationId: string)
   });
 }
 
+export function resendProjectInvitation(projectId: string, invitationId: string): Promise<ProjectInvitationItem> {
+  return request<ProjectInvitationItem>(
+    `/v1/invitations/projects/${encodeURIComponent(projectId)}/invitations/${encodeURIComponent(invitationId)}/resend`,
+    { method: "POST" },
+  );
+}
+
 export function acceptInvitation(token: string): Promise<AcceptInvitationResponse> {
   return request<AcceptInvitationResponse>("/v1/invitations/accept", {
     method: "POST",

@@ -1067,6 +1067,7 @@ export interface ProjectInvitationItem {
   accepted_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  email_sent?: boolean | null;
 }
 
 export interface AcceptInvitationResponse {
