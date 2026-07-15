@@ -63,7 +63,19 @@ function AgentsSetupActivationBanner({
   runnerNeedsRecovery: boolean;
   status: AgentControlSetupStatus;
 }) {
-  const visibleChecks = status.checks.filter((check) => !check.done).slice(0, 4);
+  const operationalChecks = runnerNeedsRecovery ? [{
+    id: "runner_health",
+    label: "Restore protected runner",
+    done: false,
+    detail: "Runner configuration is saved, but no configured runner has an active heartbeat.",
+  }] : [];
+  const visibleChecks = [
+    ...operationalChecks,
+    ...status.checks.filter((check) => !check.done),
+  ].slice(0, 4);
+  const completionLabel = runnerNeedsRecovery
+    ? `${status.completedCount}/${status.totalCount} configured; runner offline`
+    : `${status.completedCount}/${status.totalCount} complete`;
   const setupHref = status.setupAgentId
     ? `/agents/setup?agentId=${encodeURIComponent(status.setupAgentId)}`
     : "/agents/setup";
@@ -75,7 +87,7 @@ function AgentsSetupActivationBanner({
           <span>Setup activation</span>
           <strong>{status.title}</strong>
         </div>
-        <span className="agents-table-count">{status.completedCount}/{status.totalCount} complete</span>
+        <span className="agents-table-count">{completionLabel}</span>
       </div>
       <div className="agents-setup-banner-body">
         <div className="agents-setup-banner-copy">
@@ -172,7 +184,7 @@ export default function AgentsPage() {
   );
   const sourceSummary = lifecycleData?.source_summary;
   const bypassCoverageAvailable = Boolean(
-    (sourceSummary?.connected_feeds ?? 0) > 0 || (sourceSummary?.successful_pollers ?? 0) > 0,
+    (sourceSummary?.successful_pollers ?? 0) > 0,
   );
   const fleet = useMemo(() => buildFleetView({
     profiles,
@@ -236,7 +248,7 @@ export default function AgentsPage() {
       {!setupStatus.complete ? (
         <AgentsSetupActivationBanner
           status={setupStatus}
-          runnerNeedsRecovery={fleet.runners.total > 0 && fleet.runners.online === 0}
+          runnerNeedsRecovery={fleet.totals.awaitingRunner > 0 && fleet.runners.online === 0}
         />
       ) : null}
       <UnmanagedAgentsNotice

@@ -395,6 +395,17 @@ describe("agent fleet foundation", () => {
     expect(view.totals.telemetryOnly).toBe(1);
   });
 
+  it("marks placeholder agent names as unidentified runtime identities", () => {
+    const view = buildFleetView({
+      profiles: [profile({ display_name: "unknown-agent", slug: "unknown-agent" })],
+    });
+
+    expect(view.rows[0]).toMatchObject({
+      agentName: "unknown-agent",
+      identityKnown: false,
+    });
+  });
+
   it("summarizes runners and attempts without inventing per-agent links", () => {
     const view = buildFleetView({
       profiles: [profile()],

@@ -10,6 +10,7 @@ import type {
   ToolRegistryResponse,
 } from "@/lib/api";
 import {
+  agentIdentityKnown,
   buildFleetView,
   type AgentFleetAttemptSummary,
   type AgentFleetRow,
@@ -190,6 +191,7 @@ function fallbackRow(profile: AgentProfileResponse, bypassCoverageAvailable: boo
     id: `profile:${profile.id}`,
     kind: "profile",
     agentName: profile.display_name,
+    identityKnown: agentIdentityKnown(profile.display_name),
     profile,
     telemetryNames: [],
     aliases: [profile.id, profile.slug, profile.display_name],

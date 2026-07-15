@@ -100,6 +100,7 @@ export type AgentFleetRow = {
   id: string;
   kind: AgentFleetRowKind;
   agentName: string;
+  identityKnown: boolean;
   profile: AgentProfileResponse | null;
   telemetryNames: string[];
   aliases: string[];
@@ -160,6 +161,7 @@ export type BuildAgentFleetInput = {
 
 type MutableFleetRow = Omit<
   AgentFleetRow,
+  | "identityKnown"
   | "status"
   | "statusLabel"
   | "tone"
@@ -180,6 +182,20 @@ type MutableFleetRow = Omit<
 
 function normalizeAgentToken(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+const UNKNOWN_AGENT_TOKENS = new Set([
+  "",
+  "unknown",
+  "unknown agent",
+  "unknown-agent",
+  "unknown_agent",
+  "unidentified",
+  "unidentified runtime",
+]);
+
+export function agentIdentityKnown(value: string | null | undefined): boolean {
+  return !UNKNOWN_AGENT_TOKENS.has(normalizeAgentToken(value));
 }
 
 function slugAgentToken(value: string | null | undefined): string {
@@ -526,6 +542,7 @@ function finalizeRow(
     id: row.id,
     kind: row.kind,
     agentName: row.agentName,
+    identityKnown: agentIdentityKnown(row.agentName),
     profile: row.profile,
     telemetryNames: [...row.telemetrySet].sort(),
     aliases: [...row.aliasSet].sort(),
