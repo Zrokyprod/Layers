@@ -314,7 +314,7 @@ function OutcomeFeed({
                 <em>{row.detail}</em>
               </span>
               <span className="outcomes-row-side">
-                <span>{row.amountLabel}</span>
+                {row.check.amount_usd != null ? <span>{row.amountLabel}</span> : null}
                 <small>{timeSince(row.checkedAt)}</small>
               </span>
             </button>

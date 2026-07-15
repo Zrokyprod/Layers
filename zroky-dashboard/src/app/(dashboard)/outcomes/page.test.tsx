@@ -304,6 +304,9 @@ describe("OutcomesPage", () => {
     expect(screen.getByRole("region", { name: "Selected outcome check" })).toBeInTheDocument();
     expect(screen.getAllByText("Refund id rf_999").length).toBeGreaterThan(0);
     expect(screen.getByText("refund-agent / Refund")).toBeInTheDocument();
+    const amountlessRow = screen.getAllByText("Email customer@example.com")[0]?.closest("button");
+    expect(amountlessRow).not.toBeNull();
+    expect(within(amountlessRow as HTMLElement).queryByText("-")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Mismatch response case" })).toBeInTheDocument();
     expect(screen.getByText("Needs an operator")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create corrective action" }).getAttribute("href")).toBe(
