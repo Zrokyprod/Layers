@@ -54,6 +54,26 @@ type JsonGroup = {
   value: unknown;
 };
 
+function evidencePackVerification(pack: RuntimePolicyEvidencePackResponse): {
+  label: string;
+  tone: StatusTone;
+  value: string;
+} {
+  const executionPrevented = ["blocked", "rejected", "expired"].includes(pack.decision.status);
+  if (executionPrevented && pack.verification_status === "not_verified") {
+    return {
+      label: "Verification not required",
+      tone: "neutral",
+      value: "not_required",
+    };
+  }
+  return {
+    label: statusLabel(pack.verification_status),
+    tone: statusTone(pack.verification_status),
+    value: pack.verification_status,
+  };
+}
+
 function recordFrom(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -300,6 +320,7 @@ function RuntimePolicyEvidencePackView({
   title?: string;
   mode: EvidencePackMode;
 }) {
+  const verification = evidencePackVerification(pack);
   const decisionTitle =
     title ??
     (typeof pack.decision.intended_action.summary === "string" && pack.decision.intended_action.summary.trim()
@@ -383,9 +404,9 @@ function RuntimePolicyEvidencePackView({
           ) : null}
         </div>
         <StatusPill
-          value={pack.verification_status}
-          label={statusLabel(pack.verification_status)}
-          tone={statusTone(pack.verification_status)}
+          value={verification.value}
+          label={verification.label}
+          tone={verification.tone}
         />
       </header>
 
