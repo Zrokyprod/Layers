@@ -21519,8 +21519,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 14px;
   min-width: 0;
   padding: 16px;
-  border-color: rgba(47, 95, 102, 0.16);
+  border-color: rgba(47, 95, 102, 0.2);
   background: #ffffff;
+  box-shadow: 0 10px 28px rgba(24, 33, 31, 0.06), inset 0 2px 0 rgba(47, 95, 102, 0.55);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-loading {
@@ -21587,6 +21588,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 8px 16px;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-interval {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(47, 95, 102, 0.14);
+  border-radius: 6px;
+  background: rgba(47, 95, 102, 0.055);
+  color: #2f5f66 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-legend > span {
   display: inline-flex;
   align-items: center;
@@ -21623,9 +21633,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(47, 95, 102, 0.14);
+  border: 1px solid rgba(47, 95, 102, 0.16);
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(47, 95, 102, 0.035), rgba(255, 255, 255, 0) 48%), #ffffff;
+  background: linear-gradient(180deg, rgba(47, 95, 102, 0.055), rgba(255, 255, 255, 0) 54%), #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-health-chart svg {
@@ -21652,6 +21663,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   text-anchor: middle;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-health-x-axis[data-current="true"] {
+  fill: #2f5f66;
+  font-weight: 780;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-health-y-axis {
   text-anchor: end;
 }
@@ -21667,6 +21683,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   stroke-linejoin: round;
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-series-line[data-series="actions"] {
+  filter: url("#agent-line-glow");
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-series-line[data-series="completed"] {
@@ -21700,10 +21720,21 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   cursor: crosshair;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-focus-band {
+  fill: rgba(47, 95, 102, 0.055);
+  stroke: rgba(47, 95, 102, 0.08);
+  stroke-width: 1;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip > line {
   stroke: rgba(47, 95, 102, 0.32);
   stroke-width: 1;
   stroke-dasharray: 3 4;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip > .mc-agent-chart-tooltip-divider {
+  stroke: rgba(47, 95, 102, 0.12);
+  stroke-dasharray: none;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip rect {
@@ -21723,6 +21754,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip text[data-row="title"] {
   fill: var(--mc-text);
   font-weight: 740;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-tooltip text[data-row="range"] {
+  fill: var(--mc-text-tertiary);
+  font-size: 8px;
+  font-weight: 600;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-agent-chart-meta {

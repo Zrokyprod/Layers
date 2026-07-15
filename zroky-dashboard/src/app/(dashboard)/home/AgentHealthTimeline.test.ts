@@ -37,23 +37,27 @@ function intent(createdAt: string): ActionIntentResponse {
 }
 
 describe("buildAgentHealthBuckets", () => {
-  it("uses eight three-hour points for the last 24 hours", () => {
+  it("uses twelve two-hour points for the last 24 hours", () => {
     const buckets = series({
       windowDays: 1,
       windowStart: "2026-07-14T09:00:00.000Z",
       generatedAt: "2026-07-15T09:00:00.000Z",
     });
 
-    expect(buckets).toHaveLength(8);
+    expect(buckets).toHaveLength(12);
     expect(buckets.map((bucket) => bucket.axisLabel)).toEqual([
-      "9:00 AM",
-      "12:00 PM",
-      "3:00 PM",
-      "6:00 PM",
-      "9:00 PM",
-      "12:00 AM",
-      "3:00 AM",
-      "6:00 AM",
+      "11 AM",
+      "1 PM",
+      "3 PM",
+      "5 PM",
+      "7 PM",
+      "9 PM",
+      "11 PM",
+      "1 AM",
+      "3 AM",
+      "5 AM",
+      "7 AM",
+      "9 AM",
     ]);
   });
 
@@ -65,7 +69,7 @@ describe("buildAgentHealthBuckets", () => {
       intents: [intent("2026-07-11T02:30:00.000Z")],
     });
 
-    expect(buckets).toHaveLength(8);
+    expect(buckets).toHaveLength(7);
     expect(buckets.find((bucket) => bucket.protectedActions === 1)?.axisLabel).toBe("Jul 11");
   });
 
@@ -77,7 +81,19 @@ describe("buildAgentHealthBuckets", () => {
     });
 
     expect(buckets).toHaveLength(7);
-    expect(buckets[0].axisLabel).toBe("Jul 1");
-    expect(buckets[0].label).toBe("Jul 1 - Jul 3");
+    expect(buckets[0].axisLabel).toBe("Jul 3");
+    expect(buckets[0].label).toBe("Jul 1, 9 AM - Jul 3, 9 AM UTC");
+  });
+
+  it("uses ten three-day buckets for a thirty-day window", () => {
+    const buckets = series({
+      windowDays: 30,
+      windowStart: "2026-06-15T09:00:00.000Z",
+      generatedAt: "2026-07-15T09:00:00.000Z",
+    });
+
+    expect(buckets).toHaveLength(10);
+    expect(buckets[0].axisLabel).toBe("Jun 18");
+    expect(buckets[9].axisLabel).toBe("Jul 15");
   });
 });
