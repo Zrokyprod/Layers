@@ -6,24 +6,15 @@ import { StatusPill } from "@/components/status-pill";
 import type { ApprovalQueueFilter, ApprovalQueueRow } from "@/lib/approval-queue";
 import { formatDateTime, timeUntil } from "@/lib/format";
 
-const FILTERS: Array<{ id: ApprovalQueueFilter; label: string }> = [
-  { id: "pending", label: "Pending" },
-  { id: "stopped", label: "Stopped" },
-  { id: "approved", label: "Approved" },
-  { id: "all", label: "All" },
-];
-
 type ApprovalQueueProps = {
   rows: ApprovalQueueRow[];
   selectedId: string | null;
   filter: ApprovalQueueFilter;
-  onFilterChange: (filter: ApprovalQueueFilter) => void;
   onSelect: (id: string) => void;
 };
 
 export function ApprovalQueue({
   filter,
-  onFilterChange,
   onSelect,
   rows,
   selectedId,
@@ -41,21 +32,7 @@ export function ApprovalQueue({
           <span className="approval-v2-eyebrow">{panelLabel}</span>
           <strong>{countLabel}</strong>
         </div>
-        <span className="approval-v2-live">{isApprovalQueue ? "live" : "audit"}</span>
-      </div>
-
-      <div className="approval-v2-filter-group" aria-label="Approval filters">
-        {FILTERS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`approval-v2-filter-chip${filter === item.id ? " is-active" : ""}`}
-            aria-pressed={filter === item.id}
-            onClick={() => onFilterChange(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+        <span className="approval-v2-live">{isApprovalQueue ? "live" : "history"}</span>
       </div>
 
       <div className="approval-v2-queue-list">

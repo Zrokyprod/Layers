@@ -48,7 +48,7 @@ function heroState({
 }): HeroState {
   if (error) {
     return {
-      title: "Approval state unavailable",
+      title: "Approval control",
       copy: "The runtime gate did not refresh cleanly. Keep high-risk decisions conservative until it recovers.",
       pill: "refresh failed",
       tone: "danger",
@@ -56,7 +56,7 @@ function heroState({
   }
   if (loading) {
     return {
-      title: "Loading runtime gate",
+      title: "Approval control",
       copy: "Fetching held actions, mandate hits, approval audit, linked action intents, and compact evidence.",
       pill: "loading",
       tone: "neutral",
@@ -65,7 +65,7 @@ function heroState({
   if (pending > 0) {
     const actionCopy = pending === 1 ? "1 action requires" : `${pending} actions require`;
     return {
-      title: "Risky actions held before commit",
+      title: "Approval control",
       copy: `${actionCopy} a human decision before Zroky releases execution.`,
       pill: `${pending} held`,
       tone: "warning",
@@ -73,7 +73,7 @@ function heroState({
   }
   if (damageStopped > 0) {
     return {
-      title: "Unsafe action stopped",
+      title: "Approval control",
       copy: `${damageStopped} blocked, rejected, or expired decision${damageStopped === 1 ? "" : "s"} ${damageStopped === 1 ? "remains" : "remain"} preserved with audit evidence.`,
       pill: `${damageStopped} stopped`,
       tone: "danger",
@@ -81,14 +81,14 @@ function heroState({
   }
   if (total > 0) {
     return {
-      title: "Actions controlled and proved",
+      title: "Approval control",
       copy: "Resolved approval decisions remain linked to intent, mandate, audit trail, and evidence.",
       pill: `${total} audited`,
       tone: "success",
     };
   }
   return {
-    title: "Approval gate clear",
+    title: "Approval control",
     copy: "High-risk agent actions will land here before commit when policy requires human approval.",
     pill: "clear",
     tone: "neutral",
@@ -260,6 +260,9 @@ export default function RuntimeApprovalsPage() {
         approved={counts.approved}
         expiringSoon={counts.expiringSoon}
         stopped={counts.stopped}
+        total={counts.total}
+        activeFilter={filter}
+        onFilterChange={setFilter}
       />
 
       {message ? <div className="approval-v2-notice" role="status" aria-live="polite">{message}</div> : null}
@@ -292,7 +295,6 @@ export default function RuntimeApprovalsPage() {
                 rows={filteredRows}
                 selectedId={selectedRow?.id ?? null}
                 filter={filter}
-                onFilterChange={setFilter}
                 onSelect={setSelectedId}
               />
             )}
