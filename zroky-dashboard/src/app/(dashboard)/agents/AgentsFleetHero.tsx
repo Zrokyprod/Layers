@@ -70,7 +70,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean, setupIncomplete: boolea
       title: "Agents waiting for runner",
       body: `${formatCount(fleet.totals.awaitingRunner)} authorized action${fleet.totals.awaitingRunner === 1 ? " has" : "s have"} no healthy protected runner attempt yet.`,
       cta: "Restore runner",
-      ctaHref: "/actions?filter=awaiting_runner",
+      ctaHref: "/agents/setup",
     };
   }
   if (fleet.totals.sequenceRisk > 0) {
@@ -139,7 +139,7 @@ export function AgentsFleetHero({
       ? "Plan cap reached."
       : "Managed AgentProfile capacity.";
   const addDisabled = fleet.meter.reached || loading;
-  const showPrimaryAction = !setupIncomplete || [
+  const showPrimaryAction = fleet.meter.reached || !setupIncomplete || [
     fleet.totals.bypassed,
     fleet.totals.mismatched,
     fleet.totals.held,
@@ -174,9 +174,9 @@ export function AgentsFleetHero({
           <>
             {showPrimaryAction ? (
               fleet.meter.reached ? (
-                <DashboardButton disabled icon={<Lock />} title="Plan cap reached" variant="soft">
-                  Upgrade to add agents
-                </DashboardButton>
+                <DashboardButtonLink href="/settings/billing" icon={<Lock />} variant="soft">
+                  Review plan
+                </DashboardButtonLink>
               ) : (
                 <DashboardButtonLink
                   aria-disabled={addDisabled || undefined}

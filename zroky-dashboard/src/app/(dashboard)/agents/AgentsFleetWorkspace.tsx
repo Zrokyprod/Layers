@@ -22,6 +22,10 @@ function setupHrefForAgent(agentName: string) {
   return `/agents/setup?agentName=${encodeURIComponent(agentName)}`;
 }
 
+function displayAgentName(row: AgentFleetRow): string {
+  return row.identityKnown ? row.agentName : "Unidentified runtime";
+}
+
 function runtimeLabel(row: AgentFleetRow): string {
   if (row.kind === "telemetry") return "Telemetry-only / unmanaged";
   const framework = humanize(row.profile?.framework, "Custom runtime");
@@ -35,7 +39,8 @@ function coverageValue(row: AgentFleetRow): string {
 }
 
 function reviewCount(row: AgentFleetRow): number {
-  return row.riskSignals.bypassed
+  return (row.identityKnown ? 0 : 1)
+    + row.riskSignals.bypassed
     + row.riskSignals.sequenceRisk
     + row.actionRollup.mismatched
     + row.actionRollup.held
@@ -98,7 +103,7 @@ function AgentFleetList({
             </span>
             <span className="agents-agent-card-main">
               <span className="agents-agent-card-title">
-                <strong>{row.agentName}</strong>
+                <strong>{displayAgentName(row)}</strong>
                 <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} />
               </span>
               <span>{runtimeLabel(row)}</span>
@@ -108,7 +113,7 @@ function AgentFleetList({
                 <small>{row.latestActivityAt ? timeSince(row.latestActivityAt) : "No activity"}</small>
               </span>
             </span>
-            <span className="agents-agent-card-metrics" aria-label={`${row.agentName} control summary`}>
+            <span className="agents-agent-card-metrics" aria-label={`${displayAgentName(row)} control summary`}>
               <span>
                 <strong>{coverageValue(row)}</strong>
                 <small>Coverage</small>
@@ -143,13 +148,19 @@ function AgentInspector({
       <div className="agents-panel-head">
         <div>
           <span>Selected agent</span>
-          <strong>{row?.agentName ?? "No agent selected"}</strong>
+          <strong>{row ? displayAgentName(row) : "No agent selected"}</strong>
         </div>
         {row ? <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /> : null}
       </div>
 
       {row ? (
         <>
+          {!row.identityKnown ? (
+            <div className="agents-identity-warning" role="note">
+              <strong>Runtime identity was not reported</strong>
+              <span>This profile uses a placeholder identity. Update its attribution before trusting future actions.</span>
+            </div>
+          ) : null}
           <div className="agents-inspector-verdict" data-tone={row.tone === "danger" || row.tone === "warning" ? "warning" : "success"}>
             <span>{row.kind === "telemetry" ? "Unmanaged identity" : "Managed profile"}</span>
             <strong>{row.statusLabel}</strong>

@@ -355,6 +355,7 @@ function mockAgents({
   staleAttempts = [] as ActionExecutionAttemptResponse[],
   mutations = [] as SourceMutationView[],
   connectedFeeds = 1,
+  successfulPollers = connectedFeeds,
 }: {
   profiles?: AgentProfileResponse[];
   activeCount?: number;
@@ -368,6 +369,7 @@ function mockAgents({
   staleAttempts?: ActionExecutionAttemptResponse[];
   mutations?: SourceMutationView[];
   connectedFeeds?: number;
+  successfulPollers?: number;
 } = {}) {
   api.getCaptureHealth.mockResolvedValue(captureHealth());
   api.listAgentProfiles.mockResolvedValue({
@@ -430,7 +432,7 @@ function mockAgents({
         unknown_actor: 0,
         unreceipted: mutations.length,
         connected_feeds: connectedFeeds,
-        successful_pollers: connectedFeeds,
+        successful_pollers: successfulPollers,
       },
       mutations,
       attempts,
@@ -475,6 +477,21 @@ describe("AgentsPage", () => {
     );
   });
 
+  it("surfaces placeholder profiles as unidentified runtime attribution", async () => {
+    mockAgents({
+      profiles: [profile({ display_name: "unknown-agent", slug: "unknown-agent" })],
+    });
+
+    renderAgentsPage();
+
+    const fleet = await screen.findByLabelText("Agent fleet");
+    expect(within(fleet).getByText("Unidentified runtime")).toBeInTheDocument();
+    expect(within(fleet).queryByText("unknown-agent")).toBeNull();
+    const inspector = screen.getByLabelText("Selected agent control");
+    expect(within(inspector).getByText("Runtime identity was not reported")).toBeInTheDocument();
+    expect(within(inspector).getByText(/placeholder identity/i)).toBeInTheDocument();
+  });
+
   it("locks add-agent when the backend plan meter is reached", async () => {
     mockAgents({ profiles: [setupPolicyProfile()], activeCount: 1, cap: 1, limitReached: true });
 
@@ -485,6 +502,7 @@ describe("AgentsPage", () => {
       expect(document.querySelector('a[href="/agents/setup?agentId=agent_profile_inventory"]')).not.toBeNull();
     });
     expect(screen.getByText("Plan cap reached.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review plan" }).getAttribute("href")).toBe("/settings/billing");
     expect(screen.queryByRole("button", { name: /^Add agent$/i })).toBeNull();
   });
 
@@ -522,6 +540,16 @@ describe("AgentsPage", () => {
     expect(within(fleet).getByText("Bypass feed not connected")).toBeInTheDocument();
   });
 
+  it("does not claim coverage before a configured source feed completes its first sync", async () => {
+    mockAgents({ connectedFeeds: 1, successfulPollers: 0 });
+
+    renderAgentsPage();
+
+    const metrics = await screen.findByRole("region", { name: "Agent fleet summary" });
+    expect(within(metrics).getAllByText("Not covered")).toHaveLength(2);
+    expect(within(metrics).queryByText("100%")).toBeNull();
+  });
+
   it("makes runner unavailability the primary state for authorized actions", async () => {
     mockAgents({
       intents: [intent({ proof_status: "not_started", receipt_status: "missing" })],
@@ -534,13 +562,29 @@ describe("AgentsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Agents waiting for runner", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Restore runner" }).getAttribute("href")).toBe(
-      "/actions?filter=awaiting_runner",
+      "/agents/setup",
     );
+    expect(screen.getByText("Restore protected runner")).toBeInTheDocument();
+    expect(screen.getByText(/configured; runner offline/i)).toBeInTheDocument();
     const fleet = screen.getByLabelText("Agent fleet");
     expect(within(fleet).getByText("Runner unavailable")).toBeInTheDocument();
     expect(within(fleet).getByText("0 / 1")).toBeInTheDocument();
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getAllByText("Awaiting runner").length).toBeGreaterThan(0);
+  });
+
+  it("shows runner recovery when no runner has been registered", async () => {
+    mockAgents({
+      intents: [intent({ proof_status: "not_started", receipt_status: "missing" })],
+      outcomes: [],
+      attempts: [],
+      runners: [],
+    });
+
+    renderAgentsPage();
+
+    expect(await screen.findByText("Restore protected runner")).toBeInTheDocument();
+    expect(screen.getByText(/configured; runner offline/i)).toBeInTheDocument();
   });
 
   it("shows unavailable only when the core profile feed fails", async () => {
