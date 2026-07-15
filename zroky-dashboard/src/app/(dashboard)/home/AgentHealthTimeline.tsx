@@ -25,6 +25,7 @@ type ActivitySeriesInput = {
 
 export type AgentHealthBucket = {
   id: string;
+  axisLabel: string;
   label: string;
   protectedActions: number;
   completed: number;
@@ -46,13 +47,15 @@ type ChartPoint = {
 };
 
 const CHART_WIDTH = 960;
-const CHART_HEIGHT = 270;
+const CHART_HEIGHT = 220;
 const CHART_PAD = {
-  top: 28,
+  top: 24,
   right: 24,
-  bottom: 42,
+  bottom: 38,
   left: 42,
 };
+
+const MS_PER_DAY = 86_400_000;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -65,22 +68,72 @@ function parseTime(value: string | null | undefined): number | null {
 }
 
 function bucketCount(windowDays: number): number {
-  if (windowDays <= 7) return Math.max(1, windowDays);
+  if (windowDays <= 1) return 8;
+  if (windowDays <= 7) return 7;
   if (windowDays <= 14) return 7;
   if (windowDays <= 31) return 10;
   return 12;
 }
 
-function bucketLabel(startMs: number, endMs: number, windowDays: number): string {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-  if (windowDays <= 14) {
-    return formatter.format(new Date(startMs));
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "UTC",
+});
+
+function bucketLabels(startMs: number, endMs: number, windowDays: number): Pick<AgentHealthBucket, "axisLabel" | "label"> {
+  const safeEndMs = Math.max(startMs, endMs - 1);
+  if (windowDays <= 1) {
+    return {
+      axisLabel: timeFormatter.format(new Date(startMs)),
+      label: `${dateFormatter.format(new Date(startMs))}, ${timeFormatter.format(new Date(startMs))} - ${timeFormatter.format(new Date(safeEndMs))} UTC`,
+    };
   }
-  return `${formatter.format(new Date(startMs))} - ${formatter.format(new Date(endMs - 1))}`;
+  if (windowDays <= 7) {
+    const label = dateFormatter.format(new Date(startMs));
+    return { axisLabel: label, label };
+  }
+  return {
+    axisLabel: dateFormatter.format(new Date(startMs)),
+    label: `${dateFormatter.format(new Date(startMs))} - ${dateFormatter.format(new Date(safeEndMs))}`,
+  };
+}
+
+function nextUtcMidnight(time: number): number {
+  const date = new Date(time);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+}
+
+function bucketBoundaries(startMs: number, endMs: number, windowDays: number): number[] {
+  if (windowDays <= 7 && windowDays > 1) {
+    const boundaries = [startMs];
+    let boundary = nextUtcMidnight(startMs);
+    while (boundary < endMs) {
+      boundaries.push(boundary);
+      boundary += MS_PER_DAY;
+    }
+    boundaries.push(endMs);
+    return boundaries;
+  }
+
+  const count = bucketCount(windowDays);
+  const spanMs = Math.max(1, endMs - startMs);
+  return Array.from({ length: count + 1 }, (_, index) => startMs + (spanMs * index) / count);
+}
+
+function bucketIndexFor(time: number, boundaries: number[]): number | null {
+  if (time < boundaries[0] || time > boundaries[boundaries.length - 1]) return null;
+  if (time === boundaries[boundaries.length - 1]) return boundaries.length - 2;
+  const index = boundaries.findIndex((boundary, boundaryIndex) => (
+    boundaryIndex < boundaries.length - 1 && time >= boundary && time < boundaries[boundaryIndex + 1]
+  ));
+  return index >= 0 ? index : null;
 }
 
 function hasSequenceRisk(decision: RuntimePolicyDecisionResponse): boolean {
@@ -91,11 +144,6 @@ function hasSequenceRisk(decision: RuntimePolicyDecisionResponse): boolean {
 
 function riskMutation(mutation: SourceMutationView): boolean {
   return ["policy_bypass", "unmanaged_agent_action", "unknown_actor"].includes(mutation.classification);
-}
-
-function bucketIndexFor(time: number, startMs: number, spanMs: number, count: number): number | null {
-  if (time < startMs || time > startMs + spanMs) return null;
-  return clamp(Math.floor(((time - startMs) / spanMs) * count), 0, count - 1);
 }
 
 function isCompletedIntent(intent: ActionIntentResponse): boolean {
@@ -118,12 +166,10 @@ function attentionWork(bucket: Pick<AgentHealthBucket, "holds" | "riskSignals" |
 export function buildAgentHealthBuckets(input: ActivitySeriesInput): AgentHealthBucket[] {
   const endMs = parseTime(input.generatedAt) ?? Date.now();
   const startMs = parseTime(input.windowStart) ?? endMs - input.windowDays * 86_400_000;
-  const spanMs = Math.max(1, endMs - startMs);
-  const count = bucketCount(input.windowDays);
-  const bucketSpan = spanMs / count;
-  const buckets = Array.from({ length: count }, (_, index) => ({
+  const boundaries = bucketBoundaries(startMs, endMs, input.windowDays);
+  const buckets = Array.from({ length: boundaries.length - 1 }, (_, index) => ({
     id: `activity-${index}`,
-    label: bucketLabel(startMs + bucketSpan * index, startMs + bucketSpan * (index + 1), input.windowDays),
+    ...bucketLabels(boundaries[index], boundaries[index + 1], input.windowDays),
     protectedActions: 0,
     completed: 0,
     holds: 0,
@@ -137,7 +183,7 @@ export function buildAgentHealthBuckets(input: ActivitySeriesInput): AgentHealth
   const bump = (timeValue: string | null | undefined, apply: (bucket: typeof buckets[number]) => void) => {
     const time = parseTime(timeValue);
     if (time == null) return;
-    const index = bucketIndexFor(time, startMs, spanMs, count);
+    const index = bucketIndexFor(time, boundaries);
     if (index == null) return;
     apply(buckets[index]);
   };
@@ -350,10 +396,10 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
             const actionsY = yFor(bucket.protectedActions);
             const completedY = yFor(completedWork(bucket));
             const attentionY = yFor(attentionWork(bucket));
-            const showLabel = buckets.length <= 7 || index === 0 || index === buckets.length - 1 || index % 2 === 0;
+            const showLabel = buckets.length <= 8 || index === 0 || index === buckets.length - 1 || index % 2 === 0;
             return (
               <g key={bucket.id}>
-                {showLabel ? <text className="mc-health-axis mc-health-x-axis" x={x} y={CHART_HEIGHT - 12}>{bucket.label}</text> : null}
+                {showLabel ? <text className="mc-health-axis mc-health-x-axis" x={x} y={CHART_HEIGHT - 10}>{bucket.axisLabel}</text> : null}
                 <circle className="mc-agent-series-dot" data-series="actions" cx={x} cy={actionsY} r={activeIndex === index ? 5 : 3.5} />
                 <circle className="mc-agent-series-dot" data-series="completed" cx={x} cy={completedY} r={activeIndex === index ? 4.5 : 3} />
                 <circle className="mc-agent-series-dot" data-series="attention" cx={x} cy={attentionY} r={activeIndex === index ? 4.5 : 3} />

@@ -21632,7 +21632,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: block;
   width: 100%;
   height: auto;
-  min-height: 230px;
+  min-height: 190px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-health-grid-line {

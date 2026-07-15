@@ -16,6 +16,8 @@ import type {
 } from "@/lib/api";
 
 type HomeActivitySectionsProps = {
+  windowStart: string;
+  generatedAt: string;
   intents: ActionIntentResponse[];
   approvals: RuntimePolicyDecisionResponse[];
   outcomes: OutcomeReconciliationView[];
@@ -39,6 +41,15 @@ function byRecent<T extends { created_at?: string | null; checked_at?: string | 
     const bTime = new Date(b.checked_at ?? b.created_at ?? 0).getTime();
     return bTime - aTime;
   });
+}
+
+function inTimeframe(value: string | null | undefined, windowStart: string, generatedAt: string): boolean {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  const start = new Date(windowStart).getTime();
+  const end = new Date(generatedAt).getTime();
+  if (![time, start, end].every(Number.isFinite)) return true;
+  return time >= start && time <= end;
 }
 
 function approvalTitle(approval: RuntimePolicyDecisionResponse): string {
@@ -133,6 +144,8 @@ function ActivityList({
 }
 
 export function HomeActivitySections({
+  windowStart,
+  generatedAt,
   intents,
   approvals,
   outcomes,
@@ -150,7 +163,10 @@ export function HomeActivitySections({
       .filter((row) => row.actionId)
       .map((row) => [row.actionId, row]),
   );
-  const protectedActions = byRecent(intents).slice(0, 4).map((intent): ActivityRow => {
+  const protectedActions = byRecent(intents)
+    .filter((intent) => inTimeframe(intent.created_at, windowStart, generatedAt))
+    .slice(0, 4)
+    .map((intent): ActivityRow => {
     const lifecycle = lifecycleByActionId.get(intent.action_id);
     return {
       id: intent.action_id,
@@ -161,8 +177,11 @@ export function HomeActivitySections({
       href: `/actions?action_id=${encodeURIComponent(intent.action_id)}`,
       createdAt: intent.created_at,
     };
-  });
-  const recentApprovals = byRecent(approvals).slice(0, 4).map((approval): ActivityRow => ({
+    });
+  const recentApprovals = byRecent(approvals)
+    .filter((approval) => inTimeframe(approval.created_at, windowStart, generatedAt))
+    .slice(0, 4)
+    .map((approval): ActivityRow => ({
     id: approval.id,
     title: approvalTitle(approval),
     meta: approval.agent_name ?? humanize(approval.action_type) ?? "Approval",
@@ -170,8 +189,11 @@ export function HomeActivitySections({
     tone: approvalTone(approval),
     href: `/approvals?decision_id=${encodeURIComponent(approval.id)}`,
     createdAt: approval.created_at,
-  }));
-  const proofChecks = byRecent(outcomes).slice(0, 4).map((outcome): ActivityRow => ({
+    }));
+  const proofChecks = byRecent(outcomes)
+    .filter((outcome) => inTimeframe(outcome.checked_at ?? outcome.created_at, windowStart, generatedAt))
+    .slice(0, 4)
+    .map((outcome): ActivityRow => ({
     id: outcome.id,
     title: outcome.system_ref ?? humanize(outcome.action_type) ?? "Outcome check",
     meta: outcome.reason ? humanize(outcome.reason) : humanize(outcome.connector_type),
@@ -179,7 +201,7 @@ export function HomeActivitySections({
     tone: outcomeTone(outcome),
     href: `/outcomes?check_id=${encodeURIComponent(outcome.id)}`,
     createdAt: outcome.checked_at ?? outcome.created_at,
-  }));
+    }));
 
   return (
     <div className="mc-activity-grid" aria-label="Recent Home activity">
@@ -189,7 +211,7 @@ export function HomeActivitySections({
         href="/actions"
         icon={<ShieldCheck size={16} />}
         rows={protectedActions}
-        empty="No protected actions yet."
+        empty="No protected actions in this timeframe."
         loading={loading}
       />
       <ActivityList
@@ -198,7 +220,7 @@ export function HomeActivitySections({
         href="/approvals"
         icon={<ClipboardCheck size={16} />}
         rows={recentApprovals}
-        empty="No approval activity yet."
+        empty="No approval activity in this timeframe."
         loading={loading}
       />
       <ActivityList
@@ -207,7 +229,7 @@ export function HomeActivitySections({
         href="/outcomes"
         icon={<CheckCircle2 size={16} />}
         rows={proofChecks}
-        empty="No proof checks yet."
+        empty="No proof checks in this timeframe."
         loading={loading}
       />
     </div>
