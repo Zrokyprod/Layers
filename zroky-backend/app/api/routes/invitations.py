@@ -13,7 +13,13 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.authorization import require_project_role
 from app.api.dependencies.tenant import require_tenant_context, TenantContext
 from app.core.limiter import limiter
-from app.db.models import Project, ProjectInvitation, User
+from app.db.models import (
+    Project,
+    ProjectInvitation,
+    ProjectMembership,
+    User,
+    compute_email_hash,
+)
 from app.db.session import get_db_session
 from app.schemas.invitation import (
     AcceptInvitationRequest,
@@ -68,12 +74,29 @@ def create_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
     normalized_role = normalize_project_role(body.role)
+    normalized_email = body.email.strip().lower()
+
+    existing_member = db.execute(
+        select(ProjectMembership.id)
+        .join(User, User.id == ProjectMembership.user_id)
+        .where(
+            ProjectMembership.project_id == project_id,
+            ProjectMembership.is_active.is_(True),
+            User.is_active.is_(True),
+            User.email_hash == compute_email_hash(normalized_email),
+        )
+    ).scalar_one_or_none()
+    if existing_member is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This user is already an active project member.",
+        )
 
     # Prevent duplicate pending invitations
     existing = db.execute(
         select(ProjectInvitation).where(
             ProjectInvitation.project_id == project_id,
-            ProjectInvitation.email == body.email.strip().lower(),
+            ProjectInvitation.email == normalized_email,
             ProjectInvitation.accepted_at.is_(None),
             ProjectInvitation.revoked_at.is_(None),
         )
@@ -90,7 +113,7 @@ def create_invitation(
 
     invitation = ProjectInvitation(
         project_id=project_id,
-        email=body.email.strip().lower(),
+        email=normalized_email,
         role=normalized_role,
         invited_by_subject=context.subject or "unknown",
         token_hash=token_hash,
