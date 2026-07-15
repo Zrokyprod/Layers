@@ -142,16 +142,16 @@ function decisionSummary(row: ApprovalQueueRow): { eyebrow: string; title: strin
   const resolutionReason = row.decision.resolution_reason ? humanize(row.decision.resolution_reason) : null;
   if (row.status === "approved") {
     return {
-      eyebrow: "Why it was released",
-      title: "Human approval completed",
-      reasons: [...new Set([resolutionReason, ...policyReasons].filter((reason): reason is string => Boolean(reason)))],
+      eyebrow: "Decision reason",
+      title: "Approved by reviewer",
+      reasons: [resolutionReason ?? "A project reviewer approved this action."],
     };
   }
   if (row.status === "rejected") {
     return {
-      eyebrow: "Why the reviewer stopped it",
+      eyebrow: "Reviewer reason",
       title: "Rejected by reviewer",
-      reasons: [...new Set([resolutionReason, ...policyReasons].filter((reason): reason is string => Boolean(reason)))],
+      reasons: [resolutionReason ?? "A project reviewer rejected this action."],
     };
   }
   if (row.status === "expired") {
@@ -415,47 +415,15 @@ export function ApprovalInspector({
   const recorded = recordedApprovals(row);
   const remaining = Math.max(0, required - recorded);
   const approvalCopy = required > 1 ? `${recorded}/${required} approvals recorded` : row.approvalProgress;
-  const consoleState = isPendingDecision
-    ? {
-        title: "Decision required",
-        copy: "A reason is required. The decision is bound to this exact action and intent digest.",
-        progress: remaining > 1 ? `${recorded}/${required} approvals complete` : "Final decision required",
-        previewLabel: remaining > 1 ? "This records one approval" : "Approval will release",
-        previewCopy: remaining > 1
-          ? `This records approval ${recorded + 1} of ${required}. Execution remains held until distinct approvers complete the chain.`
-          : "Approval authorizes this exact action to continue through the protected execution flow.",
-      }
-    : row.status === "approved"
-      ? {
-          title: "Approval completed",
-          copy: "This decision is locked and preserved with the approver, reason, and evidence.",
-          progress: `${recorded}/${required} approvals complete`,
-          previewLabel: "Approved action",
-          previewCopy: "The exact action was released to the protected execution flow. Execution and verification remain separate stages.",
-        }
-      : row.status === "rejected"
-        ? {
-            title: "Rejected by reviewer",
-            copy: "This decision is locked and the action cannot execute from this approval.",
-            progress: "Human rejection",
-            previewLabel: "Action rejected",
-            previewCopy: "The reviewer kept this exact action from reaching execution.",
-          }
-        : row.status === "expired"
-          ? {
-              title: "Approval expired",
-              copy: "The required approval chain did not complete before the deadline.",
-              progress: "Deadline passed",
-              previewLabel: "Action remained stopped",
-              previewCopy: "No protected execution was released from this expired approval.",
-            }
-          : {
-              title: "Blocked by policy",
-              copy: "Runtime policy denied this action before it could reach execution.",
-              progress: "Policy block",
-              previewLabel: "Action blocked",
-              previewCopy: "The runtime gate prevented this exact action from reaching a runner.",
-            };
+  const consoleState = {
+    title: "Decision required",
+    copy: "A reason is required. The decision is bound to this exact action and intent digest.",
+    progress: remaining > 1 ? `${recorded}/${required} approvals complete` : "Final decision required",
+    previewLabel: remaining > 1 ? "This records one approval" : "Approval will release",
+    previewCopy: remaining > 1
+      ? `This records approval ${recorded + 1} of ${required}. Execution remains held until distinct approvers complete the chain.`
+      : "Approval authorizes this exact action to continue through the protected execution flow.",
+  };
   const mechanismCopy = row.status === "pending_approval"
     ? "Policy requires a human decision before this exact action can execute."
     : row.status === "approved"
@@ -465,11 +433,7 @@ export function ApprovalInspector({
         : row.status === "expired"
           ? "The approval window closed before the required decision chain completed."
           : "Runtime policy denied this exact action before execution.";
-  const actionFacts: Fact[] = [
-    { label: "Action ID", value: row.actionId, mono: true },
-    { label: "Decision ID", value: row.decisionId, mono: true },
-    { label: "Digest", value: row.digest, mono: true },
-    { label: "System", value: row.systemRef, mono: true },
+  const operationalFacts: Fact[] = [
     { label: "Environment", value: row.environment },
     { label: "Operation", value: row.operationKind ? humanize(row.operationKind) : null },
     {
@@ -480,6 +444,12 @@ export function ApprovalInspector({
           : formatDateTime(row.expiresAt)
         : null,
     },
+  ];
+  const technicalFacts: Fact[] = [
+    { label: "Action ID", value: row.actionId, mono: true },
+    { label: "Decision ID", value: row.decisionId, mono: true },
+    { label: "Digest", value: row.digest, mono: true },
+    { label: "System", value: row.systemRef, mono: true },
   ];
   const decisionFacts: Fact[] = [
     { label: "Runtime decision", value: humanize(row.decision.decision) },
@@ -513,7 +483,7 @@ export function ApprovalInspector({
 
       <DecisionSummary row={row} />
 
-      <section className="approval-v2-console" aria-label="Approval decision control">
+      {isPendingDecision ? <section className="approval-v2-console" aria-label="Approval decision control">
         <div>
           <span className="approval-v2-eyebrow">Decision console</span>
           <strong>{consoleState.title}</strong>
@@ -567,7 +537,7 @@ export function ApprovalInspector({
             Admin access is required to approve or reject production actions. You can still review the decision, evidence, and audit history.
           </div>
         ) : null}
-      </section>
+      </section> : null}
 
       <OperationalHandoff row={row} />
 
@@ -615,7 +585,7 @@ export function ApprovalInspector({
                 </div>
               </section>
               <ProofChainStepper steps={row.proofChain} variant="compact" />
-              <FactGrid facts={actionFacts} />
+              <FactGrid facts={operationalFacts} />
               <section className="approval-v2-mechanism">
                 <div className="approval-v2-section-head">
                   <div>
@@ -640,7 +610,12 @@ export function ApprovalInspector({
 
           {activeTab === "audit" ? <AuditTrail row={row} /> : null}
 
-          {activeTab === "raw" ? <JsonSections sections={jsonSections} /> : null}
+          {activeTab === "raw" ? (
+            <div className="approval-v2-tab-stack">
+              <FactGrid facts={technicalFacts} />
+              <JsonSections sections={jsonSections} />
+            </div>
+          ) : null}
         </div>
       </section>
     </section>

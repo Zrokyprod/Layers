@@ -24067,29 +24067,29 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   line-height: 1.4;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter {
+  width: 100% !important;
+  border-top: 1px solid var(--mc-border) !important;
+  border-right: 1px solid var(--mc-border) !important;
+  border-bottom: 1px solid var(--mc-border) !important;
+  font: inherit !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-filter-chip {
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--mc-border);
-  border-radius: 8px;
-  background: var(--mc-card);
-  color: var(--mc-text-secondary);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter:hover {
+  transform: translateY(-1px) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .approval-v2-filter-chip.is-active {
-  border-color: var(--mc-accent);
-  background: var(--mc-accent-soft);
-  color: var(--mc-accent);
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter.is-active {
+  border-color: var(--mc-accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mc-accent) 14%, transparent), var(--mc-shadow-hover) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter:focus-visible {
+  outline: 2px solid var(--mc-accent) !important;
+  outline-offset: 2px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-list {
