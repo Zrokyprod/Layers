@@ -75,6 +75,29 @@ def test_project_invitation_create_list_duplicate_and_revoke(
         )
         auth_headers = {"Authorization": f"Bearer {token}"}
 
+        membership_response = client.post(
+            f"/v1/projects/{project_id}/memberships",
+            headers=auth_headers,
+            json={
+                "subject": owner_subject,
+                "email": "Owner@Zroky.Local",
+                "role": "owner",
+                "is_active": True,
+            },
+        )
+        assert membership_response.status_code == 200
+
+        existing_member_response = client.post(
+            f"/v1/invitations/projects/{project_id}/invitations",
+            headers=auth_headers,
+            json={"email": " owner@zroky.local ", "role": "member"},
+        )
+        assert existing_member_response.status_code == 409
+        assert (
+            existing_member_response.json()["detail"]
+            == "This user is already an active project member."
+        )
+
         create_response = client.post(
             f"/v1/invitations/projects/{project_id}/invitations",
             headers=auth_headers,
