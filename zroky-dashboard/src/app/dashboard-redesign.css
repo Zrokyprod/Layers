@@ -21668,6 +21668,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-weight: 780;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-health-x-tick {
+  stroke: rgba(47, 95, 102, 0.22);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-health-y-axis {
   text-anchor: end;
 }
