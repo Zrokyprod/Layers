@@ -231,7 +231,7 @@ function metricsForCounts(counts: EvidenceLedgerCounts): EvidenceProofMetric[] {
       value: String(counts.exportReady),
     },
     {
-      detail: "not_verified, missing, or pending",
+      detail: "not verified, missing, or pending",
       href: "/evidence?filter=needs_verification",
       label: "Needs verification",
       tone: counts.needsVerification > 0 ? "warning" : "neutral",
