@@ -342,11 +342,39 @@ describe("OutcomesPage", () => {
     renderOutcomesPage();
 
     const bypass = screen.getByRole("region", { name: "Bypass check" });
+    expect(within(metric("Bypass risk")).getByText("Not covered")).toBeInTheDocument();
     expect(within(bypass).getByRole("heading", { name: "Mutation coverage unavailable" })).toBeInTheDocument();
     expect(within(bypass).queryByRole("heading", { name: "No bypass risk detected" })).not.toBeInTheDocument();
     expect(within(bypass).getByRole("link", { name: /Connect mutation feed/ }).getAttribute("href")).toBe(
       "/integrations",
     );
+
+    Object.assign(hookState.sourceMutationSummary, previousSummary);
+    hookState.unreceiptedMutations = previousMutations;
+  });
+
+  it("does not treat a configured but unsynced mutation feed as coverage", () => {
+    const previousSummary = { ...hookState.sourceMutationSummary };
+    const previousMutations = hookState.unreceiptedMutations;
+    Object.assign(hookState.sourceMutationSummary, {
+      total: 0,
+      matched_receipt: 0,
+      authorized_external: 0,
+      legacy_path: 0,
+      unmanaged_agent_action: 0,
+      policy_bypass: 0,
+      unknown_actor: 0,
+      unreceipted: 0,
+      connected_feeds: 1,
+      successful_pollers: 0,
+    });
+    hookState.unreceiptedMutations = [];
+
+    renderOutcomesPage();
+
+    expect(within(metric("Bypass risk")).getByText("Not covered")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Bypass check" }))
+      .getByRole("heading", { name: "Mutation coverage unavailable" })).toBeInTheDocument();
 
     Object.assign(hookState.sourceMutationSummary, previousSummary);
     hookState.unreceiptedMutations = previousMutations;
