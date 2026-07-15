@@ -610,7 +610,12 @@ describe("Mission Control Home", () => {
       {
         intents: [intent()],
         approvals: [],
-        outcomes: [],
+        outcomes: [outcome({
+          id: "old_check",
+          system_ref: "old_sku",
+          checked_at: "2026-05-20T10:00:00.000Z",
+          created_at: "2026-05-20T10:00:00.000Z",
+        })],
         outcome_summary: outcomeSummary(),
         source_summary: sourceSummary(),
         mutations: [],
@@ -623,6 +628,7 @@ describe("Mission Control Home", () => {
       },
     );
     oneDaySummary.window_days = 1;
+    oneDaySummary.window_start = "2026-05-28T10:00:00.000Z";
     mockHomeData({ homeSummary: oneDaySummary });
 
     render(<HomePage />);
@@ -631,6 +637,8 @@ describe("Mission Control Home", () => {
     expect(within(proofMetrics).getByText("Last 24 hours")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Receipts generated, last 24 hours")).toBeInTheDocument();
     expect(within(proofMetrics).queryByText(/Last 1 days/i)).not.toBeInTheDocument();
+    expect(screen.getByText("No proof checks in this timeframe.")).toBeInTheDocument();
+    expect(screen.queryByText("old_sku")).not.toBeInTheDocument();
   });
 
   it("rebuilds the graph from the dashboard time window", async () => {

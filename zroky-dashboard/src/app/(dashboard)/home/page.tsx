@@ -484,6 +484,8 @@ export default function HomePage() {
           <FirstRunPanel signals={signals} open={setupDialogOpen} onOpenChange={handleSetupDialogOpenChange} />
         ) : null}
         <HomeActivitySections
+          windowStart={healthWindow.windowStart}
+          generatedAt={healthWindow.generatedAt}
           intents={data.intents}
           approvals={data.approvals}
           outcomes={data.outcomes}
