@@ -2694,13 +2694,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics strong {
-  overflow: hidden !important;
+  min-height: 2.02em !important;
+  overflow: visible !important;
   color: var(--dash-text) !important;
   font-size: 0.92rem !important;
   font-weight: 840 !important;
   line-height: 1.1 !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  overflow-wrap: anywhere !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics small {
