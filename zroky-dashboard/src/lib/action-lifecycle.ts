@@ -59,6 +59,7 @@ export type ActionLifecycleRow = {
   callId: string | null;
   title: string;
   agentName: string;
+  agentIdentityKnown: boolean;
   actionType: string;
   operationKind: string | null;
   environment: string | null;
@@ -299,6 +300,23 @@ function toLifecycleStage(view: ActionView): ActionLifecycleStage {
 
 function normalized(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
+}
+
+const UNKNOWN_AGENT_NAMES = new Set([
+  "",
+  "unknown",
+  "unknown agent",
+  "unknown-agent",
+  "unknown_agent",
+  "unidentified",
+  "unidentified runtime",
+]);
+
+function agentIdentity(value: string | null | undefined, fallback = "Unidentified runtime") {
+  const name = value?.trim() ?? "";
+  return UNKNOWN_AGENT_NAMES.has(name.toLowerCase())
+    ? { name: fallback, known: false }
+    : { name, known: true };
 }
 
 function stageForAttempt(
@@ -564,6 +582,7 @@ export function buildActionLifecycle({
       }
       return step;
     });
+    const agent = agentIdentity(view.agentName);
 
     rows.push({
       id: `action:${intent.action_id}`,
@@ -575,7 +594,8 @@ export function buildActionLifecycle({
       traceId: traceIdForIntent(intent, decision, outcome),
       callId: callIdForIntent(intent, decision, outcome),
       title: view.title,
-      agentName: view.agentName,
+      agentName: agent.name,
+      agentIdentityKnown: agent.known,
       actionType: view.actionType,
       operationKind: view.operationKind,
       environment: view.environment,
@@ -633,6 +653,7 @@ export function buildActionLifecycle({
         tone: statusTone(status),
       }),
     };
+    const agent = agentIdentity(decision.agent_name);
 
     rows.push({
       id: `decision:${decision.id}`,
@@ -644,7 +665,8 @@ export function buildActionLifecycle({
       traceId: outcome?.trace_id ?? decision.trace_id,
       callId: outcome?.call_id ?? decision.call_id,
       title: titleForDecision(decision),
-      agentName: decision.agent_name ?? "Guard-only action",
+      agentName: agent.name,
+      agentIdentityKnown: agent.known,
       actionType: humanize(decision.action_type ?? decision.tool_name),
       operationKind: null,
       environment: null,
@@ -684,6 +706,7 @@ export function buildActionLifecycle({
       continue;
     }
     const actor = [mutation.actor_type, mutation.actor_id].filter(Boolean).join(":") || "Unknown actor";
+    const actorIdentity = agentIdentity(actor, "Unidentified actor");
     rows.push({
       id: `mutation:${mutation.id}`,
       kind: "bypass_mutation",
@@ -694,7 +717,8 @@ export function buildActionLifecycle({
       traceId: null,
       callId: null,
       title: titleForMutation(mutation),
-      agentName: actor,
+      agentName: actorIdentity.name,
+      agentIdentityKnown: actorIdentity.known,
       actionType: humanize(mutation.action_type ?? mutation.resource_type, "Source mutation"),
       operationKind: null,
       environment: null,
