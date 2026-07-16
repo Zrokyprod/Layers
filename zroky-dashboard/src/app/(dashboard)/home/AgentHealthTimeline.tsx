@@ -49,9 +49,9 @@ type ChartPoint = {
 };
 
 const CHART_WIDTH = 960;
-const CHART_HEIGHT = 220;
+const CHART_HEIGHT = 270;
 const CHART_PAD = {
-  top: 24,
+  top: 64,
   right: 24,
   bottom: 38,
   left: 42,
@@ -311,6 +311,7 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
   const completedTotal = buckets.reduce((sum, bucket) => sum + completedWork(bucket), 0);
   const attentionTotal = buckets.reduce((sum, bucket) => sum + attentionWork(bucket), 0);
   const receiptTotal = buckets.reduce((sum, bucket) => sum + bucket.receipts, 0);
+  const proofCheckTotal = buckets.reduce((sum, bucket) => sum + bucket.checks, 0);
   const totalSignals = buckets.reduce(
     (sum, bucket) => sum + bucket.protectedActions + bucket.holds + bucket.checks + bucket.receipts + bucket.riskSignals + bucket.stalled,
     0,
@@ -338,6 +339,22 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
   const tooltipWidth = 232;
   const tooltipX = clamp(activeX - tooltipWidth / 2, CHART_PAD.left, CHART_WIDTH - CHART_PAD.right - tooltipWidth);
   const hitWidth = bucketWidth;
+  const peakActionIndex = buckets.reduce(
+    (peakIndex, bucket, index) => bucket.protectedActions > buckets[peakIndex].protectedActions ? index : peakIndex,
+    0,
+  );
+  const peakAttentionIndex = buckets.reduce(
+    (peakIndex, bucket, index) => attentionWork(bucket) > attentionWork(buckets[peakIndex]) ? index : peakIndex,
+    0,
+  );
+  const peakActionBucket = buckets[peakActionIndex];
+  const peakAttentionBucket = buckets[peakAttentionIndex];
+  const peakActionX = xFor(peakActionIndex);
+  const peakAttentionX = xFor(peakAttentionIndex);
+  const annotationWidth = 112;
+  const actionAnnotationX = clamp(peakActionX - annotationWidth / 2, CHART_PAD.left, CHART_WIDTH - CHART_PAD.right - annotationWidth);
+  const attentionAnnotationX = clamp(peakAttentionX - annotationWidth / 2, CHART_PAD.left, CHART_WIDTH - CHART_PAD.right - annotationWidth);
+  const selectedWindowLabel = input.windowDays <= 1 ? "24H" : `${Math.round(input.windowDays)}D`;
 
   return (
     <section
@@ -345,23 +362,34 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
       aria-label={`Agent activity trend, ${timeframeLabel(input.windowDays)}`}
       data-window-days={input.windowDays}
     >
-      <div className="mc-agent-chart-toolbar">
-        <div className="mc-agent-chart-status" data-tone={status.tone}>
-          <span className="mc-agent-chart-status-dot" aria-hidden="true" />
+      <div className="mc-agent-overview-head">
+        <div className="mc-agent-overview-title">
+          <span className="mc-agent-overview-icon" aria-hidden="true"><Activity size={21} /></span>
           <div>
-            <strong>{status.label}</strong>
-            <span>{status.detail}</span>
+            <h2>Agent activity overview</h2>
+            <p>Action trends, completion, and proof signals</p>
           </div>
         </div>
-        <div className="mc-agent-chart-legend" aria-label="Chart totals">
-          <span className="mc-agent-chart-interval"><CalendarRange aria-hidden="true" size={13} />{intervalLabel(input.windowDays)}</span>
-          <span data-series="actions"><i aria-hidden="true" />Agent actions <strong>{formatCount(actionsTotal)}</strong></span>
-          <span data-series="completed"><i aria-hidden="true" />Completed <strong>{formatCount(completedTotal)}</strong></span>
-          <span data-series="attention"><i aria-hidden="true" />Needs attention <strong>{formatCount(attentionTotal)}</strong></span>
+        <div className="mc-agent-overview-stats" aria-label="Activity summary">
+          <span><small>Actions controlled</small><strong>{formatCount(actionsTotal)}</strong><em>{timeframeLabel(input.windowDays)}</em></span>
+          <span data-tone={attentionTotal > 0 ? "warning" : "success"}><small>Needs attention</small><strong>{formatCount(attentionTotal)}</strong><em>{status.label}</em></span>
+          <span data-tone={overallCompletionRate == null ? "neutral" : overallCompletionRate >= 90 ? "success" : "warning"}><small>Completion rate</small><strong>{overallCompletionRate == null ? "--" : `${overallCompletionRate}%`}</strong><em>{formatCount(completedTotal)} completed</em></span>
+        </div>
+        <div className="mc-agent-window-summary" aria-label={`Selected timeframe ${timeframeLabel(input.windowDays)}`}>
+          <strong>{selectedWindowLabel}</strong>
+          <span><CalendarRange aria-hidden="true" size={13} />{intervalLabel(input.windowDays)}</span>
         </div>
       </div>
 
-      <div className="mc-agent-health-chart">
+      <div className="mc-agent-chart-frame">
+        <div className="mc-agent-chart-legend" aria-label="Chart totals">
+          <span data-series="actions"><i aria-hidden="true" />Agent actions <strong>{formatCount(actionsTotal)}</strong></span>
+          <span data-series="completed"><i aria-hidden="true" />Completed <strong>{formatCount(completedTotal)}</strong></span>
+          <span data-series="attention"><i aria-hidden="true" />Needs attention <strong>{formatCount(attentionTotal)}</strong></span>
+          <span data-series="events"><i aria-hidden="true" />Proof checks <strong>{formatCount(proofCheckTotal)}</strong></span>
+        </div>
+
+        <div className="mc-agent-health-chart">
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           role="img"
@@ -404,6 +432,24 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
           <path className="mc-agent-series-line" data-series="completed" d={smoothPath(completedPoints)} />
           <path className="mc-agent-series-line" data-series="attention" d={smoothPath(attentionPoints)} />
 
+          {peakActionBucket.protectedActions > 0 ? (
+            <g className="mc-agent-chart-annotation" data-tone="actions" aria-hidden="true">
+              <line x1={peakActionX} x2={peakActionX} y1={46} y2={yFor(peakActionBucket.protectedActions) - 6} />
+              <rect x={actionAnnotationX} y={8} width={annotationWidth} height={40} rx={8} />
+              <text x={actionAnnotationX + annotationWidth / 2} y={24} textAnchor="middle">Peak actions</text>
+              <text data-row="value" x={actionAnnotationX + annotationWidth / 2} y={40} textAnchor="middle">{peakActionBucket.protectedActions}</text>
+            </g>
+          ) : null}
+
+          {attentionWork(peakAttentionBucket) > 0 ? (
+            <g className="mc-agent-chart-annotation" data-tone="attention" aria-hidden="true">
+              <line x1={peakAttentionX} x2={peakAttentionX} y1={46} y2={yFor(attentionWork(peakAttentionBucket)) - 6} />
+              <rect x={attentionAnnotationX} y={8} width={annotationWidth} height={40} rx={8} />
+              <text x={attentionAnnotationX + annotationWidth / 2} y={24} textAnchor="middle">Attention peak</text>
+              <text data-row="value" x={attentionAnnotationX + annotationWidth / 2} y={40} textAnchor="middle">{attentionWork(peakAttentionBucket)}</text>
+            </g>
+          ) : null}
+
           {buckets.map((bucket, index) => {
             const x = xFor(index);
             const actionsY = yFor(bucket.protectedActions);
@@ -417,6 +463,7 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
                 {bucket.protectedActions > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="actions" cx={x} cy={actionsY} r={activeIndex === index ? 5 : 3.5} /> : null}
                 {completedWork(bucket) > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="completed" cx={x} cy={completedY} r={activeIndex === index ? 4.5 : 3} /> : null}
                 {attentionWork(bucket) > 0 || activeIndex === index ? <circle className="mc-agent-series-dot" data-series="attention" cx={x} cy={attentionY} r={activeIndex === index ? 4.5 : 3} /> : null}
+                {bucket.checks > 0 ? <circle className="mc-agent-series-dot" data-series="events" cx={x} cy={yFor(Math.min(chartMax, bucket.checks))} r={3.5} /> : null}
                 <rect
                   className="mc-agent-chart-hitbox"
                   x={x - hitWidth / 2}
@@ -454,18 +501,19 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
         </svg>
 
         {totalSignals === 0 ? <p className="mc-agent-health-empty">No agent activity in the selected timeframe.</p> : null}
+        </div>
       </div>
 
       <div className="mc-agent-chart-meta">
-        <span data-tone={overallCompletionRate == null ? "neutral" : overallCompletionRate >= 90 ? "success" : "warning"}>
-          <CheckCircle2 aria-hidden="true" size={14} />Completion <strong>{overallCompletionRate == null ? "--" : `${overallCompletionRate}%`}</strong>
+        <span className="mc-agent-meta-item"><i><Clock aria-hidden="true" size={15} /></i><span><small>Last active</small><strong>{lastActive}</strong></span></span>
+        <span className="mc-agent-meta-item"><i><FileCheck2 aria-hidden="true" size={15} /></i><span><small>Proof generated</small><strong>{formatCount(receiptTotal)}</strong></span></span>
+        <span className="mc-agent-meta-item" data-tone={attentionTotal > 0 ? "warning" : "success"}>
+          <i>{attentionTotal > 0 ? <TriangleAlert aria-hidden="true" size={15} /> : <CheckCircle2 aria-hidden="true" size={15} />}</i>
+          <span><small>Open attention</small><strong>{formatCount(attentionTotal)}</strong></span>
         </span>
-        <span><Clock aria-hidden="true" size={14} />Last active <strong>{lastActive}</strong></span>
-        <span><FileCheck2 aria-hidden="true" size={14} />Proof generated <strong>{formatCount(receiptTotal)}</strong></span>
-        <span><Activity aria-hidden="true" size={14} />Actions <strong>{formatCount(actionsTotal)}</strong></span>
-        <span data-tone={attentionTotal > 0 ? "warning" : "success"}>
-          {attentionTotal > 0 ? <TriangleAlert aria-hidden="true" size={14} /> : <CheckCircle2 aria-hidden="true" size={14} />}
-          Open attention <strong>{formatCount(attentionTotal)}</strong>
+        <span className="mc-agent-meta-item" data-tone={overallCompletionRate == null ? "neutral" : overallCompletionRate >= 90 ? "success" : "warning"}>
+          <i className="mc-completion-ring" style={{ background: `conic-gradient(#1d4ed8 ${overallCompletionRate ?? 0}%, #e7ecf5 0)` }} />
+          <span><small>Completion rate</small><strong>{overallCompletionRate == null ? "--" : `${overallCompletionRate}%`}</strong></span>
         </span>
       </div>
     </section>

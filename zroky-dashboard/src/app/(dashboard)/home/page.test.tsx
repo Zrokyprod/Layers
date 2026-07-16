@@ -512,7 +512,7 @@ describe("Mission Control Home", () => {
     expect(within(agentActivityTrend).getByText("Completed")).toBeInTheDocument();
     expect(within(agentActivityTrend).getAllByText("Needs attention").length).toBeGreaterThan(0);
     expect(within(agentActivityTrend).getByText("Last active")).toBeInTheDocument();
-    expect(within(agentActivityTrend).queryByRole("heading")).not.toBeInTheDocument();
+    expect(within(agentActivityTrend).getByRole("heading", { name: "Agent activity overview" })).toBeInTheDocument();
     expect(within(agentActivityTrend).queryByText("Agent Working Status")).not.toBeInTheDocument();
     expect(within(agentActivityTrend).queryByText("Health score")).not.toBeInTheDocument();
     expect(screen.queryByText("Verified action loop")).not.toBeInTheDocument();
@@ -705,7 +705,7 @@ describe("Mission Control Home", () => {
     expect(container.querySelector(".mc-locked-preview")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
-    expect(screen.getByText("Actions controlled")).toBeInTheDocument();
+    expect(screen.getAllByText("Actions controlled")).toHaveLength(2);
     expect(screen.getByRole("dialog", { name: "Finish connecting your agent" })).toBeInTheDocument();
     const agentActivityTrend = screen.getByLabelText("Agent activity trend, last 7 days");
     expect(within(agentActivityTrend).getAllByText("No recent activity").length).toBeGreaterThan(0);
