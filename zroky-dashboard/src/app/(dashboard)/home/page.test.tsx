@@ -507,14 +507,14 @@ describe("Mission Control Home", () => {
     expect(within(proofMetrics).getByText("Proof generated")).toBeInTheDocument();
     expect(proofMetrics.querySelectorAll(".mc-proof-card-icon")).toHaveLength(4);
     expect(proofMetrics.querySelector('[data-metric="agents-protected"]')).toBeInTheDocument();
-    const agentActivityTrend = screen.getByLabelText("Agent activity trend, last 7 days");
-    expect(within(agentActivityTrend).getByText("Agent actions")).toBeInTheDocument();
-    expect(within(agentActivityTrend).getByText("Completed")).toBeInTheDocument();
-    expect(within(agentActivityTrend).getAllByText("Needs attention").length).toBeGreaterThan(0);
-    expect(within(agentActivityTrend).getByText("Last active")).toBeInTheDocument();
-    expect(within(agentActivityTrend).getByRole("heading", { name: "Agent activity overview" })).toBeInTheDocument();
-    expect(within(agentActivityTrend).queryByText("Agent Working Status")).not.toBeInTheDocument();
-    expect(within(agentActivityTrend).queryByText("Health score")).not.toBeInTheDocument();
+    const agentHealth = screen.getByRole("heading", { name: "Agent health", hidden: true }).closest("section") as HTMLElement;
+    expect(within(agentHealth).getByText("Runner availability")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("Action success rate")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("Policy pass rate")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("Proof integrity")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("Last action")).toBeInTheDocument();
+    expect(within(agentHealth).getByRole("group", { name: "Agent health history" })).toBeInTheDocument();
+    expect(within(agentHealth).queryByText("Daily, 7 points")).not.toBeInTheDocument();
     expect(screen.queryByText("Verified action loop")).not.toBeInTheDocument();
     expect(screen.queryByText("Sequence risk watch")).not.toBeInTheDocument();
     const protectedActions = screen.getByLabelText("Recent protected actions");
@@ -671,7 +671,7 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect((await screen.findByLabelText("Agent activity trend, last 30 days")).getAttribute("data-window-days")).toBe("30");
+    expect(await screen.findByText("Last 30 days", { selector: ".mc-health-timeline-head p" })).toBeInTheDocument();
     expect(api.getHomeSummary.mock.calls[0][0]).toBe(30);
     expect(screen.queryByText("Agent Working Status")).not.toBeInTheDocument();
   });
@@ -705,11 +705,11 @@ describe("Mission Control Home", () => {
     expect(container.querySelector(".mc-locked-preview")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
-    expect(screen.getAllByText("Actions controlled")).toHaveLength(2);
+    expect(screen.getByText("Actions controlled")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Finish connecting your agent" })).toBeInTheDocument();
-    const agentActivityTrend = screen.getByLabelText("Agent activity trend, last 7 days");
-    expect(within(agentActivityTrend).getAllByText("No recent activity").length).toBeGreaterThan(0);
-    expect(within(agentActivityTrend).getByText("No agent activity in the selected timeframe.")).toBeInTheDocument();
+    const agentHealth = screen.getByRole("heading", { name: "Agent health", hidden: true }).closest("section") as HTMLElement;
+    expect(within(agentHealth).getAllByText("No data").length).toBeGreaterThan(0);
+    expect(within(agentHealth).getByText("No health history available yet.")).toBeInTheDocument();
     expect(screen.getByText("Setup checklist")).toBeInTheDocument();
     const runnerCard = screen.getAllByText("Connect runner")[0].closest(".mc-first-run-step-card");
     const verificationCard = screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card");

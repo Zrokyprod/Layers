@@ -21,7 +21,7 @@ import { buildDecisionQueue, homeVerdictForQueue } from "@/lib/home-queue";
 import { useDashboardStore } from "@/lib/store";
 import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
 
-import { AgentHealthTimeline } from "./AgentHealthTimeline";
+import { AgentHealthPanel } from "./AgentHealthPanel";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
 import { HomeActivitySections } from "./HomeActivitySections";
 import { ProofStrip, type ProofMetric } from "./ProofStrip";
@@ -469,8 +469,10 @@ export default function HomePage() {
         />
 
         <ProofStrip metrics={metrics} loading={initialLoading} />
-        <AgentHealthTimeline
+        <AgentHealthPanel
           loading={initialLoading}
+          updatedLabel={updatedLabel}
+          onRefresh={() => void load()}
           windowDays={healthWindow.windowDays}
           windowStart={healthWindow.windowStart}
           generatedAt={healthWindow.generatedAt}
@@ -479,6 +481,15 @@ export default function HomePage() {
           outcomes={data.outcomes}
           mutations={data.mutations}
           staleAttempts={data.staleAttempts}
+          actionRunners={data.actionRunners}
+          availability={{
+            runners: availability.actionRunners,
+            actions: availability.intents,
+            policies: availability.approvals,
+            proof: availability.outcomes,
+            mutations: availability.mutations,
+            attempts: availability.staleAttempts,
+          }}
         />
         {showFirstRun ? (
           <FirstRunPanel signals={signals} open={setupDialogOpen} onOpenChange={handleSetupDialogOpenChange} />

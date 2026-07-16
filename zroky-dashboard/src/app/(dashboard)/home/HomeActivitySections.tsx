@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowUpRight, CheckCircle2, ClipboardCheck, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, ChevronRight, ClipboardCheck, ShieldCheck } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
 import { buildActionLifecycle } from "@/lib/action-lifecycle";
@@ -133,6 +133,7 @@ function ActivityList({
                 <StatusPill value={row.status} tone={row.tone} />
                 <em>{formatDateTime(row.createdAt)}</em>
               </span>
+              <ChevronRight className="mc-activity-row-chevron" aria-hidden="true" size={16} />
             </Link>
           ))}
         </div>

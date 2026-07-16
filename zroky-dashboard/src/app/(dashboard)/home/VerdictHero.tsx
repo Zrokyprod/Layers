@@ -25,12 +25,12 @@ type VerdictHeroProps = {
 
 function IconForTone({ tone }: { tone: StatusTone }) {
   if (tone === "danger" || tone === "warning") {
-    return <AlertTriangle aria-hidden="true" size={18} />;
+    return <AlertTriangle aria-hidden="true" size={24} />;
   }
   if (tone === "success") {
-    return <CheckCircle2 aria-hidden="true" size={18} />;
+    return <CheckCircle2 aria-hidden="true" size={24} />;
   }
-  return <ShieldCheck aria-hidden="true" size={18} />;
+  return <ShieldCheck aria-hidden="true" size={24} />;
 }
 
 export function VerdictHero({
@@ -70,7 +70,7 @@ export function VerdictHero({
             Refresh
           </DashboardButton>
           {hideCta ? null : (
-            <DashboardButtonLink href={verdict.ctaHref} variant="primary">
+            <DashboardButtonLink href={verdict.ctaHref} icon={<ShieldCheck />} variant="primary">
               {verdict.ctaLabel}
             </DashboardButtonLink>
           )}
