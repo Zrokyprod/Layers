@@ -28291,3 +28291,273 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
     transition: none !important;
   }
 }
+
+/* Home final polish: enforce the premium royal-blue dashboard contract after
+   earlier experimental Home blocks in this file. */
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) {
+  --home-page: #f6f8fc;
+  --home-sidebar: #fafbfd;
+  --home-surface: #ffffff;
+  --home-surface-soft: #f8fafd;
+  --home-border: #e4e9f1;
+  --home-border-strong: #d8e0ec;
+  --home-text: #0b1220;
+  --home-text-secondary: #5f6b7c;
+  --home-text-tertiary: #8a94a6;
+  --home-primary: #2457f5;
+  --home-primary-hover: #1948db;
+  --home-primary-soft: #eef3ff;
+  --home-success: #16a66a;
+  --home-success-soft: #eaf8f1;
+  --home-warning: #d97706;
+  --home-warning-strong: #a85b08;
+  --home-warning-soft: #fff5e5;
+  --home-danger: #dc4455;
+  --home-danger-strong: #c73546;
+  --home-danger-soft: #fff0f2;
+  --home-purple: #7657e8;
+  --home-purple-soft: #f2efff;
+  --home-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045);
+  background: var(--home-page) !important;
+}
+
+html:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a),
+body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
+  background: #f6f8fc !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.sidebar, .topbar) {
+  background: var(--home-sidebar) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.content, .content-inner, .main-content, .fi-home-option-a) {
+  background: var(--home-page) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link, .nav-link-placeholder, .settings-subnav-link) {
+  min-height: 40px !important;
+  padding: 0 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: #334155 !important;
+  font-size: 14px !important;
+  font-weight: 550 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link:hover, .settings-subnav-link:hover) {
+  background: #f2f5fa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link-active, .settings-subnav-link.is-active) {
+  border-color: rgba(36, 87, 245, 0.16) !important;
+  background: var(--home-primary-soft) !important;
+  color: var(--home-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link-active .nav-link-icon, .settings-subnav-link.is-active svg) {
+  color: var(--home-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.plan-status-active, .plan-badge) {
+  border-color: rgba(22, 166, 106, 0.18) !important;
+  background: var(--home-success-soft) !important;
+  color: #0f8a57 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-shell {
+  gap: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero {
+  min-height: 136px !important;
+  padding: 24px !important;
+  border-color: rgba(112, 144, 255, 0.32) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 74% -38%, rgba(89, 123, 255, 0.26), transparent 54%),
+    linear-gradient(118deg, #071a55 0%, #0d277b 56%, #173aa8 100%) !important;
+  box-shadow: 0 14px 34px rgba(20, 48, 150, 0.18) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-verdict-icon {
+  width: 64px !important;
+  height: 64px !important;
+  border-color: rgba(133, 162, 255, 0.56) !important;
+  border-radius: 14px !important;
+  color: #edf2ff !important;
+  background: rgba(70, 101, 225, 0.24) !important;
+  box-shadow: inset 0 0 24px rgba(119, 153, 255, 0.18), 0 0 26px rgba(68, 104, 255, 0.2) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .mc-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-danger .mc-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-warning .mc-eyebrow {
+  color: #bfccf5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero h1 {
+  color: #fff !important;
+  font-size: 32px !important;
+  font-weight: 700 !important;
+  line-height: 1.14 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero-detail {
+  color: #d7e0ff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card),
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-runtime,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card {
+  border-color: var(--home-border) !important;
+  border-radius: 14px !important;
+  background: var(--home-surface) !important;
+  box-shadow: var(--home-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card) {
+  min-height: 138px !important;
+  padding: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-head > a,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status-icon {
+  border-radius: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-runtime {
+  min-height: 240px !important;
+  max-height: 300px;
+  overflow: hidden !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-header {
+  min-height: 58px !important;
+  padding: 14px 18px !important;
+  border-bottom: 1px solid var(--home-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-layout {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) !important;
+  gap: 14px !important;
+  padding: 14px 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-summary {
+  border-color: var(--home-border) !important;
+  border-radius: 12px !important;
+  background: var(--home-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status {
+  grid-template-columns: 44px minmax(0, 1fr) max-content !important;
+  padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status[data-state="waiting"] .mc-runtime-status-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status[data-state="unavailable"] .mc-runtime-status-icon {
+  border-color: #f0cf8c !important;
+  color: var(--home-warning) !important;
+  background: var(--home-warning-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status[data-state="offline"] .mc-runtime-status-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status[data-state="attention"] .mc-runtime-status-icon {
+  border-color: #f2c3ca !important;
+  color: var(--home-danger) !important;
+  background: var(--home-danger-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-metrics article {
+  min-height: 58px !important;
+  border-color: var(--home-border) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-metrics article[data-tone="danger"] i {
+  background: var(--home-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-context {
+  color: var(--home-warning-strong) !important;
+  background: var(--home-warning-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) !important;
+  gap: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card {
+  padding: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(1) {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(2) {
+  grid-column: 2 !important;
+  grid-row: 1 / span 2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(3) {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-empty {
+  min-height: 58px !important;
+  border: 1px solid var(--home-border) !important;
+  border-radius: 10px !important;
+  background: var(--home-surface-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row:focus-visible {
+  border-color: var(--home-border-strong) !important;
+  background: #fff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .status-pill.status-awaiting-runner,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .status-pill.status-no-runner {
+  border-color: #c8d8ff !important;
+  background: var(--home-primary-soft) !important;
+  color: var(--home-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .status-pill.status-denied,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .status-pill.status-mismatched {
+  border-color: #f2c3ca !important;
+  background: var(--home-danger-soft) !important;
+  color: var(--home-danger-strong) !important;
+}
+
+@media (max-width: 900px) {
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-runtime {
+    max-height: none;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-layout,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(n) {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-metrics {
+    grid-template-columns: 1fr !important;
+  }
+}
