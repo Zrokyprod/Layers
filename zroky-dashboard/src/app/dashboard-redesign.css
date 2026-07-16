@@ -9590,7 +9590,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   letter-spacing: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .ev-row-meta,
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-meta,
 .app-shell[data-dashboard-system="control-v1"] .evidence-pack-proof-grid {
   display: grid !important;
@@ -9598,11 +9597,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 8px !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .ev-row-meta {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .ev-row-meta div,
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-meta div,
 .app-shell[data-dashboard-system="control-v1"] .evidence-pack-proof-grid > div {
   min-width: 0 !important;
@@ -9612,7 +9606,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   background: var(--ev-panel) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .ev-row-meta dt,
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-meta dt,
 .app-shell[data-dashboard-system="control-v1"] .evidence-pack-proof-grid dt {
   color: var(--ev-text-muted) !important;
@@ -9620,7 +9613,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-weight: 500 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .ev-row-meta dd,
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-meta dd,
 .app-shell[data-dashboard-system="control-v1"] .evidence-pack-proof-grid dd {
   margin-top: 3px !important;
@@ -9629,12 +9621,24 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 0.78rem !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .ev-row-meta dd code {
-  display: block !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+.app-shell[data-dashboard-system="control-v1"] .ev-row-facts {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px 16px !important;
+  color: var(--ev-text-muted) !important;
+  font-size: 0.76rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-row-facts span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-row-detail {
+  color: var(--ev-text-muted) !important;
+  line-height: 1.4 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-page code {
@@ -10388,7 +10392,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .ev-command-stats,
-  .app-shell[data-dashboard-system="control-v1"] .ev-row-meta,
   .app-shell[data-dashboard-system="control-v1"] .ev-proof-facts,
   .app-shell[data-dashboard-system="control-v1"] .ev-manifest-scope,
   .app-shell[data-dashboard-system="control-v1"] .ev-empty-contract {

@@ -411,10 +411,11 @@ describe("EvidencePage", () => {
     const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
     expect(row).not.toBeNull();
     expect(within(row).getByText("Signed receipt")).toBeInTheDocument();
-    expect(within(row).getByText("Intent digest")).toBeInTheDocument();
-    expect(within(row).getByText("sha256:intent_1")).toBeInTheDocument();
+    expect(within(row).queryByText("Intent digest")).not.toBeInTheDocument();
+    expect(within(row).queryByText("sha256:intent_1")).not.toBeInTheDocument();
     expect(within(row).getByText("ticket:T-1001")).toBeInTheDocument();
     expect(within(row).getByText("Matched")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Open receipt" })).toBeInTheDocument();
 
     const panel = await screen.findByLabelText("Focused proof panel");
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
@@ -438,12 +439,32 @@ describe("EvidencePage", () => {
     const first = ledgerResponse({
       decisions: [],
       outcomes: [],
-      intents: [actionIntent({ action_id: "act_page_1", intent_digest: "sha256:page-1", runtime_policy_decision_id: null })],
+      intents: [actionIntent({
+        action_id: "act_page_1",
+        intent_digest: "sha256:page-1",
+        runtime_policy_decision_id: null,
+        canonical_intent: {
+          principal: { id: "support-agent" },
+          purpose: { summary: "Page one proof" },
+          resource: { id: "T-1001" },
+          trace_context: { agent_name: "Support agent" },
+        },
+      })],
     });
     const second = ledgerResponse({
       decisions: [],
       outcomes: [],
-      intents: [actionIntent({ action_id: "act_page_2", intent_digest: "sha256:page-2", runtime_policy_decision_id: null })],
+      intents: [actionIntent({
+        action_id: "act_page_2",
+        intent_digest: "sha256:page-2",
+        runtime_policy_decision_id: null,
+        canonical_intent: {
+          principal: { id: "support-agent" },
+          purpose: { summary: "Page two proof" },
+          resource: { id: "T-1002" },
+          trace_context: { agent_name: "Support agent" },
+        },
+      })],
     });
     first.has_more = true;
     first.total_in_scope = 2;
@@ -459,9 +480,9 @@ describe("EvidencePage", () => {
 
     renderEvidencePage();
 
-    expect(await screen.findByText("sha256:page-1")).toBeInTheDocument();
+    expect(await screen.findByText("Page one proof")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load more proof records" }));
-    expect(await screen.findByText("sha256:page-2")).toBeInTheDocument();
+    expect(await screen.findByText("Page two proof")).toBeInTheDocument();
     expect(api.getEvidenceLedger).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ days: 7, offset: 1 }),
@@ -554,7 +575,7 @@ describe("EvidencePage", () => {
     const unlinkedRow = (await screen.findAllByText("crm:CUS-1001"))[0]?.closest(".ev-ledger-row") as HTMLElement;
     expect(within(unlinkedRow).getByText("Unlinked outcome")).toBeInTheDocument();
     expect(within(unlinkedRow).getByText("not linked / not exportable")).toBeInTheDocument();
-    fireEvent.click(within(unlinkedRow).getByRole("button", { name: "Not exportable" }));
+    fireEvent.click(within(unlinkedRow).getByRole("button", { name: "Review mismatch" }));
     expect(await screen.findByText("Not linked / not exportable")).toBeInTheDocument();
   });
 
@@ -586,8 +607,9 @@ describe("EvidencePage", () => {
     const ledger = await screen.findByLabelText("Evidence ledger");
     const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
     expect(within(row).getByText("Protected action record")).toBeInTheDocument();
-    expect(within(row).getByText("Intent digest")).toBeInTheDocument();
+    expect(within(row).queryByText("Intent digest")).not.toBeInTheDocument();
     expect(within(row).getByText("receipt not available")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Review" })).toBeInTheDocument();
 
     const panel = screen.getByLabelText("Focused proof panel");
     expect(within(panel).getByText("Protected action record / Ticket.close")).toBeInTheDocument();
