@@ -28595,6 +28595,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   background: var(--approval-page) !important;
 }
 
+html:has(.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page),
+body:has(.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page) {
+  background: #f6f8fc !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.approvals-v2-page) {
+  background: #f6f8fc !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-hero {
   min-height: 132px !important;
   padding: 22px 24px !important;
@@ -28786,6 +28795,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   border-color: rgba(36, 87, 245, 0.36) !important;
   border-left-color: var(--approval-primary) !important;
   background: var(--approval-primary-soft) !important;
+  color: var(--approval-text) !important;
   box-shadow: 0 0 0 2px rgba(36, 87, 245, 0.1) !important;
 }
 
@@ -28910,6 +28920,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-tab.is-active,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-tab:hover {
+  border-color: var(--approval-border) !important;
   background: #fff !important;
   color: var(--approval-primary) !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
