@@ -23428,7 +23428,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   gap: 16px;
-  padding: 16px 20px 18px;
+  padding: 13px 20px;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-runtime-status,
