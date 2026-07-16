@@ -164,10 +164,12 @@ describe("BillingPage", () => {
       razorpay_order_id: string;
       razorpay_signature: string;
     }) => void) | null = null;
-    window.Razorpay = function Razorpay(options) {
+    window.Razorpay = function Razorpay(
+      options: ConstructorParameters<NonNullable<typeof window.Razorpay>>[0],
+    ) {
       paymentHandler = options.handler;
       return { open: checkoutOpen, on: checkoutOn };
-    } as typeof window.Razorpay;
+    } as unknown as typeof window.Razorpay;
     api.createRazorpayOrder.mockResolvedValue({
       order_id: "order_team_1",
       amount: 19_900,

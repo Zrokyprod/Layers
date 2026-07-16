@@ -35,7 +35,7 @@ const api = vi.hoisted(() => ({
 const storeState = vi.hoisted(() => ({
   selectedProject: "proj_1",
   realTimeEnabled: false,
-  dateRange: { from: null, to: null },
+  dateRange: { from: null, to: null } as { from: Date | null; to: Date | null },
 }));
 
 vi.mock("next/link", () => ({
@@ -347,7 +347,7 @@ function apiKey(overrides: Partial<ApiKeyResponse> = {}): ApiKeyResponse {
 
 function homeSummary(
   overrides: Partial<HomeSummaryResponse["metrics"]> = {},
-  data: HomeSummaryResponse["data"] = {},
+  data?: HomeSummaryResponse["data"],
 ): HomeSummaryResponse {
   return {
     project_id: "proj_1",
@@ -507,14 +507,12 @@ describe("Mission Control Home", () => {
     expect(within(proofMetrics).getByText("Proof generated")).toBeInTheDocument();
     expect(proofMetrics.querySelectorAll(".mc-proof-card-icon")).toHaveLength(4);
     expect(proofMetrics.querySelector('[data-metric="agents-protected"]')).toBeInTheDocument();
-    const agentHealth = screen.getByRole("heading", { name: "Agent health", hidden: true }).closest("section") as HTMLElement;
-    expect(within(agentHealth).getByText("Runner availability")).toBeInTheDocument();
-    expect(within(agentHealth).getByText("Action success rate")).toBeInTheDocument();
-    expect(within(agentHealth).getByText("Policy pass rate")).toBeInTheDocument();
-    expect(within(agentHealth).getByText("Proof integrity")).toBeInTheDocument();
-    expect(within(agentHealth).getByText("Last action")).toBeInTheDocument();
-    expect(within(agentHealth).getByRole("group", { name: "Agent health history" })).toBeInTheDocument();
-    expect(within(agentHealth).queryByText("Daily, 7 points")).not.toBeInTheDocument();
+    const runtime = screen.getByRole("heading", { name: "Agent runtime", hidden: true }).closest("section") as HTMLElement;
+    expect(within(runtime).getByText("Actions controlled")).toBeInTheDocument();
+    expect(within(runtime).getByText("Completed")).toBeInTheDocument();
+    expect(within(runtime).getByText("Pending approvals")).toBeInTheDocument();
+    expect(within(runtime).getByText("Proof generated")).toBeInTheDocument();
+    expect(within(runtime).queryByText(/health|timeline|%/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Verified action loop")).not.toBeInTheDocument();
     expect(screen.queryByText("Sequence risk watch")).not.toBeInTheDocument();
     const protectedActions = screen.getByLabelText("Recent protected actions");
@@ -643,7 +641,7 @@ describe("Mission Control Home", () => {
     expect(screen.queryByText("old_sku")).not.toBeInTheDocument();
   });
 
-  it("rebuilds the graph from the dashboard time window", async () => {
+  it("loads runtime data from the dashboard time window", async () => {
     storeState.dateRange = {
       from: new Date("2026-04-29T10:00:00.000Z"),
       to: new Date("2026-05-29T10:00:00.000Z"),
@@ -671,9 +669,9 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByText("Last 30 days", { selector: ".mc-health-timeline-head p" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Agent runtime", hidden: true })).toBeInTheDocument();
     expect(api.getHomeSummary.mock.calls[0][0]).toBe(30);
-    expect(screen.queryByText("Agent Working Status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/health timeline|Agent Working Status/i)).not.toBeInTheDocument();
   });
 
   it("keeps guard-only runtime approvals visible", async () => {
@@ -705,11 +703,11 @@ describe("Mission Control Home", () => {
     expect(container.querySelector(".mc-locked-preview")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
-    expect(screen.getByText("Actions controlled")).toBeInTheDocument();
+    expect(screen.getAllByText("Actions controlled").length).toBeGreaterThan(0);
     expect(screen.getByRole("dialog", { name: "Finish connecting your agent" })).toBeInTheDocument();
-    const agentHealth = screen.getByRole("heading", { name: "Agent health", hidden: true }).closest("section") as HTMLElement;
-    expect(within(agentHealth).getAllByText("No data").length).toBeGreaterThan(0);
-    expect(within(agentHealth).getByText("No health history available yet.")).toBeInTheDocument();
+    const runtime = screen.getByRole("heading", { name: "Agent runtime", hidden: true }).closest("section") as HTMLElement;
+    expect(within(runtime).getByText(/Runner offline|Waiting for runner/)).toBeInTheDocument();
+    expect(within(runtime).queryByText(/health|timeline|%/i)).not.toBeInTheDocument();
     expect(screen.getByText("Setup checklist")).toBeInTheDocument();
     const runnerCard = screen.getAllByText("Connect runner")[0].closest(".mc-first-run-step-card");
     const verificationCard = screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card");

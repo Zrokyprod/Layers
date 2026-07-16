@@ -21,7 +21,7 @@ import { buildDecisionQueue, homeVerdictForQueue } from "@/lib/home-queue";
 import { useDashboardStore } from "@/lib/store";
 import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
 
-import { AgentHealthPanel } from "./AgentHealthPanel";
+import { AgentRuntimeOverview } from "./AgentRuntimeOverview";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
 import { HomeActivitySections } from "./HomeActivitySections";
 import { ProofStrip, type ProofMetric } from "./ProofStrip";
@@ -237,6 +237,39 @@ function protectedAgentDetail(protectedCount: number, activeCount: number): stri
   return "No active agents yet";
 }
 
+function isCompletedIntent(intent: ActionIntentResponse): boolean {
+  const status = normalized(intent.status);
+  return (
+    intent.receipt_status === "generated" ||
+    intent.proof_status === "matched" ||
+    ["completed", "executed", "succeeded", "verified"].includes(status)
+  );
+}
+
+function latestRuntimeActivity(data: MissionData): string | null {
+  const timestamps = [
+    ...data.actionRunners.flatMap((runner) => [runner.last_heartbeat_at, runner.updated_at]),
+    ...data.intents.map((intent) => intent.created_at),
+    ...data.approvals.map((decision) => decision.created_at),
+    ...data.outcomes.flatMap((outcome) => [outcome.checked_at, outcome.created_at]),
+  ].filter((value): value is string => Boolean(value));
+  if (timestamps.length === 0) return null;
+  return timestamps.reduce((latest, value) => (
+    new Date(value).getTime() > new Date(latest).getTime() ? value : latest
+  ));
+}
+
+function runtimeEnvironment(data: MissionData): string | null {
+  return (
+    data.actionRunners.find((runner) => normalized(runner.status) === "online")?.environment ??
+    data.actionRunners[0]?.environment ??
+    data.agentProfiles.find((profile) => profile.is_active)?.environment ??
+    data.intents[0]?.environment ??
+    process.env.NEXT_PUBLIC_DASHBOARD_ENV ??
+    null
+  );
+}
+
 function proofMetrics(
   data: MissionData,
   availability: MissionAvailability,
@@ -419,7 +452,7 @@ export default function HomePage() {
   const activeAgentCount = data.agentProfileMeta?.active_count ?? data.agentProfiles.filter((profile) => profile.is_active).length;
   const protectedCount = protectedAgentCount(data);
   const metrics = proofMetrics(data, availability, protectedCount, activeAgentCount);
-  const healthWindow = useMemo(() => {
+  const activityWindow = useMemo(() => {
     const generatedAt = data.homeSummary?.generated_at ?? lastLoadedAt ?? new Date().toISOString();
     const generatedAtMs = new Date(generatedAt).getTime();
     const safeGeneratedAtMs = Number.isFinite(generatedAtMs) ? generatedAtMs : Date.now();
@@ -469,34 +502,34 @@ export default function HomePage() {
         />
 
         <ProofStrip metrics={metrics} loading={initialLoading} />
-        <AgentHealthPanel
+        <AgentRuntimeOverview
           loading={initialLoading}
-          updatedLabel={updatedLabel}
-          onRefresh={() => void load()}
-          windowDays={healthWindow.windowDays}
-          windowStart={healthWindow.windowStart}
-          generatedAt={healthWindow.generatedAt}
-          intents={data.intents}
-          approvals={data.approvals}
-          outcomes={data.outcomes}
-          mutations={data.mutations}
-          staleAttempts={data.staleAttempts}
-          actionRunners={data.actionRunners}
-          availability={{
-            runners: availability.actionRunners,
-            actions: availability.intents,
-            policies: availability.approvals,
-            proof: availability.outcomes,
-            mutations: availability.mutations,
-            attempts: availability.staleAttempts,
-          }}
+          runnerSourceAvailable={availability.actionRunners}
+          hasManagedAgent={activeAgentCount > 0}
+          hasOnlineRunner={data.actionRunners.some((runner) => normalized(runner.status) === "online")}
+          lastActiveAt={latestRuntimeActivity(data)}
+          generatedAt={activityWindow.generatedAt}
+          environment={runtimeEnvironment(data)}
+          openAttention={
+            availability.intents &&
+            availability.approvals &&
+            availability.outcomes &&
+            availability.mutations &&
+            availability.staleAttempts
+              ? rows.length
+              : null
+          }
+          actionsControlled={availability.homeSummary && data.homeSummary ? data.homeSummary.metrics.controlled_actions : null}
+          completedActions={availability.intents ? data.intents.filter(isCompletedIntent).length : null}
+          pendingApprovals={availability.homeSummary && data.homeSummary ? data.homeSummary.metrics.pending_approvals : null}
+          proofGenerated={availability.homeSummary && data.homeSummary ? data.homeSummary.metrics.receipts_generated : null}
         />
         {showFirstRun ? (
           <FirstRunPanel signals={signals} open={setupDialogOpen} onOpenChange={handleSetupDialogOpenChange} />
         ) : null}
         <HomeActivitySections
-          windowStart={healthWindow.windowStart}
-          generatedAt={healthWindow.generatedAt}
+          windowStart={activityWindow.windowStart}
+          generatedAt={activityWindow.generatedAt}
           intents={data.intents}
           approvals={data.approvals}
           outcomes={data.outcomes}
