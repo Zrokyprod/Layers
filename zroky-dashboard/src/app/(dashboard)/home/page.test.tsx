@@ -505,6 +505,8 @@ describe("Mission Control Home", () => {
     expect(within(proofMetrics).getByText("Actions controlled")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Pending approvals")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Proof generated")).toBeInTheDocument();
+    expect(proofMetrics.querySelectorAll(".mc-proof-card-icon")).toHaveLength(4);
+    expect(proofMetrics.querySelector('[data-metric="agents-protected"]')).toBeInTheDocument();
     const agentActivityTrend = screen.getByLabelText("Agent activity trend, last 7 days");
     expect(within(agentActivityTrend).getByText("Agent actions")).toBeInTheDocument();
     expect(within(agentActivityTrend).getByText("Completed")).toBeInTheDocument();
