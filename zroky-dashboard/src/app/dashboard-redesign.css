@@ -23129,6 +23129,309 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   height: 12px;
 }
 
+/* Home visual system: royal-blue control accents on ivory and pearl surfaces.
+   Operational tones stay semantic; the brand color never replaces warnings. */
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) {
+  --mc-canvas: #f7f4ec;
+  --mc-card: #fffdf9;
+  --mc-soft: #f1eee6;
+  --mc-border: #ddd7ca;
+  --mc-border-strong: #c9c0af;
+  --mc-text: #111827;
+  --mc-text-secondary: #667085;
+  --mc-text-tertiary: #858b98;
+  --mc-accent: #1d4ed8;
+  --mc-accent-hover: #173fae;
+  --mc-accent-soft: rgba(29, 78, 216, 0.09);
+  --mc-warning: #9a6a1d;
+  --mc-warning-soft: rgba(181, 133, 53, 0.11);
+  --mc-danger: #c53d4b;
+  --mc-danger-soft: rgba(197, 61, 75, 0.09);
+  --mc-shadow-rest: 0 1px 2px rgba(38, 31, 21, 0.04), 0 6px 18px rgba(38, 31, 21, 0.035);
+  --mc-shadow-hover: 0 12px 30px -18px rgba(29, 78, 216, 0.24);
+}
+
+html:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a),
+body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
+  background: #f7f4ec !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .sidebar {
+  background: #fbfaf6 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .topbar {
+  background: rgba(247, 244, 236, 0.94) !important;
+  backdrop-filter: blur(14px);
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link-active, .settings-subnav-link.is-active) {
+  border-color: rgba(29, 78, 216, 0.11) !important;
+  background: rgba(29, 78, 216, 0.09) !important;
+  color: var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.plan-badge, .plan-usage-link) {
+  color: var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.topbar-env-dot, .org-env-dot) {
+  background: var(--mc-accent) !important;
+  box-shadow: 0 0 0 3px var(--mc-accent-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-shell {
+  gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero {
+  min-height: 132px;
+  padding: 20px 24px;
+  border-color: rgba(29, 78, 216, 0.15);
+  background: var(--mc-card);
+  box-shadow: var(--mc-shadow-rest);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-danger {
+  border-color: rgba(197, 61, 75, 0.25);
+  background: #fff8f7;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-warning {
+  border-color: rgba(181, 133, 53, 0.28);
+  background: #fffbf3;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-verdict-icon {
+  width: 50px;
+  height: 50px;
+  border-color: rgba(29, 78, 216, 0.16);
+  background: #eef3ff;
+  color: var(--mc-accent);
+  box-shadow: 0 8px 20px -14px rgba(29, 78, 216, 0.55);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-verdict-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-danger .mc-verdict-icon {
+  border-color: rgba(197, 61, 75, 0.2);
+  background: #fff0ef;
+  color: var(--mc-danger);
+  box-shadow: 0 8px 20px -14px rgba(197, 61, 75, 0.48);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-warning .mc-verdict-icon {
+  border-color: rgba(181, 133, 53, 0.22);
+  background: #fff5df;
+  color: var(--mc-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero h1 {
+  font-size: 30px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-danger .mc-eyebrow {
+  color: #a63a46;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-dot {
+  background: var(--mc-accent);
+  box-shadow: 0 0 0 3px var(--mc-accent-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-strip {
+  gap: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card) {
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-height: 126px;
+  padding: 15px;
+  border-color: var(--mc-border);
+  background: var(--mc-card);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card):hover,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card):focus-visible {
+  border-color: rgba(29, 78, 216, 0.28);
+  box-shadow: var(--mc-shadow-hover);
+  outline: 0;
+  transform: translateY(-1px);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(29, 78, 216, 0.15);
+  border-radius: 8px;
+  background: #eef3ff;
+  color: var(--mc-accent);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="controlled-actions"] .mc-proof-card-icon {
+  border-color: rgba(8, 127, 159, 0.17);
+  background: #eaf8f9;
+  color: #087f9f;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="pending-approvals"] .mc-proof-card-icon {
+  border-color: rgba(111, 72, 179, 0.16);
+  background: #f4efff;
+  color: #6f48b3;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="proof-generated"] .mc-proof-card-icon {
+  border-color: rgba(181, 133, 53, 0.2);
+  background: #fff5e7;
+  color: #a66d1a;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-head {
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-head svg {
+  flex: 0 0 auto;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card strong {
+  font-size: 26px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-health-panel {
+  padding: 18px;
+  border-color: rgba(29, 78, 216, 0.14);
+  background: var(--mc-card);
+  box-shadow: var(--mc-shadow-rest);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-interval {
+  border-color: rgba(29, 78, 216, 0.16);
+  background: #eef3ff;
+  color: var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-legend i {
+  background: #1d4ed8;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-legend span[data-series="completed"] i {
+  background: #087f9f;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-legend span[data-series="attention"] i {
+  border-top-color: #b58535;
+  background: transparent;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-health-chart {
+  border-color: #e1ddd3;
+  background: linear-gradient(180deg, rgba(29, 78, 216, 0.035), rgba(255, 253, 249, 0) 55%), #fffdf9;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-grid-line {
+  stroke: #e4dfd5;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-x-axis[data-current="true"] {
+  fill: #1d4ed8;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-x-tick {
+  stroke: #cfc8bb;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-series-line {
+  stroke: #1d4ed8;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-series-line[data-series="completed"] {
+  stroke: #087f9f;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-series-line[data-series="attention"] {
+  stroke: #b58535;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-series-dot {
+  fill: #fffdf9;
+  stroke: #1d4ed8;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-series-dot[data-series="completed"] {
+  stroke: #087f9f;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-series-dot[data-series="attention"] {
+  stroke: #b58535;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-focus-band {
+  fill: rgba(29, 78, 216, 0.045);
+  stroke: rgba(29, 78, 216, 0.08);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-tooltip > line {
+  stroke: rgba(29, 78, 216, 0.28);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-chart-tooltip rect {
+  fill: #fffdf9;
+  stroke: rgba(29, 78, 216, 0.2);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-grid {
+  gap: 14px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card {
+  border-color: var(--mc-border);
+  background: var(--mc-card);
+  box-shadow: var(--mc-shadow-rest);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-icon {
+  border-color: rgba(29, 78, 216, 0.15);
+  background: #eef3ff;
+  color: var(--mc-accent);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-empty {
+  background: #faf8f2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row:focus-visible {
+  border-color: rgba(29, 78, 216, 0.24);
+  background: #fffdf9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card) {
+    transition: none;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card):hover,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card):focus-visible {
+    transform: none;
+  }
+}
+
 @media (max-width: 1320px) {
   .app-shell[data-dashboard-system="control-v1"] .mc-activity-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

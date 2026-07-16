@@ -370,11 +370,11 @@ export function AgentHealthTimeline({ loading, ...input }: AgentHealthTimelinePr
         >
           <defs>
             <linearGradient id="agent-actions-area" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#2f5f66" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="#2f5f66" stopOpacity="0.01" />
+              <stop offset="0%" stopColor="#1d4ed8" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.01" />
             </linearGradient>
             <filter id="agent-line-glow" x="-20%" y="-40%" width="140%" height="180%">
-              <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#2f5f66" floodOpacity="0.18" />
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#1d4ed8" floodOpacity="0.12" />
             </filter>
           </defs>
 
