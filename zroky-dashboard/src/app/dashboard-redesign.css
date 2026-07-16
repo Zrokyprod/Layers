@@ -27401,3 +27401,1124 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
     border-bottom: 0;
   }
 }
+
+/* Home enterprise health redesign. Home-scoped tokens keep the operational
+   modules unchanged while giving the primary dashboard one coherent system. */
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) {
+  --home-page: #f6f8fc;
+  --home-sidebar: #fafbfd;
+  --home-surface: #ffffff;
+  --home-surface-soft: #f8fafd;
+  --home-text: #0b1220;
+  --home-text-secondary: #5f6b7c;
+  --home-text-tertiary: #8a94a6;
+  --home-border: #e5eaf1;
+  --home-border-strong: #d8e0ec;
+  --home-primary: #2457f5;
+  --home-primary-hover: #1948db;
+  --home-primary-soft: #eef3ff;
+  --home-success: #16a66a;
+  --home-success-soft: #eaf8f1;
+  --home-warning: #d97706;
+  --home-warning-soft: #fff5e5;
+  --home-danger: #dc4455;
+  --home-danger-soft: #fff0f2;
+  --home-purple: #7657e8;
+  --home-purple-soft: #f2efff;
+  --home-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045);
+  background: var(--home-page) !important;
+}
+
+html:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a),
+body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
+  background: var(--home-page, #f6f8fc) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.sidebar, .topbar, .content, .content-inner, .fi-home-option-a) {
+  font-family: var(--font-geist), Inter, ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.content, .content-inner) {
+  background: var(--home-page) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .content-inner {
+  min-height: calc(100dvh - 72px) !important;
+  padding: 16px 24px 28px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .sidebar {
+  background: var(--home-sidebar) !important;
+  border-right-color: var(--home-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .topbar {
+  min-height: 72px !important;
+  padding: 12px 24px !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  border-bottom-color: var(--home-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.topbar-route-trigger, .topbar-ctrl-btn, .topbar-env-btn, .topbar-account-btn) {
+  min-height: 40px !important;
+  border-color: #e4e9f1 !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025) !important;
+  font-size: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.topbar-route-trigger, .topbar-ctrl-btn, .topbar-env-btn, .topbar-account-btn):hover {
+  border-color: var(--home-border-strong) !important;
+  background: var(--home-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.topbar-route-trigger, .topbar-ctrl-btn, .topbar-env-btn, .topbar-account-btn):focus-visible,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a :where(a, button):focus-visible {
+  outline: 3px solid rgba(36, 87, 245, 0.22) !important;
+  outline-offset: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .sidebar-logo {
+  min-height: 72px !important;
+  margin-bottom: 16px !important;
+  padding: 0 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .sidebar-logo::after {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .sidebar-logo-image {
+  width: 154px !important;
+  height: auto !important;
+  object-fit: contain !important;
+  filter: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .nav-section-label {
+  margin: 10px 10px 6px !important;
+  color: var(--home-text-tertiary) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link, .nav-link-placeholder, .settings-subnav-link) {
+  min-height: 40px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  color: #334155 !important;
+  font-size: 14px !important;
+  font-weight: 550 !important;
+  transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link, .settings-subnav-link):hover {
+  background: #f2f5fa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.nav-link.active, .settings-subnav-link.active) {
+  color: var(--home-primary) !important;
+  background: var(--home-primary-soft) !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 245, 0.09) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-shell {
+  gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero {
+  position: relative;
+  min-height: 138px;
+  padding: 24px 28px;
+  overflow: hidden;
+  border: 1px solid rgba(112, 144, 255, 0.32);
+  border-radius: 8px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 74% -35%, rgba(84, 116, 255, 0.36), transparent 52%),
+    linear-gradient(118deg, #081b5a 0%, #0b2374 54%, #1534a5 100%) !important;
+  box-shadow: 0 14px 34px rgba(20, 48, 150, 0.18);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero::after {
+  position: absolute;
+  right: -8%;
+  bottom: -80px;
+  width: 62%;
+  height: 150px;
+  border: 1px solid rgba(154, 176, 255, 0.08);
+  border-radius: 50%;
+  content: "";
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero-main,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero-main {
+  gap: 20px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-verdict-icon {
+  width: 68px;
+  height: 68px;
+  border: 1px solid rgba(133, 162, 255, 0.56);
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(55, 84, 221, 0.22));
+  box-shadow: inset 0 0 24px rgba(119, 153, 255, 0.18), 0 0 26px rgba(68, 104, 255, 0.2);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-tone-danger .mc-verdict-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-tone-warning .mc-verdict-icon {
+  color: #ffcad1;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-tone-success .mc-verdict-icon {
+  color: #a7f3d0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .mc-eyebrow {
+  color: #bfccf5;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero h1 {
+  margin-top: 5px;
+  color: #fff !important;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.14;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero-detail {
+  margin-top: 6px;
+  color: #d7e0ff !important;
+  font-size: 14px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-status {
+  color: #dce5ff;
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-dot {
+  background: #2bd180 !important;
+  box-shadow: 0 0 0 4px rgba(43, 209, 128, 0.13) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .dashboard-button {
+  min-height: 44px;
+  padding-inline: 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .dashboard-button-soft {
+  border-color: rgba(255, 255, 255, 0.82);
+  color: #10204e;
+  background: #fff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .dashboard-button-soft:hover {
+  background: #f2f6ff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .dashboard-button-primary {
+  border-color: #3970ff;
+  background: var(--home-primary);
+  box-shadow: 0 8px 20px rgba(0, 80, 255, 0.32);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .dashboard-button-primary:hover {
+  background: var(--home-primary-hover);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-strip {
+  gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card) {
+  grid-template-columns: 52px minmax(0, 1fr);
+  min-height: 145px;
+  padding: 18px;
+  border-color: var(--home-border);
+  border-radius: 8px;
+  color: var(--home-text);
+  background: var(--home-surface);
+  box-shadow: var(--home-shadow);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card):hover {
+  border-color: var(--home-border-strong);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+  transform: translateY(-2px);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="agents-protected"] .mc-proof-card-icon {
+  border-color: #dce6ff;
+  color: var(--home-primary);
+  background: var(--home-primary-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="controlled-actions"] .mc-proof-card-icon {
+  border-color: #caefdc;
+  color: #0f9b5f;
+  background: var(--home-success-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="pending-approvals"] .mc-proof-card-icon {
+  border-color: #dfd7ff;
+  color: var(--home-purple);
+  background: var(--home-purple-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card[data-metric="proof-generated"] .mc-proof-card-icon {
+  border-color: #f8dfbd;
+  color: var(--home-warning);
+  background: var(--home-warning-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card-head {
+  color: var(--home-text-secondary);
+  font-size: 13px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card strong {
+  color: var(--home-text);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card p {
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-agent-health-panel {
+  padding: 0;
+  overflow: visible;
+  border: 1px solid var(--home-border);
+  border-radius: 8px;
+  color: var(--home-text);
+  background: var(--home-surface);
+  box-shadow: var(--home-shadow);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  min-height: 76px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--home-border);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-header > div:first-child {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-heading-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #dce6ff;
+  border-radius: 8px;
+  color: var(--home-primary);
+  background: var(--home-primary-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-header h2 {
+  color: var(--home-text);
+  font-size: 18px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-header p {
+  margin-top: 3px;
+  color: var(--home-text-secondary);
+  font-size: 13px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-updated {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-updated > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-updated > span i,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals > div > span i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--home-success);
+  box-shadow: 0 0 0 4px rgba(22, 166, 106, 0.1);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-updated .dashboard-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--home-border);
+  border-radius: 8px;
+  color: var(--home-text-secondary);
+  background: #fff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 270px) minmax(380px, 1fr) minmax(270px, 320px);
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals {
+  border: 1px solid var(--home-border);
+  border-radius: 8px;
+  background: var(--home-surface-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 14px;
+  align-content: center;
+  align-items: center;
+  min-height: 210px;
+  padding: 18px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring {
+  position: relative;
+  width: 112px;
+  height: 112px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring svg {
+  width: 112px;
+  height: 112px;
+  transform: rotate(-90deg);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring circle {
+  fill: none;
+  stroke-width: 7;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-ring-track {
+  stroke: #e8edf4;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-ring-value {
+  stroke: var(--home-text-tertiary);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 180ms ease;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring[data-status="healthy"] .mc-health-ring-value {
+  stroke: var(--home-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring[data-status="degraded"] .mc-health-ring-value {
+  stroke: var(--home-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring[data-status="critical"] .mc-health-ring-value {
+  stroke: var(--home-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring > span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  padding-top: 38px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring strong {
+  color: var(--home-text);
+  font-size: 29px;
+  font-weight: 700;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring small {
+  color: var(--home-text-tertiary);
+  font-size: 11px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) {
+  display: grid;
+  gap: 4px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) > small {
+  color: var(--home-text-tertiary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) > strong {
+  color: var(--home-text-secondary);
+  font-size: 17px;
+  font-weight: 680;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) > strong[data-status="healthy"] {
+  color: var(--home-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) > strong[data-status="degraded"] {
+  color: var(--home-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) > strong[data-status="critical"] {
+  color: var(--home-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score > div:nth-child(2) > p {
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--home-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 3px;
+  min-width: 0;
+  min-height: 100px;
+  padding: 12px 14px;
+  border: 1px solid var(--home-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-head > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--home-primary);
+  background: var(--home-primary-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-head > i {
+  color: var(--home-text-tertiary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card[data-status="healthy"] .mc-health-signal-head > i {
+  color: var(--home-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card[data-status="degraded"] .mc-health-signal-head > i {
+  color: var(--home-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card[data-status="critical"] .mc-health-signal-head > i {
+  color: var(--home-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-neutral-mark {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--home-text-tertiary);
+  border-radius: 999px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card > p {
+  margin-top: 3px;
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card > strong {
+  color: var(--home-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card > small {
+  overflow: hidden;
+  color: var(--home-text-tertiary);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-microbar {
+  height: 3px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf1f6;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-microbar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--home-primary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card[data-status="healthy"] .mc-health-microbar i {
+  background: var(--home-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card[data-status="degraded"] .mc-health-microbar i {
+  background: var(--home-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-card[data-status="critical"] .mc-health-microbar i {
+  background: var(--home-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals {
+  padding: 14px 16px 8px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals h3,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline h3 {
+  color: var(--home-text);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals > div > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--home-success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals ul {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-height: 31px;
+  border-top: 1px solid var(--home-border);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li > span {
+  color: var(--home-text-secondary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li strong {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  color: var(--home-text);
+  font-weight: 620;
+  text-align: right;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li strong i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--home-text-tertiary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li[data-status="healthy"] strong i {
+  background: var(--home-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li[data-status="degraded"] strong i {
+  background: var(--home-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li[data-status="critical"] strong i {
+  background: var(--home-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline {
+  position: relative;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--home-border);
+  background: #fbfcfe;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-head p {
+  margin-top: 2px;
+  color: var(--home-text-tertiary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #dce2ea;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend span[data-status="healthy"] i,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment[data-status="healthy"] {
+  background: var(--home-success);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend span[data-status="degraded"] i,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment[data-status="degraded"] {
+  background: var(--home-warning);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend span[data-status="critical"] i,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment[data-status="critical"] {
+  background: var(--home-danger);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segments {
+  display: grid;
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(3px, 1fr);
+  gap: 3px;
+  height: 30px;
+  margin-top: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment {
+  position: relative;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: #dce2ea;
+  cursor: help;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment:hover,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment:focus-visible {
+  z-index: 3;
+  filter: brightness(0.94);
+  transform: translateY(-2px);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment > span {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  z-index: 5;
+  display: none;
+  gap: 3px;
+  width: min(240px, calc(100vw - 48px));
+  padding: 10px 12px;
+  border: 1px solid var(--home-border-strong);
+  border-radius: 8px;
+  color: var(--home-text);
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  transform: translateX(-50%);
+  text-align: left;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment:first-child > span {
+  left: 0;
+  transform: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment:last-child > span {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment:hover > span,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment:focus-visible > span {
+  display: grid;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment > span strong {
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment > span small,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segment > span em {
+  color: var(--home-text-secondary);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-time-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: var(--home-text-tertiary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-empty {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 62px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--home-border-strong);
+  border-radius: 8px;
+  color: var(--home-text-tertiary);
+  background: #fff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-empty span {
+  display: grid;
+  gap: 2px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-empty strong {
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-empty small {
+  color: var(--home-text-tertiary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card {
+  padding: 18px;
+  border-color: var(--home-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--home-shadow);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(1) {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(2) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(3) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-head h2 {
+  color: var(--home-text);
+  font-size: 16px;
+  font-weight: 670;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-head > a {
+  border-color: var(--home-border);
+  border-radius: 8px;
+  color: var(--home-primary);
+  background: var(--home-primary-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row {
+  grid-template-columns: minmax(0, 1fr) auto 16px;
+  min-height: 58px;
+  border: 1px solid var(--home-border) !important;
+  border-radius: 8px;
+  background: var(--home-surface-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row:hover {
+  border-color: var(--home-border-strong) !important;
+  background: #fff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row strong {
+  color: var(--home-text);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row small,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row em {
+  color: var(--home-text-secondary);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-row-chevron {
+  color: var(--home-text-tertiary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-empty {
+  min-height: 62px;
+  border-color: var(--home-border-strong);
+  border-radius: 8px;
+  color: var(--home-text-secondary);
+  background: var(--home-surface-soft);
+  font-size: 12px;
+}
+
+@media (min-width: 1121px) {
+  .app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) {
+    grid-template-columns: 248px minmax(0, 1fr) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .sidebar {
+    width: 248px !important;
+    padding-inline: 16px !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .topbar {
+    left: 248px !important;
+  }
+}
+
+@media (max-width: 1279px) {
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-layout {
+    grid-template-columns: minmax(220px, 0.72fr) minmax(380px, 1.28fr);
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals ul {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    border-top: 1px solid var(--home-border);
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li {
+    display: grid;
+    gap: 3px;
+    min-height: 54px;
+    padding: 7px 10px;
+    border-top: 0;
+    border-right: 1px solid var(--home-border);
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li:last-child {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-grid,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals {
+    grid-column: 1;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score {
+    min-height: 170px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card:nth-child(n) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .content-inner {
+    padding: 12px 12px 24px !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero {
+    min-height: 0;
+    padding: 20px 18px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-verdict-icon {
+    width: 54px;
+    height: 54px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero h1 {
+    font-size: 27px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card) {
+    min-height: 126px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-header,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-timeline-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-updated {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-layout {
+    padding: 14px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score {
+    grid-template-columns: 96px 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring svg {
+    width: 96px;
+    height: 96px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-score-ring > span {
+    padding-top: 31px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-signal-grid,
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals ul {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-live-signals li {
+    display: flex;
+    min-height: 38px;
+    padding: 5px 0;
+    border-right: 0;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-legend {
+    justify-content: flex-start;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-segments {
+    gap: 2px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-health-time-labels span:nth-child(2) {
+    display: none;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-activity-card {
+    padding: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a :where(.mc-proof-card, .mc-health-segment, .mc-health-ring-value) {
+    transition: none !important;
+  }
+}
