@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { DashboardButton } from "@/components/dashboard-button";
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { SettingsHero, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import {
@@ -344,7 +344,7 @@ function BillingSettingsContent() {
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
   const [billingUsage, setBillingUsage] = useState<BillingUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutPlanCode, setCheckoutPlanCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState("");
 
@@ -388,10 +388,10 @@ function BillingSettingsContent() {
         setActionMsg("Razorpay key is not configured for this dashboard environment.");
         return;
       }
-      setCheckoutBusy(true);
+      setCheckoutPlanCode(planCode);
       const loaded = await loadRazorpayCheckout();
       if (!loaded || !window.Razorpay) {
-        setCheckoutBusy(false);
+        setCheckoutPlanCode(null);
         setActionMsg("Razorpay checkout script failed to load.");
         return;
       }
@@ -413,13 +413,13 @@ function BillingSettingsContent() {
             } catch (e: unknown) {
               setActionMsg(e instanceof Error ? e.message : "Payment verification failed.");
             } finally {
-              setCheckoutBusy(false);
+              setCheckoutPlanCode(null);
             }
           })();
         },
         modal: {
           ondismiss: () => {
-            setCheckoutBusy(false);
+            setCheckoutPlanCode(null);
             setActionMsg("Razorpay checkout was closed before payment.");
           },
         },
@@ -428,7 +428,7 @@ function BillingSettingsContent() {
         },
       });
       checkout.on("payment.failed", (response) => {
-        setCheckoutBusy(false);
+        setCheckoutPlanCode(null);
         setActionMsg(response.error?.description || "Razorpay payment failed.");
       });
       setActionMsg(`Opening Razorpay checkout for ${plan.name} (${formatRazorpayAmount(order.amount, order.currency)}).`);
@@ -436,10 +436,12 @@ function BillingSettingsContent() {
       checkout.open();
     } catch (e: unknown) {
       setActionMsg(e instanceof Error ? e.message : "Failed to update plan.");
-      setCheckoutBusy(false);
+      setCheckoutPlanCode(null);
     }
   }
 
+  const checkoutBusy = checkoutPlanCode != null;
+  const billingRecordUnavailable = !loading && !billingMe;
   const currentPlanCode = billingMe?.plan_code ?? "free";
   const currentCatalogCode = catalogPlanCode(currentPlanCode);
   const currentPlanAlias = currentPlanCode.trim().toLowerCase();
@@ -530,6 +532,17 @@ function BillingSettingsContent() {
 
       {loading && !billingMe ? (
         <div className="loading" />
+      ) : billingRecordUnavailable ? (
+        <section className="billing-unavailable-state" aria-label="Billing unavailable">
+          <CreditCard aria-hidden="true" />
+          <div>
+            <h2>Billing data unavailable</h2>
+            <p>Your current plan and usage could not be confirmed. No fallback plan has been assumed.</p>
+          </div>
+          <DashboardButton icon={<RefreshCw />} onClick={() => void load()} variant="primary">
+            Retry
+          </DashboardButton>
+        </section>
       ) : (
         <section className="billing-overview-grid" aria-label="Billing overview">
           <article className="billing-current-card">
@@ -611,7 +624,7 @@ function BillingSettingsContent() {
           <div className="billing-plans-grid">
             {visiblePlans.map((plan) => {
               const isCurrent = plan.code === currentCatalogCode;
-              const canChangeToPlan = !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
+              const canChangeToPlan = Boolean(billingMe) && !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
               return (
                 <div
                   key={plan.code}
@@ -639,16 +652,25 @@ function BillingSettingsContent() {
                   </ul>
                   {isCurrent ? (
                     <span className="billing-plan-current-label">Current plan</span>
-                  ) : canChangeToPlan ? (
+                  ) : canChangeToPlan && plan.selfServe ? (
                     <DashboardButton
                       type="button"
                       className="billing-plan-btn"
                       variant="primary"
                       onClick={() => void changePlan(plan.code)}
                       disabled={loading || checkoutBusy}
+                      loading={checkoutPlanCode === plan.code}
                     >
-                      {plan.selfServe ? (checkoutBusy ? "Opening..." : `Upgrade to ${plan.name}`) : "Contact sales"}
+                      {checkoutPlanCode === plan.code ? "Opening checkout" : `Upgrade to ${plan.name}`}
                     </DashboardButton>
+                  ) : canChangeToPlan ? (
+                    <DashboardButtonLink
+                      className="billing-plan-btn"
+                      href="/contact?subject=enterprise-plan"
+                      variant="primary"
+                    >
+                      Contact sales
+                    </DashboardButtonLink>
                   ) : null}
                 </div>
               );
