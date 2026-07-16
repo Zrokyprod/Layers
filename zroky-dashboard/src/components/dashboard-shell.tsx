@@ -24,6 +24,7 @@ import {
   Menu,
   Plug,
   RotateCcw,
+  Search,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -434,6 +435,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const envMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
+  const [projectSearch, setProjectSearch] = useState("");
   const [workspacePopoverStyle, setWorkspacePopoverStyle] = useState<CSSProperties | null>(null);
   const [workspacePopoverTarget, setWorkspacePopoverTarget] = useState<HTMLElement | null>(null);
   const [activeDatePreset, setActiveDatePreset] = useState<DatePresetId>("7d");
@@ -489,6 +491,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const myProjects = useMemo(() => myProjectsQuery.data ?? [], [myProjectsQuery.data]);
+  const showProjectSearch = myProjects.length >= 6;
+  const filteredProjects = useMemo(() => {
+    const query = projectSearch.trim().toLocaleLowerCase();
+    if (!query) return myProjects;
+    return myProjects.filter((project) => project.project_name.toLocaleLowerCase().includes(query));
+  }, [myProjects, projectSearch]);
   const myProjectIdsKey = myProjects.map((project) => project.project_id).join("|");
   const selectedProjectMembership = selectedProject
     ? myProjects.find((project) => project.project_id === selectedProject) ?? null
@@ -681,6 +689,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       : protectedActionsUsageTone === "warning"
         ? "is-warning"
         : "is-ok";
+  const planFooterLabel =
+    protectedActionsUsageTone === "critical"
+      ? "Limit reached"
+      : protectedActionsUsageTone === "warning"
+        ? "Near monthly limit"
+        : planPeriod;
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
   const currentRoute = getRouteMeta(pathname);
   const showDashboardTimeWindow = !pathname.startsWith("/settings");
@@ -706,6 +720,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const accountInitials = initials(accountName || accountEmail || "User");
 
   function toggleMenu(menu: ShellMenu) {
+    if (menu === "workspace" && openMenu !== "workspace") setProjectSearch("");
     setOpenMenu((current) => (current === menu ? null : menu));
   }
 
@@ -785,8 +800,20 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       aria-label="Project menu"
       style={workspacePopoverStyle}
     >
-      {myProjects.length > 0 ? (
-        myProjects.map((project) => {
+      {showProjectSearch ? (
+        <label className="org-project-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={projectSearch}
+            onChange={(event) => setProjectSearch(event.target.value)}
+            placeholder="Find project"
+            aria-label="Find project"
+          />
+        </label>
+      ) : null}
+      {filteredProjects.length > 0 ? (
+        filteredProjects.map((project) => {
           const isSelected = project.project_id === selectedProject;
           return (
             <button
@@ -805,6 +832,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </button>
           );
         })
+      ) : projectSearch.trim() ? (
+        <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
+          <Search size={15} aria-hidden="true" />
+          <span>
+            <strong>No matching projects</strong>
+            <small>Try another project name.</small>
+          </span>
+        </div>
       ) : (
         <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
           <AlertTriangle size={15} aria-hidden="true" />
@@ -913,7 +948,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </div>
             ) : null}
             <div className="plan-card-footrow">
-              <span className="plan-renew">{planPeriod}</span>
+              <span className="plan-renew">{planFooterLabel}</span>
               <span className="plan-usage-link">
                 Billing <ArrowRight size={12} aria-hidden="true" />
               </span>
