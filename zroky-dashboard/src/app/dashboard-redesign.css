@@ -26466,3 +26466,69 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   box-shadow: none !important;
   padding: 0 !important;
 }
+
+/* Keep the compact sidebar controls readable at the fixed desktop rail width. */
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-usage-summary {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-usage-kicker {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card-footrow {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-renew {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-usage-link {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 3px !important;
+  color: var(--mc-accent) !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .org-widget {
+  text-align: left !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .org-info {
+  width: 100% !important;
+  justify-items: start !important;
+  text-align: left !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot :where(.org-kicker, .org-name, .org-meta) {
+  width: 100% !important;
+  text-align: left !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot :where(.org-meta, .org-env) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .org-chevron {
+  transition: transform 160ms ease !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .org-widget-active .org-chevron {
+  transform: rotate(180deg) !important;
+}
