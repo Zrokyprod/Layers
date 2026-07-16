@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { Clock3, Download, Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
@@ -49,10 +49,10 @@ function exportLabel(row: EvidenceLedgerRow): string {
 }
 
 function actionLabel(row: EvidenceLedgerRow): string {
-  if (row.exportable) {
-    return row.exportKind === "receipt" ? "Open receipt" : "Open pack";
-  }
-  return row.kind === "unlinked_outcome" ? "Not exportable" : "Review row";
+  if (row.exportable) return row.exportKind === "receipt" ? "Open receipt" : "Open proof";
+  if (row.kind === "unlinked_outcome") return "Review mismatch";
+  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "View details";
+  return "Review";
 }
 
 export function EvidenceLedger({
@@ -173,29 +173,15 @@ export function EvidenceLedger({
                     <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} />
                   </div>
                   <p>{row.agentName} / {row.actionType}</p>
-                  <dl className="ev-row-meta">
-                    {row.digest ? (
-                      <div>
-                        <dt>{row.kind === "action_receipt" ? "Intent digest" : "Digest"}</dt>
-                        <dd>
-                          <code>{row.digest}</code>
-                        </dd>
-                      </div>
-                    ) : null}
-                    <div>
-                      <dt>Checked</dt>
-                      <dd>{formatDateTime(row.checkedAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>Export</dt>
-                      <dd>{exportLabel(row)}</dd>
-                    </div>
-                  </dl>
-                  <small>{row.systemRef ?? row.detail}</small>
+                  <div className="ev-row-facts" aria-label="Record summary">
+                    <span><Clock3 size={13} aria-hidden="true" />{formatDateTime(row.checkedAt)}</span>
+                    <span><Download size={13} aria-hidden="true" />{exportLabel(row)}</span>
+                  </div>
+                  <small className="ev-row-detail">{row.systemRef ?? row.detail}</small>
                 </div>
                 <div className="ev-ledger-actions">
                   <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
-                    {row.exportable ? "View proof" : actionLabel(row)}
+                    {actionLabel(row)}
                   </DashboardButton>
                   {row.kind === "unlinked_outcome" ? (
                     <Link className="ev-link" href="/outcomes">Open outcomes</Link>
