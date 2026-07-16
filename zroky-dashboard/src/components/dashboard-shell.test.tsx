@@ -618,6 +618,7 @@ describe("DashboardShell primary navigation", () => {
     expect((projectMenu as HTMLElement).style.position).toBe("fixed");
     expect((projectMenu as HTMLElement).style.width).toBe("312px");
     expect(screen.getByRole("menuitem", { name: /Manage projects/ }).getAttribute("href")).toBe("/projects");
+    expect(screen.getByRole("menuitem", { name: /Team access/ }).getAttribute("href")).toBe("/settings/team");
     expect(screen.queryByText("Project switcher")).not.toBeInTheDocument();
     expect(screen.queryByText(/projects used/)).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /New project/ })).not.toBeInTheDocument();
@@ -698,6 +699,13 @@ describe("DashboardShell primary navigation", () => {
 
     const planLink = screen.getByLabelText("Open billing and usage");
     const workspaceButton = screen.getByRole("button", { name: "Open project menu" });
+    expect(planLink.getAttribute("href")).toBe("/settings/billing");
+    expect(workspaceButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(workspaceButton);
+
+    expect(workspaceButton.getAttribute("aria-expanded")).toBe("true");
+    expect(workspaceButton.classList.contains("org-widget-active")).toBe(true);
     expect(planLink.compareDocumentPosition(workspaceButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
