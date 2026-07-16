@@ -29387,3 +29387,391 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page)
     min-width: 0 !important;
   }
 }
+
+/* Agents final polish: fleet governance surface with a 60/40 fleet-detail split. */
+.app-shell[data-dashboard-system="control-v1"] .agents-screen {
+  --agents-page: #f6f8fc;
+  --agents-surface: #ffffff;
+  --agents-surface-soft: #f8fafd;
+  --agents-border: #e4e9f1;
+  --agents-border-strong: #d8e0ec;
+  --agents-text: #0b1220;
+  --agents-text-secondary: #5f6b7c;
+  --agents-text-tertiary: #8a94a6;
+  --agents-primary: #2457f5;
+  --agents-primary-soft: #eef3ff;
+  --agents-success: #16a66a;
+  --agents-success-soft: #eaf8f1;
+  --agents-warning: #d97706;
+  --agents-warning-soft: #fff5e5;
+  --agents-danger: #dc4455;
+  --agents-danger-soft: #fff0f2;
+  --agents-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045);
+  gap: 16px !important;
+  color: var(--agents-text) !important;
+}
+
+html:has(.app-shell[data-dashboard-system="control-v1"] .agents-screen),
+body:has(.app-shell[data-dashboard-system="control-v1"] .agents-screen),
+.app-shell[data-dashboard-system="control-v1"]:has(.agents-screen) {
+  background: #f6f8fc !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-hero {
+  min-height: 132px !important;
+  padding: 22px 24px !important;
+  border: 1px solid var(--agents-border) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(36, 87, 245, 0.1), transparent 34%),
+    var(--agents-surface) !important;
+  box-shadow: var(--agents-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-hero::before {
+  background: var(--agents-primary) !important;
+  opacity: 0.92 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-hero h1 {
+  color: var(--agents-text) !important;
+  font-size: 30px !important;
+  font-weight: 720 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-hero p,
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-meta {
+  color: var(--agents-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-hero .dashboard-button-primary {
+  background: var(--agents-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-strip {
+  gap: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-card {
+  min-height: 132px !important;
+  padding: 18px !important;
+  border: 1px solid var(--agents-border) !important;
+  border-radius: 14px !important;
+  background: var(--agents-surface) !important;
+  box-shadow: var(--agents-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-card:hover {
+  border-color: var(--agents-border-strong) !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-card strong {
+  color: var(--agents-text) !important;
+  font-size: 29px !important;
+  font-weight: 730 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-card p {
+  color: var(--agents-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+@media (min-width: 1181px) {
+  .app-shell[data-dashboard-system="control-v1"] .agents-layout-grid {
+    grid-template-columns: minmax(520px, 3fr) minmax(390px, 2fr) !important;
+    gap: 16px !important;
+  }
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-table-panel,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-panel,
+.app-shell[data-dashboard-system="control-v1"] .agents-warning-panel,
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner,
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-card {
+  border-color: var(--agents-border) !important;
+  border-radius: 16px !important;
+  background: var(--agents-surface) !important;
+  box-shadow: var(--agents-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-table-panel,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-panel,
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner,
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-card {
+  padding: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-panel-head {
+  align-items: center !important;
+  margin-bottom: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-panel-head span,
+.app-shell[data-dashboard-system="control-v1"] .agents-eyebrow {
+  color: var(--agents-text-tertiary) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-panel-head strong {
+  color: var(--agents-text) !important;
+  font-size: 17px !important;
+  font-weight: 680 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-table-count {
+  border-color: #b9e6d0 !important;
+  border-radius: 999px !important;
+  background: var(--agents-success-soft) !important;
+  color: #0f8a57 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-fleet-summary {
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-fleet-summary > div,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-score > div,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-control-grid > div {
+  border-color: var(--agents-border) !important;
+  border-radius: 12px !important;
+  background: var(--agents-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-fleet-summary strong,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-score strong,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-control-grid strong {
+  color: var(--agents-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-fleet-summary span,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-score span,
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-control-grid span {
+  color: var(--agents-text-tertiary) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-list {
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card {
+  grid-template-columns: 24px minmax(0, 1fr) minmax(230px, 0.54fr) !important;
+  min-height: 92px !important;
+  padding: 12px !important;
+  border: 1px solid var(--agents-border) !important;
+  border-left: 3px solid var(--agents-border-strong) !important;
+  border-radius: 12px !important;
+  background: var(--agents-surface-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card:hover,
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card:focus-visible {
+  border-color: var(--agents-border-strong) !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055) !important;
+  outline: 0 !important;
+  transform: translateY(-1px) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card.is-selected {
+  border-color: rgba(36, 87, 245, 0.36) !important;
+  border-left-color: var(--agents-primary) !important;
+  background: var(--agents-primary-soft) !important;
+  box-shadow: 0 0 0 2px rgba(36, 87, 245, 0.1) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card[data-tone="success"] {
+  border-left-color: var(--agents-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card[data-tone="warning"] {
+  border-left-color: var(--agents-warning) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card[data-tone="danger"] {
+  border-left-color: var(--agents-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card.is-selected[data-tone] {
+  border-left-color: var(--agents-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-icon {
+  width: 18px !important;
+  height: 18px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card[data-tone="success"] .agents-agent-icon {
+  color: var(--agents-success) !important;
+  background: transparent !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card[data-tone="warning"] .agents-agent-icon {
+  color: var(--agents-warning) !important;
+  background: transparent !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card[data-tone="danger"] .agents-agent-icon {
+  color: var(--agents-danger) !important;
+  background: transparent !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-title strong {
+  color: var(--agents-text) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-main > span:not(.agents-agent-card-title):not(.agents-agent-card-signals),
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-signals small {
+  color: var(--agents-text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-signals small {
+  border-color: var(--agents-border) !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics {
+  gap: 6px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics > span {
+  border-color: var(--agents-border) !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics strong {
+  color: var(--agents-text) !important;
+  font-size: 13px !important;
+  font-weight: 720 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics small {
+  color: var(--agents-text-secondary) !important;
+  font-size: 11px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-panel {
+  top: 88px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-verdict,
+.app-shell[data-dashboard-system="control-v1"] .agents-mandate-card,
+.app-shell[data-dashboard-system="control-v1"] .agents-latest-action-card,
+.app-shell[data-dashboard-system="control-v1"] .agents-identity-warning,
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-filter,
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner-checks > div,
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-path > div {
+  border-color: var(--agents-border) !important;
+  border-radius: 12px !important;
+  background: var(--agents-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-verdict {
+  border-left: 3px solid var(--agents-border-strong) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-verdict[data-tone="success"] {
+  border-left-color: var(--agents-success) !important;
+  background: linear-gradient(90deg, var(--agents-success-soft) 0%, var(--agents-surface) 44%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-verdict[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .agents-identity-warning {
+  border-left: 3px solid var(--agents-warning) !important;
+  background: linear-gradient(90deg, var(--agents-warning-soft) 0%, var(--agents-surface) 44%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-verdict strong,
+.app-shell[data-dashboard-system="control-v1"] .agents-mandate-card strong,
+.app-shell[data-dashboard-system="control-v1"] .agents-latest-action-card strong,
+.app-shell[data-dashboard-system="control-v1"] .agents-identity-warning strong,
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-filter strong {
+  color: var(--agents-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-inspector-verdict small,
+.app-shell[data-dashboard-system="control-v1"] .agents-mandate-card small,
+.app-shell[data-dashboard-system="control-v1"] .agents-latest-action-card small,
+.app-shell[data-dashboard-system="control-v1"] .agents-identity-warning span,
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-filter span {
+  color: var(--agents-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-warning-panel {
+  border-left: 3px solid var(--agents-warning) !important;
+  background: linear-gradient(90deg, var(--agents-warning-soft) 0%, var(--agents-surface) 44%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner {
+  border-left: 3px solid var(--agents-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner-progress i {
+  background: var(--agents-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner-progress div {
+  background: #e4e9f1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner-checks > div[data-done="false"] {
+  border-color: #f0cf8c !important;
+  background: var(--agents-warning-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-setup-banner-checks > div[data-done="true"] {
+  border-color: #b9e6d0 !important;
+  background: var(--agents-success-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-empty-path span {
+  border-color: #c8d8ff !important;
+  background: var(--agents-primary-soft) !important;
+  color: var(--agents-primary) !important;
+}
+
+@media (max-width: 1180px) {
+  .app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-strip,
+  .app-shell[data-dashboard-system="control-v1"] .agents-fleet-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agents-inspector-panel {
+    position: static !important;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-metric-strip,
+  .app-shell[data-dashboard-system="control-v1"] .agents-fleet-summary,
+  .app-shell[data-dashboard-system="control-v1"] .agents-agent-card-metrics {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agents-agent-card {
+    grid-template-columns: 24px minmax(0, 1fr) !important;
+  }
+}
