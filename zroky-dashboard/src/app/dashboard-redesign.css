@@ -28188,6 +28188,53 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   }
 }
 
+/* Status text must communicate the verdict instead of inheriting the neutral
+   badge color. Explicit status classes keep older call sites semantic too. */
+.app-shell[data-dashboard-system="control-v1"] :where(
+  .status-pill[data-tone="warning"],
+  .status-pill.status-awaiting-runner,
+  .status-pill.status-approval-pending,
+  .status-pill.status-pending,
+  .status-pill.status-pending-approval,
+  .status-pill.status-not-verified
+) {
+  border-color: #f0cf8c !important;
+  background: #fff7e8 !important;
+  color: #a85b08 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(
+  .status-pill[data-tone="danger"],
+  .status-pill.status-denied,
+  .status-pill.status-mismatched,
+  .status-pill.status-failed,
+  .status-pill.status-rejected,
+  .status-pill.status-blocked
+) {
+  border-color: #f2c3ca !important;
+  background: #fff1f3 !important;
+  color: #c73546 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(
+  .status-pill[data-tone="success"],
+  .status-pill.status-approved,
+  .status-pill.status-allowed,
+  .status-pill.status-completed,
+  .status-pill.status-generated,
+  .status-pill.status-matched,
+  .status-pill.status-verified
+) {
+  border-color: #b9e6d0 !important;
+  background: #ecf9f2 !important;
+  color: #0f8a57 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-status-active {
+  color: #0f8a57 !important;
+  font-weight: 700 !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card {
     transition: none !important;
