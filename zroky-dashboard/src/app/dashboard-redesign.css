@@ -26458,3 +26458,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     flex-direction: column;
   }
 }
+
+/* The usage block already provides hierarchy, so the plan name stays typographic. */
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-badge {
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
