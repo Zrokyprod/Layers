@@ -28358,7 +28358,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   color: var(--home-primary) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) :where(.plan-status-active, .plan-badge) {
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .plan-badge {
+  color: var(--home-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"]:has(.fi-home-option-a) .plan-status-active {
   border-color: rgba(22, 166, 106, 0.18) !important;
   background: var(--home-success-soft) !important;
   color: #0f8a57 !important;
