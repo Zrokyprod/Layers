@@ -509,6 +509,49 @@ describe("EvidencePage", () => {
     expect(api.getActionIntentReceipt).not.toHaveBeenCalled();
   });
 
+  it("switches between protected-action proof records and keeps the URL in sync", async () => {
+    const guardDecision = runtimeDecision({
+      id: "decision_2",
+      call_id: "call_2",
+      trace_id: "trace_2",
+      action_type: "customer.access.grant",
+      tool_name: "customer.access.grant",
+      intended_action: { summary: "Grant customer access" },
+    });
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      decisions: [runtimeDecision(), guardDecision],
+    }));
+    api.getRuntimePolicyEvidencePack.mockImplementation((decisionId: string) => Promise.resolve(evidencePack({
+      decision_id: decisionId,
+      decision: {
+        ...guardDecision,
+        id: decisionId,
+        approval_scope_hash: "scope_2",
+      },
+    })));
+
+    renderEvidencePage();
+
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    const receiptRow = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
+    const guardRow = (await within(ledger).findByText("Grant customer access")).closest(".ev-ledger-row") as HTMLElement;
+
+    expect(receiptRow.getAttribute("data-focused")).toBe("true");
+    fireEvent.click(within(guardRow).getByRole("button", { name: "Open proof" }));
+
+    await waitFor(() => expect(guardRow.getAttribute("data-focused")).toBe("true"));
+    expect(window.location.search).toBe("?decision_id=decision_2");
+    expect(await screen.findByRole("heading", { name: "Runtime decision proof" })).toBeInTheDocument();
+    expect(screen.getByText("Guard-only Evidence Pack / Customer.access.grant")).toBeInTheDocument();
+    expect(api.getRuntimePolicyEvidencePack).toHaveBeenCalledWith("decision_2", expect.any(AbortSignal));
+
+    fireEvent.click(within(receiptRow).getByRole("button", { name: "Open receipt" }));
+
+    await waitFor(() => expect(receiptRow.getAttribute("data-focused")).toBe("true"));
+    expect(window.location.search).toBe("?action_id=act_1");
+    expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
+  });
+
   it("searches the ledger and exports a scoped audit manifest", async () => {
     renderEvidencePage();
 

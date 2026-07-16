@@ -21126,6 +21126,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-accent) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .plan-badge {
+  border-color: transparent !important;
+  background: transparent !important;
+  padding-inline: 0 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] :where(.plan-status, .plan-renew, .plan-usage-total, .plan-usage-link, .org-kicker, .org-env, .user-email, .topbar-search-hint, .topbar-search-icon, .topbar-bc-icon, .topbar-bc-chevron, .user-row-chevron, .org-chevron, .shell-menu-item small, .shell-popover-head span, .shell-popover-head small) {
   color: var(--mc-text-tertiary) !important;
 }
