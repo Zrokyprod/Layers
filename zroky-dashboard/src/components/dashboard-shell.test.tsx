@@ -529,6 +529,32 @@ describe("DashboardShell primary navigation", () => {
     expect(container.querySelector(".plan-usage-track")).toBeInTheDocument();
   });
 
+  it("surfaces near-limit and exhausted protected-action quotas", () => {
+    navState.protectedActionsUsage = {
+      used: 8_000,
+      limit: 10_000,
+      unlimited: false,
+      overage: null,
+      state: "near_limit",
+      resets_at: null,
+    };
+
+    const { container, rerender } = render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Near monthly limit")).toBeInTheDocument();
+    expect(container.querySelector(".plan-card")?.classList.contains("is-warning")).toBe(true);
+
+    navState.protectedActionsUsage = {
+      ...navState.protectedActionsUsage,
+      used: 10_000,
+      state: "blocked",
+    };
+    rerender(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Limit reached")).toBeInTheDocument();
+    expect(container.querySelector(".plan-card")?.classList.contains("is-critical")).toBe(true);
+  });
+
   it("keeps the subscription quota visible while usage is still syncing", () => {
     navState.planCode = "free";
     navState.planTemplate = {
@@ -624,6 +650,7 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByRole("menuitem", { name: /New project/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Upgrade to add more/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Project settings/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Find project" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));
 
@@ -642,6 +669,30 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByRole("menuitem", { name: /Integrations/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Cost/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Alerts/ })).not.toBeInTheDocument();
+  });
+
+  it("filters large project lists without crowding smaller workspaces", () => {
+    navState.myProjects = Array.from({ length: 6 }, (_, index) => ({
+      membership_id: `mem_${index + 1}`,
+      project_id: `proj_${index + 1}`,
+      project_name: index === 5 ? "Payments Production" : `Workspace ${index + 1}`,
+      role: index === 0 ? "owner" : "member",
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    }));
+
+    render(<DashboardShell>content</DashboardShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Open project menu" }));
+
+    const search = screen.getByRole("searchbox", { name: "Find project" });
+    fireEvent.change(search, { target: { value: "payments" } });
+
+    expect(screen.getByRole("menuitem", { name: "Payments Production" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Workspace 2" })).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "missing" } });
+    expect(screen.getByRole("menuitem", { name: /No matching projects/ })).toBeInTheDocument();
   });
 
   it("toggles the desktop sidebar from the topbar control", () => {

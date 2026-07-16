@@ -26532,3 +26532,59 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .sidebar-foot .org-widget-active .org-chevron {
   transform: rotate(180deg) !important;
 }
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card.is-warning {
+  border-color: rgba(184, 116, 20, 0.42) !important;
+  box-shadow: inset 3px 0 0 #b87414, var(--mc-shadow-rest) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card.is-warning .plan-usage-fill {
+  background: #b87414 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card.is-warning .plan-renew {
+  color: #8a5410 !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card.is-critical {
+  border-color: rgba(196, 54, 54, 0.42) !important;
+  box-shadow: inset 3px 0 0 var(--mc-danger), var(--mc-shadow-rest) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card.is-critical .plan-usage-fill {
+  background: var(--mc-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-card.is-critical .plan-renew {
+  color: var(--mc-danger) !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .org-project-search {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 38px !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-card) !important;
+  color: var(--mc-text-tertiary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .org-project-search:focus-within {
+  border-color: var(--mc-accent) !important;
+  box-shadow: 0 0 0 2px var(--mc-accent-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .org-project-search input {
+  width: 100% !important;
+  min-width: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--mc-text) !important;
+  font: inherit !important;
+}
