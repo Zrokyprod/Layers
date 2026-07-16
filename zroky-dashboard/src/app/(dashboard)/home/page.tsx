@@ -456,7 +456,7 @@ export default function HomePage() {
   const updatedLabel = lastLoadedAt ? `Updated ${timeSince(lastLoadedAt)}` : "Loading";
 
   return (
-    <main className="mission-control-page">
+    <main className="mission-control-page fi-home-option-a">
       <div className="mc-shell">
         <VerdictHero
           verdict={verdict}
