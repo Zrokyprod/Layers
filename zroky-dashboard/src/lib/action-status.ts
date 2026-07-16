@@ -38,9 +38,12 @@ export type LifecycleStage = {
 const LABELS: Record<string, string> = {
   approval_pending: "Approval pending",
   authorized: "Authorized",
+  awaiting_runner: "Awaiting runner",
   blocked: "Blocked",
+  bypassed: "Bypassed",
   deciding: "Policy deciding",
   denied: "Denied",
+  execution_stalled: "Execution stalled",
   expired: "Expired",
   failed: "Failed",
   generated: "Generated",
@@ -49,12 +52,17 @@ const LABELS: Record<string, string> = {
   matched_receipt: "Matched receipt",
   mismatched: "Mismatched",
   missing: "Missing",
+  needs_verification: "Needs verification",
+  no_runner: "No runner",
   not_started: "Not started",
   not_verified: "Not verified",
   pending: "Pending",
   pending_approval: "Pending approval",
   policy_bypass: "Policy bypass",
+  receipt_unavailable: "Receipt unavailable",
   rejected: "Rejected",
+  signature_invalid: "Signature invalid",
+  signature_valid: "Signature valid",
   unmanaged_agent_action: "Unmanaged agent action",
   unknown_actor: "Unknown actor",
   validated: "Validated",
@@ -62,22 +70,29 @@ const LABELS: Record<string, string> = {
 
 const DANGER = new Set([
   "blocked",
+  "bypassed",
   "denied",
+  "execution_stalled",
   "expired",
   "failed",
   "fail",
   "mismatched",
   "policy_bypass",
+  "receipt_unavailable",
   "rejected",
+  "signature_invalid",
   "unmanaged_agent_action",
   "unknown_actor",
 ]);
 
 const WARNING = new Set([
   "approval_pending",
+  "awaiting_runner",
   "deciding",
   "legacy_path",
   "missing",
+  "needs_verification",
+  "no_runner",
   "not_started",
   "not_verified",
   "pending",
@@ -95,6 +110,8 @@ const SUCCESS = new Set([
   "matched",
   "matched_receipt",
   "pass",
+  "receipted",
+  "signature_valid",
   "verified",
 ]);
 
@@ -164,19 +181,19 @@ export function lifecycleStage(intent: Pick<ActionIntentResponse, "status" | "pr
       tone: "warning",
     };
   }
-  if (["mismatched", "not_verified"].includes(proof)) {
-    return {
-      id: "verification",
-      label: statusLabel(proof, "proof"),
-      detail: "Verification reached a terminal proof verdict.",
-      tone: statusTone(proof, "proof"),
-    };
-  }
   if (receipt === "generated") {
     return {
       id: "receipted",
       label: "Receipt generated",
       detail: proof === "matched" ? "Action proof is matched and receipted." : "Receipt records the final action state.",
+      tone: statusTone(proof, "proof"),
+    };
+  }
+  if (["mismatched", "not_verified"].includes(proof)) {
+    return {
+      id: "verification",
+      label: statusLabel(proof, "proof"),
+      detail: "Verification reached a terminal proof verdict.",
       tone: statusTone(proof, "proof"),
     };
   }

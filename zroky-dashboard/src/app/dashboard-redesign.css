@@ -5,36 +5,42 @@
 html:has(.app-shell[data-dashboard-system="control-v1"]),
 body:has(.app-shell[data-dashboard-system="control-v1"]) {
   min-height: 100%;
-  background: #f6f7f9 !important;
+  background: #f6f8fc !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] {
-  --dash-canvas: #f6f7f9;
-  --dash-sidebar: #f1f3f6;
+  --dash-canvas: #f6f8fc;
+  --dash-sidebar: #fafbfd;
   --dash-surface: #ffffff;
-  --dash-surface-subtle: #f9fafb;
-  --dash-surface-muted: #eef2f6;
-  --dash-border: #dfe5ec;
-  --dash-border-strong: #cbd5e1;
-  --dash-text: #101828;
-  --dash-text-soft: #475467;
-  --dash-text-muted: #667085;
-  --dash-blue: #1d4ed8;
-  --dash-blue-soft: #edf4ff;
-  --dash-red: #b42318;
-  --dash-red-soft: #fff1f0;
-  --dash-amber: #a15c07;
-  --dash-amber-soft: #fff7e6;
-  --dash-green: #067647;
-  --dash-green-soft: #ecfdf3;
-  --dash-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --dash-surface-subtle: #f8fafd;
+  --dash-surface-muted: #eef3ff;
+  --dash-border: #e4e9f1;
+  --dash-border-strong: #d8e0ec;
+  --dash-text: #0b1220;
+  --dash-text-soft: #5f6b7c;
+  --dash-text-muted: #8a94a6;
+  --dash-blue: #2457f5;
+  --dash-blue-hover: #1948db;
+  --dash-blue-soft: #eef3ff;
+  --dash-red: #dc4455;
+  --dash-red-strong: #c73546;
+  --dash-red-soft: #fff0f2;
+  --dash-amber: #d97706;
+  --dash-amber-strong: #a85b08;
+  --dash-amber-soft: #fff5e5;
+  --dash-green: #16a66a;
+  --dash-green-strong: #0f8a57;
+  --dash-green-soft: #eaf8f1;
+  --dash-purple: #7657e8;
+  --dash-purple-soft: #f2efff;
+  --dash-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045);
   display: grid !important;
   grid-template-columns: 208px minmax(0, 1fr) !important;
   min-height: 100dvh !important;
   background: var(--dash-canvas) !important;
   color: var(--dash-text) !important;
   color-scheme: light !important;
-  font-family: var(--font-manrope), "SF Pro Display", "Helvetica Neue", Arial, sans-serif !important;
+  font-family: var(--font-geist), Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"].sidebar-collapsed {
@@ -5812,6 +5818,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   line-height: 1 !important;
   text-decoration: none !important;
   white-space: nowrap !important;
+  cursor: pointer !important;
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease,
@@ -5853,8 +5860,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-primary {
-  background: var(--mc-accent) !important;
+  border-color: var(--dash-blue) !important;
+  background: var(--dash-blue) !important;
   color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(36, 87, 245, 0.18) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-primary .dashboard-button-label,
@@ -5863,40 +5872,48 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-primary:hover {
-  background: var(--mc-accent-hover) !important;
+  border-color: var(--dash-blue-hover) !important;
+  background: var(--dash-blue-hover) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-soft {
-  background: var(--mc-soft) !important;
-  border-color: var(--mc-border) !important;
-  color: var(--mc-text) !important;
+  background: var(--dash-surface) !important;
+  border-color: var(--dash-border) !important;
+  color: var(--dash-text) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-soft:hover {
-  border-color: var(--mc-border-strong) !important;
+  border-color: var(--dash-border-strong) !important;
+  background: var(--dash-surface-subtle) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-ghost {
   background: transparent !important;
-  color: var(--mc-text-secondary) !important;
+  color: var(--dash-text-soft) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-ghost:hover {
-  background: var(--mc-soft) !important;
-  color: var(--mc-text) !important;
+  background: var(--dash-blue-soft) !important;
+  color: var(--dash-blue) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-danger {
-  background: var(--mc-danger) !important;
+  border-color: var(--dash-red) !important;
+  background: var(--dash-red) !important;
   color: #ffffff !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-danger:hover {
-  background: #b93232 !important;
+  border-color: var(--dash-red-strong) !important;
+  background: var(--dash-red-strong) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .dashboard-button:active {
+  transform: translateY(1px) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--mc-accent) 55%, transparent) !important;
+  outline: 3px solid color-mix(in srgb, var(--dash-blue) 24%, transparent) !important;
   outline-offset: 2px !important;
 }
 
@@ -28191,47 +28208,81 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 /* Status text must communicate the verdict instead of inheriting the neutral
    badge color. Explicit status classes keep older call sites semantic too. */
 .app-shell[data-dashboard-system="control-v1"] :where(
+  .status-pill[data-tone="neutral"],
+  .status-pill.status-proposed,
+  .status-pill.status-validated,
+  .status-pill.status-incomplete,
+  .status-pill.status-unknown
+) {
+  border-color: var(--dash-border) !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(
   .status-pill[data-tone="warning"],
   .status-pill.status-awaiting-runner,
   .status-pill.status-approval-pending,
+  .status-pill.status-deciding,
+  .status-pill.status-expired,
+  .status-pill.status-legacy-path,
+  .status-pill.status-missing,
+  .status-pill.status-needs-verification,
+  .status-pill.status-no-runner,
+  .status-pill.status-not-started,
   .status-pill.status-pending,
   .status-pill.status-pending-approval,
-  .status-pill.status-not-verified
+  .status-pill.status-not-verified,
+  .status-pill.status-signature-review
 ) {
   border-color: #f0cf8c !important;
-  background: #fff7e8 !important;
-  color: #a85b08 !important;
+  background: var(--dash-amber-soft) !important;
+  color: var(--dash-amber-strong) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] :where(
   .status-pill[data-tone="danger"],
+  .status-pill.status-bypassed,
   .status-pill.status-denied,
+  .status-pill.status-exception,
+  .status-pill.status-execution-stalled,
   .status-pill.status-mismatched,
   .status-pill.status-failed,
+  .status-pill.status-policy-bypass,
+  .status-pill.status-receipt-unavailable,
   .status-pill.status-rejected,
+  .status-pill.status-signature-invalid,
+  .status-pill.status-unmanaged-agent-action,
+  .status-pill.status-unknown-actor,
   .status-pill.status-blocked
 ) {
   border-color: #f2c3ca !important;
-  background: #fff1f3 !important;
-  color: #c73546 !important;
+  background: var(--dash-red-soft) !important;
+  color: var(--dash-red-strong) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] :where(
   .status-pill[data-tone="success"],
   .status-pill.status-approved,
   .status-pill.status-allowed,
+  .status-pill.status-authorized,
+  .status-pill.status-clear,
   .status-pill.status-completed,
   .status-pill.status-generated,
   .status-pill.status-matched,
+  .status-pill.status-matched-receipt,
+  .status-pill.status-pass,
+  .status-pill.status-receipted,
+  .status-pill.status-signature-valid,
   .status-pill.status-verified
 ) {
   border-color: #b9e6d0 !important;
-  background: #ecf9f2 !important;
-  color: #0f8a57 !important;
+  background: var(--dash-green-soft) !important;
+  color: var(--dash-green-strong) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .sidebar-foot .plan-status-active {
-  color: #0f8a57 !important;
+  color: var(--dash-green-strong) !important;
   font-weight: 700 !important;
 }
 
