@@ -27796,6 +27796,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   font-weight: 650;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-danger .mc-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-warning .mc-eyebrow {
+  color: #bfccf5;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero h1 {
   margin-top: 5px;
   color: #fff !important;
