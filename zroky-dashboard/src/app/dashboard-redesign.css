@@ -28565,3 +28565,373 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Approvals final polish: the human approval gate should feel precise and
+   calm, with urgency communicated through small semantic accents. */
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page {
+  --approval-page: #f6f8fc;
+  --approval-surface: #ffffff;
+  --approval-surface-soft: #f8fafd;
+  --approval-border: #e4e9f1;
+  --approval-border-strong: #d8e0ec;
+  --approval-text: #0b1220;
+  --approval-text-secondary: #5f6b7c;
+  --approval-text-tertiary: #8a94a6;
+  --approval-primary: #2457f5;
+  --approval-primary-hover: #1948db;
+  --approval-primary-soft: #eef3ff;
+  --approval-success: #16a66a;
+  --approval-success-soft: #eaf8f1;
+  --approval-warning: #d97706;
+  --approval-warning-soft: #fff5e5;
+  --approval-danger: #dc4455;
+  --approval-danger-soft: #fff0f2;
+  --approval-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045);
+  gap: 16px !important;
+  color: var(--approval-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.content, .content-inner, .main-content):has(.approvals-v2-page) {
+  background: var(--approval-page) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-hero {
+  min-height: 132px !important;
+  padding: 22px 24px !important;
+  border: 1px solid var(--approval-border) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(36, 87, 245, 0.1), transparent 34%),
+    var(--approval-surface) !important;
+  box-shadow: var(--approval-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-hero::before {
+  background: var(--approval-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-copy h1 {
+  color: var(--approval-text) !important;
+  font-size: 30px !important;
+  font-weight: 700 !important;
+  line-height: 1.12 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-copy p {
+  max-width: 760px !important;
+  color: var(--approval-text-secondary) !important;
+  font-size: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-live-status {
+  color: var(--approval-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-live-dot {
+  background: var(--approval-success) !important;
+  box-shadow: 0 0 0 4px rgba(22, 166, 106, 0.12) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-pill {
+  border-color: #c8d8ff !important;
+  background: var(--approval-primary-soft) !important;
+  color: var(--approval-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-hero[data-tone="warning"] .dashboard-verdict-pill {
+  border-color: #f0cf8c !important;
+  background: var(--approval-warning-soft) !important;
+  color: #a85b08 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-verdict-hero[data-tone="danger"] .dashboard-verdict-pill {
+  border-color: #f2c3ca !important;
+  background: var(--approval-danger-soft) !important;
+  color: #c73546 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-metric-strip {
+  gap: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter {
+  min-height: 132px !important;
+  padding: 18px !important;
+  border: 1px solid var(--approval-border) !important;
+  border-radius: 14px !important;
+  background: var(--approval-surface) !important;
+  box-shadow: var(--approval-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter.is-active {
+  border-color: rgba(36, 87, 245, 0.36) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%) !important;
+  box-shadow: 0 0 0 2px rgba(36, 87, 245, 0.12), var(--approval-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter .dashboard-metric-icon {
+  border-radius: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter[data-tone="warning"] .dashboard-metric-icon {
+  border-color: #f0cf8c !important;
+  color: var(--approval-warning) !important;
+  background: var(--approval-warning-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter[data-tone="danger"] .dashboard-metric-icon {
+  border-color: #f2c3ca !important;
+  color: var(--approval-danger) !important;
+  background: var(--approval-danger-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-metric-filter[data-tone="success"] .dashboard-metric-icon {
+  border-color: #b9e6d0 !important;
+  color: var(--approval-success) !important;
+  background: var(--approval-success-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-workspace {
+  gap: 16px !important;
+}
+
+@media (min-width: 1181px) {
+  .app-shell[data-dashboard-system="control-v1"] .approvals-v2-page .dashboard-workspace {
+    grid-template-columns: minmax(360px, 0.92fr) minmax(560px, 1.08fr) !important;
+  }
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-panel,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-panel,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-alert,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-empty-state,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-notice {
+  border-color: var(--approval-border) !important;
+  border-radius: 14px !important;
+  background: var(--approval-surface) !important;
+  box-shadow: var(--approval-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-panel,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-panel {
+  gap: 14px !important;
+  padding: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-section-head,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-header {
+  align-items: center !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-section-head strong,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-header h2 {
+  color: var(--approval-text) !important;
+  font-size: 17px !important;
+  font-weight: 680 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-eyebrow {
+  color: var(--approval-text-tertiary) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-live {
+  border-color: #b9e6d0 !important;
+  background: var(--approval-success-soft) !important;
+  color: #0f8a57 !important;
+  font-weight: 700 !important;
+  text-transform: capitalize !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-list {
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row {
+  grid-template-columns: auto minmax(0, 1fr) auto 18px !important;
+  min-height: 84px !important;
+  padding: 12px !important;
+  border: 1px solid var(--approval-border) !important;
+  border-left: 3px solid var(--approval-border-strong) !important;
+  border-radius: 12px !important;
+  background: var(--approval-surface-soft) !important;
+  box-shadow: none !important;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row.approval-v2-tone-warning {
+  border-left-color: var(--approval-warning) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row.approval-v2-tone-danger {
+  border-left-color: var(--approval-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row.approval-v2-tone-success {
+  border-left-color: var(--approval-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row:focus-visible {
+  border-color: var(--approval-border-strong) !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055) !important;
+  outline: 0 !important;
+  transform: translateY(-1px) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row.is-selected {
+  border-color: rgba(36, 87, 245, 0.36) !important;
+  border-left-color: var(--approval-primary) !important;
+  background: var(--approval-primary-soft) !important;
+  box-shadow: 0 0 0 2px rgba(36, 87, 245, 0.1) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-priority,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-kind {
+  min-height: 24px !important;
+  border-color: var(--approval-border) !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  color: var(--approval-text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-main strong {
+  color: var(--approval-text) !important;
+  font-size: 13px !important;
+  font-weight: 680 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-main small,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-main em,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-side small,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-inspector-header p {
+  color: var(--approval-text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-row-arrow {
+  color: var(--approval-text-tertiary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-intent-card,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-console,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-mechanism,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-audit,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-fact-grid div,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-json-section,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-operational-row {
+  border-color: var(--approval-border) !important;
+  border-radius: 12px !important;
+  background: var(--approval-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary {
+  border-left: 3px solid var(--approval-border-strong) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary.approval-v2-tone-warning {
+  border-left-color: var(--approval-warning) !important;
+  background: linear-gradient(90deg, var(--approval-warning-soft) 0%, var(--approval-surface) 42%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary.approval-v2-tone-danger {
+  border-left-color: var(--approval-danger) !important;
+  background: linear-gradient(90deg, var(--approval-danger-soft) 0%, var(--approval-surface) 42%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-risk-summary.approval-v2-tone-success {
+  border-left-color: var(--approval-success) !important;
+  background: linear-gradient(90deg, var(--approval-success-soft) 0%, var(--approval-surface) 42%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-console {
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-action-preview,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-resolution {
+  border-color: #c8d8ff !important;
+  border-radius: 12px !important;
+  background: var(--approval-primary-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips button {
+  border-color: var(--approval-border) !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  color: var(--approval-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips button:hover,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips button:focus-visible {
+  border-color: rgba(36, 87, 245, 0.3) !important;
+  background: var(--approval-primary-soft) !important;
+  color: var(--approval-primary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-actions input {
+  min-height: 42px !important;
+  border-color: var(--approval-border) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  color: var(--approval-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-actions input:focus {
+  border-color: rgba(36, 87, 245, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(36, 87, 245, 0.12) !important;
+  outline: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-actions .dashboard-button-soft:last-child {
+  border-color: #f2c3ca !important;
+  background: var(--approval-danger-soft) !important;
+  color: #c73546 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-tab-list {
+  border-color: var(--approval-border) !important;
+  border-radius: 12px !important;
+  background: var(--approval-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-tab {
+  min-height: 36px !important;
+  border-radius: 9px !important;
+  color: var(--approval-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-tab.is-active,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-tab:hover {
+  background: #fff !important;
+  color: var(--approval-primary) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-permission-note {
+  border-color: #f0cf8c !important;
+  background: var(--approval-warning-soft) !important;
+  color: #a85b08 !important;
+}
+
+@media (max-width: 900px) {
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-panel {
+    position: static !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-priority,
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-row-arrow {
+    display: none !important;
+  }
+}
