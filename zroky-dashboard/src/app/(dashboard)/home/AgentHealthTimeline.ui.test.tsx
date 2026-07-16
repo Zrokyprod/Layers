@@ -54,7 +54,9 @@ describe("AgentHealthTimeline", () => {
     );
 
     expect(screen.getByText("Daily, 7 points")).toBeInTheDocument();
-    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Agent activity overview" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Activity summary")).toBeInTheDocument();
+    expect(screen.getAllByText("100%")).toHaveLength(2);
 
     const hitboxes = container.querySelectorAll(".mc-agent-chart-hitbox");
     expect(hitboxes).toHaveLength(7);
