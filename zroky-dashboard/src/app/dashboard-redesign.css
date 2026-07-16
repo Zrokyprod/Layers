@@ -29042,25 +29042,36 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page)
 }
 
 .app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-icon {
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 12px !important;
+  width: 18px !important;
+  height: 18px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-card[data-tone="success"] .dashboard-metric-icon {
   color: var(--action-success) !important;
-  background: var(--action-success-soft) !important;
+  background: transparent !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-card[data-tone="warning"] .dashboard-metric-icon,
 .app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-card[data-tone="setup"] .dashboard-metric-icon {
   color: var(--action-warning) !important;
-  background: var(--action-warning-soft) !important;
+  background: transparent !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-card[data-tone="danger"] .dashboard-metric-icon {
   color: var(--action-danger) !important;
-  background: var(--action-danger-soft) !important;
+  background: transparent !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  min-height: 20px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .actions-lifecycle-page .dashboard-metric-card strong {
