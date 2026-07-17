@@ -31359,3 +31359,37 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
   background: #fff0f2 !important;
   color: #c62f43 !important;
 }
+
+/* Specificity guard for live Policies elements that are still styled by
+   older module-scoped selectors above this cleanup layer. */
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-title svg,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-result > svg {
+  color: #2457f5 !important;
+  stroke: #2457f5 !important;
+  border-color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-tone-success,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-allowed,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-approved {
+  border-color: rgba(22, 166, 106, 0.26) !important;
+  background: #eaf8f1 !important;
+  color: #0f8a57 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-tone-warning,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-requires-approval,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-held,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-review {
+  border-color: rgba(217, 119, 6, 0.28) !important;
+  background: #fff5e5 !important;
+  color: #b75f00 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-tone-danger,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-blocked,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill.status-denied {
+  border-color: rgba(220, 68, 85, 0.28) !important;
+  background: #fff0f2 !important;
+  color: #c62f43 !important;
+}
