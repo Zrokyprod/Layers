@@ -31545,3 +31545,176 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
   background: #eaf8f1 !important;
   color: #0f8a57 !important;
 }
+
+/* Policies aligned to the Outcomes card language. The module keeps the same
+   policy data and actions, but cards use one neutral SaaS surface system. */
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(
+  .policy-generator,
+  .policy-rule-builder,
+  .policy-recent-decisions,
+  .settings-control-panel,
+  .policy-advanced-shell
+) {
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(
+  .policy-generator-header,
+  .policy-rule-builder-header,
+  .policy-generator-question,
+  .policy-sentence-builder,
+  .policy-outcome-builder,
+  .policy-rule-limits,
+  .policy-rule-result,
+  .policy-advanced-shell > summary,
+  .policy-effective-summary,
+  .policy-dry-run,
+  .policy-dry-run-result,
+  .policy-rule-inventory-list,
+  .policy-boundary-card
+) {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generator-header, .policy-rule-builder-header, .policy-advanced-shell > summary) {
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(
+  .policy-choice,
+  .policy-area-choice,
+  .policy-outcome-options > button,
+  .policy-rule-inventory-list article,
+  .policy-decision-row,
+  .settings-toggle-row
+) {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(
+  .policy-choice,
+  .policy-area-choice,
+  .policy-outcome-options > button,
+  .policy-rule-inventory-list article,
+  .policy-decision-row
+):hover {
+  border-color: #d8e0ec !important;
+  background: #fbfcff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(
+  .policy-choice[data-selected="true"],
+  .policy-area-choice[data-selected="true"],
+  .policy-outcome-options > button[data-selected="true"],
+  .policy-outcome-options > button[aria-pressed="true"]
+) {
+  border-color: rgba(36, 87, 245, 0.42) !important;
+  background: #eef3ff !important;
+  color: #0b1220 !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 245, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(
+  .policy-choice[data-selected="true"] svg,
+  .policy-area-choice[data-selected="true"] svg,
+  .policy-outcome-options > button[data-selected="true"] svg,
+  .policy-outcome-options > button[aria-pressed="true"] svg,
+  .policy-generated-title svg,
+  .policy-rule-result > svg,
+  .policy-area-choice[data-selected="true"] .policy-area-check
+) {
+  color: #2457f5 !important;
+  stroke: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-result,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-result {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #f8fafd !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-result {
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1fr) auto !important;
+  align-items: center !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-result ul {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-boundary-card {
+  min-height: 112px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-effective-conditions span {
+  border-color: rgba(36, 87, 245, 0.18) !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="success"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="danger"] {
+  min-height: 64px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result[data-status],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result[data-status="allowed"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result[data-status="blocked"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result[data-status="requires_approval"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result[data-status="held"] {
+  border: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill {
+  border: 1px solid #d8e0ec !important;
+  background: #f8fafd !important;
+  color: #5f6b7c !important;
+  border-radius: 999px !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.status-pill.status-tone-success, .status-pill.status-allowed, .status-pill.status-approved) {
+  border-color: rgba(22, 166, 106, 0.26) !important;
+  background: #eaf8f1 !important;
+  color: #0f8a57 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.status-pill.status-tone-warning, .status-pill.status-requires-approval, .status-pill.status-held, .status-pill.status-review) {
+  border-color: rgba(217, 119, 6, 0.28) !important;
+  background: #fff5e5 !important;
+  color: #b75f00 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.status-pill.status-tone-danger, .status-pill.status-blocked, .status-pill.status-denied) {
+  border-color: rgba(220, 68, 85, 0.28) !important;
+  background: #fff0f2 !important;
+  color: #c62f43 !important;
+}
+
+@media (max-width: 900px) {
+  .app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-result {
+    grid-template-columns: 1fr !important;
+  }
+}
