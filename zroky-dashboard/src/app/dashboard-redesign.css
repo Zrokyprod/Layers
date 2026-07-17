@@ -30509,3 +30509,314 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
 .app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) .dashboard-verdict-copy p {
   color: #5f6b7c !important;
 }
+
+/* Evidence visual alignment. Keep the receipt/export behavior intact while
+   bringing the page onto the same cobalt enterprise surface as Actions,
+   Agents, and Outcomes. */
+.app-shell[data-dashboard-system="control-v1"] .ev-page {
+  --ev-canvas: #f6f8fc;
+  --ev-card: #ffffff;
+  --ev-panel: #f8fafd;
+  --ev-border: #e4e9f1;
+  --ev-border-strong: #d8e0ec;
+  --ev-text: #0b1220;
+  --ev-text-soft: #5f6b7c;
+  --ev-text-muted: #8a94a6;
+  --ev-accent: #2457f5;
+  --ev-accent-hover: #1948db;
+  --ev-accent-soft: #eef3ff;
+  --ev-success: #16a66a;
+  --ev-success-soft: #eaf8f1;
+  --ev-warning: #d97706;
+  --ev-warning-soft: #fff5e5;
+  --ev-danger: #dc4455;
+  --ev-danger-soft: #fff0f2;
+  gap: 16px !important;
+  background: #f6f8fc !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .ev-command-hero {
+  min-height: 132px !important;
+  padding: 22px 24px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(36, 87, 245, 0.08), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcff 100%) !important;
+  color: #0b1220 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .ev-command-hero :where(h1, p, span) {
+  color: inherit !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-verdict-copy h1 {
+  color: #0b1220 !important;
+  font-size: 30px !important;
+  font-weight: 680 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-verdict-copy p,
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-verdict-meta {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-verdict-pill {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-metric-card {
+  min-height: 138px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-metric-card:hover {
+  border-color: #cfd8e8 !important;
+  transform: translateY(-1px) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-workspace {
+  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr) !important;
+  gap: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-panel,
+.app-shell[data-dashboard-system="control-v1"] .ev-focused-card,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-detail {
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-panel {
+  padding: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-section-head h2,
+.app-shell[data-dashboard-system="control-v1"] .ev-focused-copy h2 {
+  color: #0b1220 !important;
+  font-size: 17px !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-section-head p,
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-main p,
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-main small,
+.app-shell[data-dashboard-system="control-v1"] .ev-focused-copy p,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-note {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .ev-row-kind {
+  color: #8a94a6 !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-filter-chip {
+  min-height: 34px !important;
+  border-color: #e4e9f1 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  color: #5f6b7c !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-filter-chip:hover {
+  border-color: #d8e0ec !important;
+  background: #f8fafd !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-filter-chip[data-active="true"] {
+  border-color: rgba(36, 87, 245, 0.28) !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-search-field,
+.app-shell[data-dashboard-system="control-v1"] .ev-manifest-scope {
+  min-height: 40px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  color: #8a94a6 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-search-field:focus-within {
+  border-color: rgba(36, 87, 245, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(36, 87, 245, 0.12) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-manifest-scope {
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-list {
+  gap: 9px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row {
+  min-height: 112px !important;
+  padding: 13px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row:hover {
+  border-color: #cfd8e8 !important;
+  background: #fbfcff !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row[data-focused="true"] {
+  border-color: rgba(36, 87, 245, 0.42) !important;
+  background: #f7faff !important;
+  box-shadow: inset 3px 0 0 #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row[data-tone="danger"] {
+  box-shadow: inset 3px 0 0 #dc4455 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row[data-tone="warning"] {
+  box-shadow: inset 3px 0 0 #d97706 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row[data-focused="true"][data-tone="danger"] {
+  border-color: rgba(220, 68, 85, 0.28) !important;
+  background: #fff9fa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-row[data-focused="true"][data-tone="warning"] {
+  border-color: rgba(217, 119, 6, 0.28) !important;
+  background: #fffaf2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-titleline h3 {
+  color: #0b1220 !important;
+  font-size: 14px !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-row-facts {
+  color: #8a94a6 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-ledger-actions {
+  min-width: 122px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-link {
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-focused-card {
+  padding: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-focused-head,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-simple-head {
+  align-items: flex-start !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-actions {
+  justify-content: flex-start !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify {
+  border: 1px solid rgba(36, 87, 245, 0.22) !important;
+  border-left: 3px solid #2457f5 !important;
+  border-radius: 12px !important;
+  background: #eef3ff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify > div:first-child {
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify code,
+.app-shell[data-dashboard-system="control-v1"] .ev-page code {
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-focused-meta div,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-facts div,
+.app-shell[data-dashboard-system="control-v1"] .evidence-pack-proof-grid > div {
+  border-color: #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-path li {
+  border-bottom-color: #e4e9f1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-path li > span {
+  background: #8a94a6 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-path li[data-tone="success"] > span {
+  background: #16a66a !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-path li[data-tone="warning"] > span {
+  background: #d97706 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-path li[data-tone="danger"] > span {
+  background: #dc4455 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-note {
+  border-color: rgba(36, 87, 245, 0.16) !important;
+  background: #eef3ff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-detail .evidence-pack-section,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-detail .evidence-receipt-accordion,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-detail .evidence-pack-receipt-outcome {
+  border-color: #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-detail .evidence-pack-section pre,
+.app-shell[data-dashboard-system="control-v1"] .ev-proof-detail .evidence-pack-json-grid pre {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-empty-state,
+.app-shell[data-dashboard-system="control-v1"] .ev-skeleton-list {
+  border-color: #d8e0ec !important;
+  border-radius: 12px !important;
+  background: #f8fafd !important;
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-alert-strip {
+  border-color: rgba(36, 87, 245, 0.2) !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+}
+
+@media (max-width: 960px) {
+  .app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .dashboard-workspace {
+    grid-template-columns: 1fr !important;
+  }
+}
