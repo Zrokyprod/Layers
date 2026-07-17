@@ -31718,3 +31718,193 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Connectors aligned to the Outcomes card language. The catalog keeps its
+   one-click/manual connector handlers, but visual emphasis is neutral and
+   consistent with Outcomes/Policies. */
+.app-shell[data-dashboard-system="control-v1"] .connectors-page {
+  gap: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connectors-inventory-panel,
+  .connector-inspector-panel,
+  .connectors-coverage-panel,
+  .connectors-coverage-panel-secondary,
+  .connectors-generic-panel
+) {
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connector-search-field,
+  .connector-launch-grid article,
+  .connector-simple-status,
+  .connector-advanced-details,
+  .connector-setup-details,
+  .connector-details-json,
+  .connectors-empty-state,
+  .connector-planned-row,
+  .connector-purpose-panel,
+  .connector-preflight-panel,
+  .connector-fact,
+  .connectors-generic-form,
+  .connectors-generic-bridge,
+  .connectors-coverage-row,
+  .connector-readonly-banner
+) {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #f8fafd !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connector-inventory-row,
+  .connector-inventory-row[data-tone],
+  .connector-inventory-row[data-tone="success"],
+  .connector-inventory-row[data-tone="warning"],
+  .connector-inventory-row[data-tone="danger"]
+) {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inventory-row:hover {
+  border-color: #d8e0ec !important;
+  background: #fbfcff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inventory-row[data-selected="true"] {
+  border-color: rgba(36, 87, 245, 0.42) !important;
+  background: #eef3ff !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 245, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inventory-row[data-selected="true"] .connector-logo {
+  border-color: rgba(36, 87, 245, 0.24) !important;
+  background: #ffffff !important;
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-logo {
+  border: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inspector-title .connector-logo {
+  border-color: rgba(36, 87, 245, 0.16) !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connectors-coverage-row[data-tone],
+  .connectors-coverage-row[data-tone="success"],
+  .connectors-coverage-row[data-tone="warning"],
+  .connectors-coverage-row[data-tone="danger"],
+  .connector-simple-status[data-tone],
+  .connector-simple-status[data-tone="success"],
+  .connector-simple-status[data-tone="warning"],
+  .connector-simple-status[data-tone="danger"],
+  .connector-preflight-panel[data-tone],
+  .connector-preflight-panel[data-tone="success"],
+  .connector-preflight-panel[data-tone="warning"],
+  .connector-preflight-panel[data-tone="danger"],
+  .connector-inspector-callout[data-tone],
+  .connector-inspector-callout[data-tone="success"],
+  .connector-inspector-callout[data-tone="warning"],
+  .connector-inspector-callout[data-tone="danger"]
+) {
+  border-left: 1px solid #e4e9f1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connector-simple-status[data-tone="success"],
+  .connector-preflight-panel[data-tone="success"],
+  .connector-inspector-callout[data-tone="success"],
+  .connectors-coverage-row[data-tone="success"]
+) {
+  border-color: rgba(22, 166, 106, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connector-simple-status[data-tone="warning"],
+  .connector-preflight-panel[data-tone="warning"],
+  .connector-inspector-callout[data-tone="warning"],
+  .connectors-coverage-row[data-tone="warning"]
+) {
+  border-color: rgba(217, 119, 6, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connector-simple-status[data-tone="danger"],
+  .connector-preflight-panel[data-tone="danger"],
+  .connector-inspector-callout[data-tone="danger"],
+  .connectors-coverage-row[data-tone="danger"]
+) {
+  border-color: rgba(220, 68, 85, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-setup-details > summary {
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-setup-details[open] > summary {
+  border-bottom: 1px solid #e4e9f1 !important;
+  border-radius: 12px 12px 0 0 !important;
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-setup-details > summary small {
+  border-color: rgba(36, 87, 245, 0.18) !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-setup-details .connectors-generic-form:first-child,
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-setup-details .connectors-generic-form {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(
+  .connector-action-tags span,
+  .connector-preflight-meta span,
+  .status-pill
+) {
+  border: 1px solid #d8e0ec !important;
+  border-radius: 999px !important;
+  background: #f8fafd !important;
+  color: #5f6b7c !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(.status-pill.status-tone-success, .status-pill.status-matched, .status-pill.status-ready, .status-pill.status-healthy) {
+  border-color: rgba(22, 166, 106, 0.26) !important;
+  background: #eaf8f1 !important;
+  color: #0f8a57 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(.status-pill.status-tone-warning, .status-pill.status-not-tested, .status-pill.status-not-verified, .status-pill.status-missing) {
+  border-color: rgba(217, 119, 6, 0.28) !important;
+  background: #fff5e5 !important;
+  color: #b75f00 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :where(.status-pill.status-tone-danger, .status-pill.status-failing, .status-pill.status-mismatched) {
+  border-color: rgba(220, 68, 85, 0.28) !important;
+  background: #fff0f2 !important;
+  color: #c62f43 !important;
+}
