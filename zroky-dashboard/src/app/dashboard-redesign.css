@@ -30472,3 +30472,40 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
     text-align: left !important;
   }
 }
+
+/* Final consistency locks. These intentionally use direct selectors so older
+   module-specific high-specificity rules cannot bring back beige chrome or
+   smaller hero radii on individual routes. */
+.app-shell[data-dashboard-system="control-v1"] .sidebar,
+.app-shell[data-dashboard-system="control-v1"] .topbar {
+  background: #fafbfd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) .dashboard-verdict-hero,
+.app-shell[data-dashboard-system="control-v1"] .evidence-ledger-page .ev-command-hero,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-command-hero,
+.app-shell[data-dashboard-system="control-v1"] .connectors-page .dashboard-verdict-hero,
+.app-shell[data-dashboard-system="control-v1"] .settings-control-page .settings-control-hero {
+  min-height: 132px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(36, 87, 245, 0.08), transparent 32%),
+    #ffffff !important;
+  color: #0b1220 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) .dashboard-verdict-hero :where(h1, p, span),
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) .dashboard-verdict-copy :where(h1, p, span) {
+  color: inherit !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) .dashboard-verdict-copy h1 {
+  color: #0b1220 !important;
+  font-weight: 680 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) .dashboard-verdict-copy p {
+  color: #5f6b7c !important;
+}
