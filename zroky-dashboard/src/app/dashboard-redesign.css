@@ -30820,3 +30820,249 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Policies visual alignment. The policy builder stays functional, but the
+   interaction surfaces use the same cobalt/white product language as Actions,
+   Agents, Outcomes, and Evidence. */
+.app-shell[data-dashboard-system="control-v1"] .policies-page {
+  --policy-canvas: #f6f8fc;
+  --policy-card: #ffffff;
+  --policy-panel: #f8fafd;
+  --policy-border: #e4e9f1;
+  --policy-border-strong: #d8e0ec;
+  --policy-text: #0b1220;
+  --policy-text-soft: #5f6b7c;
+  --policy-text-muted: #8a94a6;
+  --policy-primary: #2457f5;
+  --policy-primary-soft: #eef3ff;
+  --policy-success: #16a66a;
+  --policy-success-soft: #eaf8f1;
+  --policy-warning: #d97706;
+  --policy-warning-soft: #fff5e5;
+  --policy-danger: #dc4455;
+  --policy-danger-soft: #fff0f2;
+  background: #f6f8fc !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-verdict-hero {
+  min-height: 132px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(36, 87, 245, 0.08), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcff 100%) !important;
+  color: #0b1220 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-verdict-hero :where(h1, p, span) {
+  color: inherit !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-verdict-copy h1 {
+  color: #0b1220 !important;
+  font-size: 30px !important;
+  font-weight: 680 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-verdict-copy p,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-verdict-meta {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-verdict-pill {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-metric-card {
+  min-height: 138px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-metric-card:hover {
+  border-color: #cfd8e8 !important;
+  background: #fbfcff !important;
+  transform: translateY(-1px) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generator, .policy-rule-builder, .policy-recent-decisions, .settings-control-panel, .policy-advanced-shell) {
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generator-header, .policy-generator-question, .policy-rule-builder-header, .policy-sentence-builder, .policy-outcome-builder, .policy-rule-limits, .policy-rule-result, .policy-advanced-shell > summary) {
+  border-color: #e4e9f1 !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generator-header h2, .policy-rule-builder-header h2, .panel-header h2, .policy-recent-decisions h2) {
+  color: #0b1220 !important;
+  font-size: 17px !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generator-header p, .policy-rule-builder-header p, .panel-header p, .policy-generator-question-copy small, .policy-choice span, .policy-area-choice small, .policy-generated-result ul, .policy-rule-result > div span, .policy-rule-inventory-empty, .policy-decision-row p, .policy-decision-row span:not(.status-pill), .policy-boundary-card p) {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.dashboard-eyebrow, .policy-template-select > span, .policy-sentence-builder label > span, .policy-rule-limits label > span, .policy-boundary-card span, .policy-generated-title span) {
+  color: #8a94a6 !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generator-step,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-area-check {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+  color: #8a94a6 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-choice, .policy-area-choice, .policy-outcome-options button, .policy-sentence-builder :where(select, input), .policy-template-select select, .policy-rule-limits input, input, textarea, select) {
+  border-color: #e4e9f1 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-choice, .policy-area-choice, .policy-outcome-options button):hover {
+  border-color: #cfd8e8 !important;
+  background: #fbfcff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-choice, .policy-area-choice, .policy-outcome-options button)[data-selected="true"] {
+  border-color: rgba(36, 87, 245, 0.38) !important;
+  background: #eef3ff !important;
+  color: #0b1220 !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 245, 0.38) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-choice, .policy-area-choice, .policy-outcome-options button):focus-visible,
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(input, textarea, select):focus-visible {
+  outline: 3px solid rgba(36, 87, 245, 0.14) !important;
+  outline-offset: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generator-question-copy > span {
+  background: #2457f5 !important;
+  color: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-area-choice svg, .policy-outcome-builder > div:first-child > span, .policy-area-choice[data-selected="true"] .policy-area-check) {
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-result,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-result {
+  border-top: 1px solid #e4e9f1 !important;
+  border-bottom: 1px solid #e4e9f1 !important;
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generated-title svg, .policy-rule-result > svg) {
+  color: #16a66a !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-limits {
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-limits > summary {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-inventory-list {
+  border-color: #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-inventory-list article {
+  border-bottom-color: #e4e9f1 !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-advanced-body {
+  background: #f8fafd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-boundary-card {
+  border-color: #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .settings-toggle-row {
+  border-color: #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-effective-summary,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-dry-run-result {
+  border-color: #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-effective-conditions span {
+  border-color: #e4e9f1 !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row {
+  min-height: 64px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row:hover {
+  border-color: #cfd8e8 !important;
+  background: #fbfcff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="success"] {
+  box-shadow: inset 3px 0 0 #16a66a !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="warning"] {
+  box-shadow: inset 3px 0 0 #d97706 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="danger"] {
+  box-shadow: inset 3px 0 0 #dc4455 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row strong {
+  color: #0b1220 !important;
+  font-size: 14px !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-empty-state {
+  border-color: #d8e0ec !important;
+  border-radius: 12px !important;
+  background: #f8fafd !important;
+  color: #5f6b7c !important;
+}
