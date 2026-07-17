@@ -30969,9 +30969,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
 
 .app-shell[data-dashboard-system="control-v1"] .policies-page .policy-generated-result,
 .app-shell[data-dashboard-system="control-v1"] .policies-page .policy-rule-result {
-  border-top: 1px solid #e4e9f1 !important;
-  border-bottom: 1px solid #e4e9f1 !important;
+  border: 1px solid #e4e9f1 !important;
   background: #f8fafd !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generated-title svg, .policy-rule-result > svg) {
