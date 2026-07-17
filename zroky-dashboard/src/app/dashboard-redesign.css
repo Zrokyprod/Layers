@@ -30250,3 +30250,225 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .outcomes-page),
     text-align: left !important;
   }
 }
+
+/* Dashboard consistency pass. Keep the product surfaces on one calm light
+   system: neutral hero cards, ivory-free page background, status chips on the
+   right, and measured type weight across modules. */
+html:has(.app-shell[data-dashboard-system="control-v1"]),
+body:has(.app-shell[data-dashboard-system="control-v1"]),
+.app-shell[data-dashboard-system="control-v1"],
+.app-shell[data-dashboard-system="control-v1"] :where(.content, .content-inner, .main-content) {
+  background: #f6f8fc !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.sidebar, .topbar) {
+  background: #fafbfd !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.plan-card, .org-widget, .topbar-account-btn, .topbar-ctrl-btn, .topbar-env-btn, .topbar-route-trigger) {
+  border-color: #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025), 0 8px 20px rgba(15, 23, 42, 0.035) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.user-menu-popover, .shell-popover) {
+  border-color: #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.12) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.user-name, .org-name, .topbar-account-name, .topbar-bc-page) {
+  color: #0b1220 !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.user-email, .org-kicker, .org-env, .plan-renew, .plan-usage-total) {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.dashboard-verdict-hero, .policy-command-hero, .evidence-hero) {
+  min-height: 132px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(36, 87, 245, 0.08), transparent 32%),
+    #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.dashboard-verdict-hero, .policy-command-hero, .evidence-hero)::before {
+  background: #2457f5 !important;
+  opacity: 0.9 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .dashboard-verdict-icon,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-verdict-icon {
+  border-color: #c8d8ff !important;
+  background: #eef3ff !important;
+  color: #2457f5 !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.dashboard-verdict-copy h1, .policy-hero-copy h1, .evidence-hero h1),
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero h1 {
+  color: #0b1220 !important;
+  font-size: 30px !important;
+  font-weight: 680 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.dashboard-verdict-copy p, .dashboard-verdict-meta, .policy-hero-copy p, .evidence-hero p),
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero-detail {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.dashboard-verdict-pill, .policy-verdict-card),
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a :where(.mc-inline-warning, .mc-live-status) {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero {
+  min-height: 132px !important;
+  border-color: #e4e9f1 !important;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(36, 87, 245, 0.08), transparent 32%),
+    #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero .mc-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-danger .mc-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-hero.mc-tone-warning .mc-eyebrow {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card:not(.mc-skeleton-card) {
+  min-height: 132px !important;
+  border-radius: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a :where(.mc-proof-card-icon, .mc-activity-icon, .mc-runtime-status-icon) {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a .mc-proof-card strong {
+  font-size: 30px !important;
+  font-weight: 680 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-hero {
+  border-color: #e4e9f1 !important;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(36, 87, 245, 0.08), transparent 32%),
+    #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-hero::before {
+  display: block !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-copy h1,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-copy p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-meta {
+  color: inherit !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-copy h1 {
+  color: #0b1220 !important;
+  font-weight: 680 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-copy p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-meta {
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-pill {
+  border-color: #e4e9f1 !important;
+  background: #f8fafd !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-copy {
+  grid-template-columns: 1fr !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-clear {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  text-align: right !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-status {
+  display: flex !important;
+  justify-content: flex-end !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-side {
+  min-width: 120px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-icon {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen :where(.dashboard-verdict-hero h1, .agents-panel-head strong, .agents-agent-card-title strong, .agents-inspector-verdict strong, .agents-mandate-card strong, .agents-latest-action-card strong) {
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-screen .dashboard-verdict-hero h1 {
+  font-size: 29px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+  color: #2457f5 !important;
+  opacity: 1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agents-agent-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) {
+  background: #f6f8fc !important;
+  color: #0b1220 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] :where(.evidence-ledger-page, .policies-page, .connectors-page, .settings-control-page, .settings-shell, .settings-integrations-page) :where(.panel, .metric-card, .settings-summary-card, .settings-control-panel, .evidence-focus-panel, .evidence-ledger-panel, .policy-boundary-card, .policy-decision-panel, .connectors-generic-panel, .connector-inspector-panel, .connector-catalog-card) {
+  border-color: #e4e9f1 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-clear,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-row-status,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-row-side {
+    justify-content: flex-start !important;
+    justify-items: start !important;
+    text-align: left !important;
+  }
+}
