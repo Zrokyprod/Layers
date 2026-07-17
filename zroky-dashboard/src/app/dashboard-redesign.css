@@ -31265,3 +31265,97 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
   border-radius: 999px !important;
   font-weight: 650 !important;
 }
+
+/* Policies live residue cleanup. These selectors sit last because older
+   policy modules still carry legacy green/teal button and selection rules. */
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-button-primary {
+  border-color: #2457f5 !important;
+  background: #2457f5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(36, 87, 245, 0.18) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-button-primary:hover {
+  border-color: #1948db !important;
+  background: #1948db !important;
+  color: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-button-primary :where(svg, span) {
+  color: currentColor !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-button-soft {
+  border-color: #d8e0ec !important;
+  background: #ffffff !important;
+  color: #2457f5 !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .dashboard-button-soft:hover {
+  border-color: #b9c7dc !important;
+  background: #eef3ff !important;
+  color: #1948db !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-outcome-options > button {
+  min-height: 72px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-outcome-options > button:hover {
+  border-color: #cfd8e8 !important;
+  background: #fbfcff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-outcome-options > button:where([aria-pressed="true"], [data-selected="true"]) {
+  border-color: rgba(36, 87, 245, 0.42) !important;
+  background: #eef3ff !important;
+  color: #0b1220 !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 245, 0.36) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-outcome-options > button:where([aria-pressed="true"], [data-selected="true"]) svg,
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.policy-generated-title svg, .policy-rule-result > svg) {
+  color: #2457f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row,
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="success"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .policies-page .policy-decision-row[data-tone="danger"] {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page .status-pill {
+  border: 1px solid #d8e0ec !important;
+  background: #f8fafd !important;
+  color: #5f6b7c !important;
+  letter-spacing: 0.01em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.status-tone-success, .status-allowed, .status-approved) {
+  border-color: rgba(22, 166, 106, 0.26) !important;
+  background: #eaf8f1 !important;
+  color: #0f8a57 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.status-tone-warning, .status-requires-approval, .status-held, .status-review) {
+  border-color: rgba(217, 119, 6, 0.28) !important;
+  background: #fff5e5 !important;
+  color: #b75f00 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .policies-page :where(.status-tone-danger, .status-blocked, .status-denied) {
+  border-color: rgba(220, 68, 85, 0.28) !important;
+  background: #fff0f2 !important;
+  color: #c62f43 !important;
+}
