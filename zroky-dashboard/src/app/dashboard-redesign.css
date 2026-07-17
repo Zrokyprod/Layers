@@ -29779,6 +29779,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .agents-screen),
 /* Outcomes polish. This page is the "claim vs source-of-record truth" surface,
    so the visual hierarchy keeps verdict, receipt coverage, and the selected
    proof comparison clear without changing the underlying reconciliation data. */
+body:has(.app-shell[data-dashboard-system="control-v1"] .outcomes-page),
+.app-shell[data-dashboard-system="control-v1"]:has(.outcomes-page) {
+  background: #f6f8fc !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .outcomes-page {
   --outcomes-bg: #f6f8fc;
   --outcomes-surface: #ffffff;
