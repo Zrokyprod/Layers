@@ -31393,3 +31393,155 @@ body:has(.app-shell[data-dashboard-system="control-v1"]),
   background: #fff0f2 !important;
   color: #c62f43 !important;
 }
+
+/* Outcomes card color cleanup. Keep semantic meaning in small pills and
+   borders, but remove old beige/pink/cream card fills from the proof panels. */
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page :where(
+  .outcomes-bypass-strip,
+  .outcomes-feed-panel,
+  .outcomes-inspector-panel,
+  .outcomes-toolbar,
+  .outcomes-proof-callout,
+  .outcomes-fact-grid div,
+  .outcomes-investigation-panel,
+  .outcomes-case-panel,
+  .outcomes-case-resolution div,
+  .outcomes-json-grid section,
+  .outcomes-diff-table,
+  .outcomes-empty-state,
+  .outcomes-diff-empty
+) {
+  border-color: #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page :where(
+  .outcomes-toolbar,
+  .outcomes-fact-grid div,
+  .outcomes-case-resolution div,
+  .outcomes-json-grid section,
+  .outcomes-empty-state,
+  .outcomes-diff-empty
+) {
+  background: #f8fafd !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone="success"] {
+  border: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone="warning"] {
+  border-top-color: rgba(217, 119, 6, 0.28) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone="danger"] {
+  border-top-color: rgba(220, 68, 85, 0.28) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-strip[data-tone="success"] {
+  border-top-color: rgba(22, 166, 106, 0.28) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-bypass-clear {
+  border: 1px solid #e4e9f1 !important;
+  background: #f8fafd !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row.tone-danger,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row.tone-warning,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row.tone-success {
+  border: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row:focus-visible {
+  border-color: #d8e0ec !important;
+  background: #fbfcff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-feed-row.is-selected {
+  border-color: rgba(36, 87, 245, 0.42) !important;
+  background: #eef3ff !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 245, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-proof-callout,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-proof-callout[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-proof-callout[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-proof-callout[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone="success"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-case-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-case-panel[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-case-panel[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-case-panel[data-tone="success"] {
+  border: 1px solid #e4e9f1 !important;
+  border-left: 1px solid #e4e9f1 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-proof-callout[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-case-panel[data-tone="danger"] {
+  border-color: rgba(220, 68, 85, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-proof-callout[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone="warning"] {
+  border-color: rgba(217, 119, 6, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-investigation-panel[data-tone="success"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-case-panel[data-tone="success"] {
+  border-color: rgba(22, 166, 106, 0.24) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-diff-head {
+  background: #f8fafd !important;
+  color: #8a94a6 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-diff-row,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-diff-row[data-tone],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-diff-row[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-diff-row[data-tone="warning"] {
+  background: #ffffff !important;
+  color: #5f6b7c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .outcomes-diff-row:nth-child(even) {
+  background: #fbfcff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page :where(.status-pill.status-mismatched, .status-pill.status-missing, .status-pill.status-tone-danger) {
+  border-color: rgba(220, 68, 85, 0.28) !important;
+  background: #fff0f2 !important;
+  color: #c62f43 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page :where(.status-pill.status-not-verified, .status-pill.status-tone-warning) {
+  border-color: rgba(217, 119, 6, 0.28) !important;
+  background: #fff5e5 !important;
+  color: #b75f00 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page :where(.status-pill.status-matched, .status-pill.status-clear, .status-pill.status-tone-success) {
+  border-color: rgba(22, 166, 106, 0.26) !important;
+  background: #eaf8f1 !important;
+  color: #0f8a57 !important;
+}
