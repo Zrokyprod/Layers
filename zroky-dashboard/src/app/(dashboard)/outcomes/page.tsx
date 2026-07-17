@@ -305,15 +305,15 @@ function OutcomeFeed({
               type="button"
               onClick={() => onSelect(row)}
             >
-              <span className="outcomes-row-status">
-                <StatusPill value={row.verdict} />
-              </span>
               <span className="outcomes-row-main">
                 <strong>{row.title}</strong>
                 <small>{row.agentLabel} / {row.actionType}</small>
                 <em>{row.detail}</em>
               </span>
               <span className="outcomes-row-side">
+                <span className="outcomes-row-status">
+                  <StatusPill value={row.verdict} />
+                </span>
                 {row.check.amount_usd != null ? <span>{row.amountLabel}</span> : null}
                 <small>{timeSince(row.checkedAt)}</small>
               </span>
@@ -563,11 +563,6 @@ function BypassStrip({
   return (
     <section className="outcomes-bypass-strip" data-tone={tone} aria-label="Bypass check">
       <div className="outcomes-bypass-copy">
-        <StatusPill
-          label={hasBypass ? undefined : coverageAvailable ? "clear" : "coverage unknown"}
-          tone={tone}
-          value={hasBypass ? "policy_bypass" : coverageAvailable ? "clear" : "not_verified"}
-        />
         <div>
           <span className="dashboard-eyebrow">Receipt coverage</span>
           <h2>
@@ -602,15 +597,15 @@ function BypassStrip({
         </div>
       ) : coverageAvailable ? (
         <div className="outcomes-bypass-clear">
-          <StatusPill value="clear" />
           <span>All observed protected mutations are receipted or authorized.</span>
+          <StatusPill value="clear" />
         </div>
       ) : (
         <div className="outcomes-bypass-clear">
-          <StatusPill value="not_verified" label="setup required" tone="warning" />
           <DashboardButtonLink href="/integrations" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
             Connect mutation feed
           </DashboardButtonLink>
+          <StatusPill value="not_verified" label="coverage unknown" tone="warning" />
         </div>
       )}
     </section>
