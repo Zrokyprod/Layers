@@ -29775,3 +29775,473 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .agents-screen),
     grid-template-columns: 24px minmax(0, 1fr) !important;
   }
 }
+
+/* Outcomes polish. This page is the "claim vs source-of-record truth" surface,
+   so the visual hierarchy keeps verdict, receipt coverage, and the selected
+   proof comparison clear without changing the underlying reconciliation data. */
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page {
+  --outcomes-bg: #f6f8fc;
+  --outcomes-surface: #ffffff;
+  --outcomes-surface-soft: #f8fafd;
+  --outcomes-text: #0b1220;
+  --outcomes-text-secondary: #5f6b7c;
+  --outcomes-text-tertiary: #8a94a6;
+  --outcomes-border: #e4e9f1;
+  --outcomes-border-strong: #d8e0ec;
+  --outcomes-primary: #2457f5;
+  --outcomes-primary-soft: #eef3ff;
+  --outcomes-success: #16a66a;
+  --outcomes-success-soft: #eaf8f1;
+  --outcomes-warning: #d97706;
+  --outcomes-warning-soft: #fff5e5;
+  --outcomes-danger: #dc4455;
+  --outcomes-danger-soft: #fff0f2;
+  --outcomes-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.045);
+  gap: 16px !important;
+  color: var(--outcomes-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-hero {
+  min-height: 132px !important;
+  padding: 24px !important;
+  border: 1px solid rgba(145, 169, 255, 0.26) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 14% 10%, rgba(97, 139, 255, 0.26), transparent 30%),
+    linear-gradient(135deg, #071a55 0%, #173aa8 100%) !important;
+  box-shadow: 0 14px 34px rgba(20, 48, 150, 0.18) !important;
+  overflow: hidden !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-hero::before {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-icon {
+  width: 54px !important;
+  height: 54px !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.11) !important;
+  color: #dce7ff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 18px 40px rgba(5, 16, 54, 0.2) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-copy h1 {
+  color: #ffffff !important;
+  font-size: 31px !important;
+  font-weight: 720 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-copy p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-meta {
+  color: rgba(232, 238, 255, 0.78) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-pill {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-verdict-actions {
+  align-items: center !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-strip {
+  gap: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-card {
+  min-height: 132px !important;
+  padding: 18px !important;
+  border-color: var(--outcomes-border) !important;
+  border-radius: 14px !important;
+  background: var(--outcomes-surface) !important;
+  box-shadow: var(--outcomes-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-card:hover {
+  border-color: rgba(36, 87, 245, 0.24) !important;
+  transform: translateY(-1px) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-icon {
+  width: 18px !important;
+  height: 18px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-card span {
+  color: var(--outcomes-text-secondary) !important;
+  font-size: 13px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-card strong {
+  color: var(--outcomes-text) !important;
+  font-size: 30px !important;
+  font-weight: 720 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-card small {
+  color: var(--outcomes-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-error-banner,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-panel {
+  border-color: var(--outcomes-border) !important;
+  border-radius: 16px !important;
+  background: var(--outcomes-surface) !important;
+  box-shadow: var(--outcomes-shadow) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip {
+  grid-template-columns: minmax(260px, 0.92fr) minmax(0, 1.35fr) !important;
+  min-height: 118px !important;
+  padding: 16px !important;
+  border-left: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip[data-tone="danger"] {
+  border-color: rgba(220, 68, 85, 0.22) !important;
+  background: linear-gradient(90deg, var(--outcomes-danger-soft) 0%, #ffffff 34%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip[data-tone="warning"] {
+  border-color: rgba(217, 119, 6, 0.24) !important;
+  background: linear-gradient(90deg, var(--outcomes-warning-soft) 0%, #ffffff 34%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip[data-tone="success"] {
+  border-color: rgba(22, 166, 106, 0.22) !important;
+  background: linear-gradient(90deg, var(--outcomes-success-soft) 0%, #ffffff 34%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-copy {
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-copy h2,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-panel-head h2,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-header h2 {
+  color: var(--outcomes-text) !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-copy p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-header p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-panel p,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-footnote {
+  color: var(--outcomes-text-secondary) !important;
+  font-size: 13px !important;
+  line-height: 1.48 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-list {
+  justify-content: flex-end !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-clear {
+  border-color: var(--outcomes-border) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row[data-tone="danger"] {
+  border-color: rgba(220, 68, 85, 0.22) !important;
+  background: #fff7f8 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-workspace.dashboard-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.88fr) !important;
+  gap: 16px !important;
+  align-items: start !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-panel {
+  gap: 14px !important;
+  padding: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-panel-head,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-header {
+  align-items: center !important;
+  padding-bottom: 4px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-live-chip {
+  min-height: 24px !important;
+  border: 1px solid rgba(22, 166, 106, 0.2) !important;
+  background: var(--outcomes-success-soft) !important;
+  color: #0f8a57 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-toolbar {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px) !important;
+  padding: 10px !important;
+  border: 1px solid var(--outcomes-border) !important;
+  border-radius: 14px !important;
+  background: var(--outcomes-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-filter-chip {
+  min-height: 32px !important;
+  border-color: transparent !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: var(--outcomes-text-secondary) !important;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-filter-chip:hover,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-filter-chip:focus-visible {
+  background: #ffffff !important;
+  color: var(--outcomes-text) !important;
+  outline: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-filter-chip.is-active {
+  border-color: rgba(36, 87, 245, 0.18) !important;
+  background: #ffffff !important;
+  color: var(--outcomes-primary) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-search {
+  min-height: 36px !important;
+  border-color: var(--outcomes-border) !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-list {
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row {
+  min-height: 74px !important;
+  padding: 12px !important;
+  border-color: var(--outcomes-border) !important;
+  border-left: 0 !important;
+  border-radius: 12px !important;
+  background: var(--outcomes-surface-soft) !important;
+  box-shadow: none !important;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row.tone-danger {
+  background: #fff9fa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row.tone-warning {
+  background: #fffbf2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row.tone-success {
+  background: #f7fcfa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row:focus-visible {
+  border-color: var(--outcomes-border-strong) !important;
+  background: #ffffff !important;
+  outline: 0 !important;
+  transform: translateY(-1px) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row.is-selected {
+  border-color: rgba(36, 87, 245, 0.36) !important;
+  background: var(--outcomes-primary-soft) !important;
+  box-shadow: 0 0 0 2px rgba(36, 87, 245, 0.08) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-main strong {
+  color: var(--outcomes-text) !important;
+  font-size: 13px !important;
+  font-weight: 720 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-main small,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-main em,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-side small,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-row-side span {
+  color: var(--outcomes-text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-fact-grid div,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-resolution div,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-json-grid section {
+  border-color: var(--outcomes-border) !important;
+  border-radius: 12px !important;
+  background: var(--outcomes-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout {
+  align-items: flex-start !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel[data-tone="danger"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-panel[data-tone="danger"] {
+  border-color: rgba(220, 68, 85, 0.22) !important;
+  background: linear-gradient(90deg, var(--outcomes-danger-soft) 0%, #ffffff 48%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout[data-tone="warning"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel[data-tone="warning"] {
+  border-color: rgba(217, 119, 6, 0.24) !important;
+  background: linear-gradient(90deg, var(--outcomes-warning-soft) 0%, #ffffff 48%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel[data-tone="success"],
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-panel[data-tone="success"] {
+  border-color: rgba(22, 166, 106, 0.22) !important;
+  background: linear-gradient(90deg, var(--outcomes-success-soft) 0%, #ffffff 48%) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout strong,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel strong,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-panel strong,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-section-head strong {
+  color: var(--outcomes-text) !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-fact-grid {
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-fact-grid dt,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-head,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-json-grid h3,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-actions label > span,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-resolution dt {
+  color: var(--outcomes-text-tertiary) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-fact-grid dd,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-resolution dd {
+  color: var(--outcomes-text) !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel {
+  border-left: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-case-panel {
+  border-left: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-table {
+  border-color: var(--outcomes-border) !important;
+  border-radius: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-head {
+  background: var(--outcomes-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-row {
+  background: #ffffff !important;
+  color: var(--outcomes-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-row[data-tone="danger"] {
+  background: #fff9fa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-row[data-tone="warning"] {
+  background: #fffbf2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-empty-state,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-diff-empty {
+  border-color: var(--outcomes-border-strong) !important;
+  border-radius: 14px !important;
+  background: var(--outcomes-surface-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-json-details summary {
+  color: var(--outcomes-text-secondary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-json-grid pre {
+  color: var(--outcomes-text-secondary) !important;
+  font-size: 11px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-footnote {
+  margin: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-footnote a {
+  color: var(--outcomes-primary) !important;
+}
+
+@media (max-width: 1180px) {
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-workspace.dashboard-workspace {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-toolbar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-list {
+    justify-content: flex-start !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-page .dashboard-metric-strip,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-fact-grid,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-case-actions,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-case-resolution,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-json-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-feed-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-row-side {
+    justify-items: start !important;
+    text-align: left !important;
+  }
+}
