@@ -869,6 +869,7 @@ Tasks:
 - enforce read-only manifest rules at validation time: no mutation methods, no write scopes, no raw customer secrets in the control plane;
 - prove Generic REST and Postgres source-of-record verification through manifest data, not new backend connector code;
 - wire `webhook_callback` as signed inbound observation intake, not as a pull-read runtime;
+- prove at least two source families in one outcome graph before adding more presets;
 - ship branded presets as manifest data first: Stripe, GitHub, Jira, ServiceNow, Salesforce, HubSpot, Zendesk, Shopify;
 - add bespoke auth adapters only where the primitive cannot safely cover auth, such as GitHub App installation tokens or OAuth refresh;
 - install starter Assurance Pack templates from connector manifests so verification semantics live in data, not hardcoded routes;
