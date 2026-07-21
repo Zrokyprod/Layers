@@ -51,6 +51,7 @@ class ConnectorReadManifest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1)
     database_url: str | None = Field(default=None, min_length=1)
     path_template: str | None = Field(default=None, min_length=1)
+    path_value_keys: tuple[str, ...] = Field(default_factory=tuple)
     query: str | None = Field(default=None, min_length=1)
     query_params: dict[str, Any] = Field(default_factory=dict)
     fixed_params: dict[str, Any] = Field(default_factory=dict)

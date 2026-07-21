@@ -43,6 +43,7 @@ VALID_VERIFICATION_CONNECTORS = {
     "zoho_crm",
     "zendesk_ticket",
     "jira_issue",
+    "servicenow_change",
     "netsuite_finance",
     "ticket_status",
     "email_delivery",

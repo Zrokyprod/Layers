@@ -677,6 +677,7 @@ export type AgentVerificationConnectorType =
   | "zoho_crm"
   | "zendesk_ticket"
   | "jira_issue"
+  | "servicenow_change"
   | "ticket_status"
   | "email_delivery"
   | "github_ci";

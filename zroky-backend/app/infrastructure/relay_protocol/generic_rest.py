@@ -15,6 +15,7 @@ class GenericRestReadManifest(BaseModel):
     connector_capability: str = Field(min_length=1, max_length=255)
     base_url: str = Field(min_length=1)
     path_template: str = Field(default="/records/{record_ref}", min_length=1)
+    path_value_keys: tuple[str, ...] = Field(default_factory=tuple)
     query: dict[str, Any] = Field(default_factory=dict)
     record_path: str | None = None
     timeout_seconds: float = Field(default=5.0, gt=0, le=30)
@@ -51,6 +52,7 @@ def execute_manifest_bound_generic_rest_read(
         record_ref=record_ref,
         bearer_token=bearer_token,
         path_template=manifest.path_template,
+        path_values={key: command.selector[key] for key in manifest.path_value_keys if key in command.selector},
         query=manifest.query,
         record_path=manifest.record_path,
         timeout_seconds=manifest.timeout_seconds,

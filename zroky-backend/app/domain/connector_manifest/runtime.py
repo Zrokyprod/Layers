@@ -46,6 +46,7 @@ def _generic_rest_manifest(manifest: ConnectorManifest) -> GenericRestReadManife
         connector_capability=manifest.connector_capability,
         base_url=_required(manifest.read.base_url, "generic_rest manifest requires read.base_url"),
         path_template=_required(manifest.read.path_template, "generic_rest manifest requires read.path_template"),
+        path_value_keys=manifest.read.path_value_keys,
         query=manifest.read.query_params,
         record_path=manifest.read.record_path,
         timeout_seconds=manifest.read.timeout_seconds,
