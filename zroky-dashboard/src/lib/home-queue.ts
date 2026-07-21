@@ -194,7 +194,7 @@ export function buildDecisionQueue({
       detail: approval.reasons[0] ?? (approval.expires_at ? `Expires ${timeUntil(approval.expires_at, nowMs)}` : "Human decision required."),
       status: approval.status,
       actionLabel: "Review",
-      href: `/approvals?decision_id=${encodeURIComponent(approval.id)}`,
+      href: `/operations?decision_id=${encodeURIComponent(approval.id)}`,
       createdAt: approval.created_at,
       actionId: intent?.action_id ?? null,
       decisionId: approval.id,

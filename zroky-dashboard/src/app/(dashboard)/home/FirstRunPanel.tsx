@@ -17,6 +17,7 @@ export type FirstRunSignals = {
   hasActiveAgent: boolean;
   hasRunnerConnected: boolean;
   hasVerificationConnected: boolean;
+  hasAssurancePack: boolean;
   hasActionIntent: boolean;
   hasProofSignal: boolean;
   hasReceiptGenerated: boolean;
@@ -24,38 +25,38 @@ export type FirstRunSignals = {
 
 const STEPS = [
   {
-    id: "runner",
-    label: "Connect runner",
-    detail: "Connect the execution path that will run approved actions.",
-    completeDetail: "Runner connected.",
-    cta: "Connect runner",
-    href: "/workflows?intent=connect-runner&source=home",
-    icon: RadioTower,
-  },
-  {
-    id: "verification",
+    id: "source",
     label: "Connect source-of-record",
     detail: "Connect the system Zroky checks after an action runs.",
-    completeDetail: "Verification connected.",
-    cta: "Connect verification",
+    completeDetail: "Source-of-record connected.",
+    cta: "Connect source",
     href: "/integrations",
     icon: FileSearch,
   },
   {
-    id: "action",
-    label: "Run first protected action",
-    detail: "Send one real action through policy before execution.",
-    completeDetail: "First action reached Zroky.",
-    cta: "Run first action",
+    id: "pack",
+    label: "Define Assurance Pack",
+    detail: "Define what correct means before Zroky verifies outcomes.",
+    completeDetail: "Assurance Pack signal found.",
+    cta: "Define pack",
     href: "/workflows",
     icon: ShieldCheck,
   },
   {
-    id: "receipt",
-    label: "Generate first receipt",
-    detail: "Verify the action and create the first signed receipt.",
-    completeDetail: "Receipt generated.",
-    cta: "Review receipt",
+    id: "agent",
+    label: "Connect agent",
+    detail: "Connect the agent or issuer whose actions will be governed.",
+    completeDetail: "Agent connected.",
+    cta: "Connect agent",
+    href: "/operations",
+    icon: RadioTower,
+  },
+  {
+    id: "verified",
+    label: "See first verified run",
+    detail: "Run one protected action and verify it against the source of truth.",
+    completeDetail: "First verified run found.",
+    cta: "View evidence",
     href: "/evidence",
     icon: FileCheck2,
   },
@@ -64,33 +65,30 @@ const STEPS = [
 type StepState = "done" | "current" | "locked";
 
 function stepState(stepId: (typeof STEPS)[number]["id"], signals: FirstRunSignals): StepState {
-  if (stepId === "runner") {
-    return signals.hasRunnerConnected ? "done" : "current";
+  if (stepId === "source") {
+    return signals.hasVerificationConnected ? "done" : "current";
   }
-  if (stepId === "verification") {
-    if (signals.hasVerificationConnected) return "done";
-    return signals.hasRunnerConnected ? "current" : "locked";
+  if (stepId === "pack") {
+    if (signals.hasAssurancePack) return "done";
+    return signals.hasVerificationConnected ? "current" : "locked";
   }
-  if (stepId === "action") {
-    if (signals.hasActionIntent) return "done";
-    return signals.hasRunnerConnected && signals.hasVerificationConnected ? "current" : "locked";
+  if (stepId === "agent") {
+    if (signals.hasActiveAgent || signals.hasRunnerConnected) return "done";
+    return signals.hasVerificationConnected && signals.hasAssurancePack ? "current" : "locked";
   }
-  if (signals.hasReceiptGenerated) return "done";
-  return signals.hasActionIntent ? "current" : "locked";
+  if (signals.hasReceiptGenerated || signals.hasProofSignal) return "done";
+  return (signals.hasActiveAgent || signals.hasRunnerConnected) && signals.hasAssurancePack ? "current" : "locked";
 }
 
 function stepDetail(step: (typeof STEPS)[number], state: StepState, signals: FirstRunSignals): string {
   if (state === "done") {
     return step.completeDetail;
   }
-  if (step.id === "action" && state === "current" && signals.hasActiveAgent) {
-    return "Agent is protected. Run the first controlled action.";
+  if (step.id === "agent" && state === "current") {
+    return "Bring one agent onto the governed rail.";
   }
-  if (step.id === "action" && state === "current") {
-    return "Connect one agent, then run the first action.";
-  }
-  if (step.id === "receipt" && state === "current") {
-    return "Verify the outcome and generate the receipt.";
+  if (step.id === "verified" && state === "current") {
+    return "Generate one proven outcome and signed evidence.";
   }
   return step.detail;
 }
@@ -108,16 +106,16 @@ function stepHint(stepId: (typeof STEPS)[number]["id"], state: StepState): strin
   if (state === "locked") {
     return "Unlocks after the previous step";
   }
-  if (stepId === "runner") {
-    return "Runner connected";
+  if (stepId === "source") {
+    return "Connect source now";
   }
-  if (stepId === "verification") {
-    return "Verification connected";
+  if (stepId === "pack") {
+    return "Define policy now";
   }
-  if (stepId === "action") {
-    return "Action controlled";
+  if (stepId === "agent") {
+    return "Connect agent now";
   }
-  return "Receipt generated";
+  return "Verify first run now";
 }
 
 export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
@@ -136,7 +134,7 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
           <p className="mc-eyebrow">First run</p>
           <h2>Get Home reporting real activity</h2>
           <p className="mc-muted">
-            Connect the runtime and verification path, then run one protected action and generate its receipt.
+            Connect proof, define correctness, bring one agent onto the rail, then verify the first run.
           </p>
         </div>
       </div>
@@ -167,9 +165,9 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
                       {step.cta}
                     </DashboardButtonLink>
                   ) : null}
-                  {step.id === "runner" && state === "current" ? (
+                  {step.id === "agent" && state === "current" ? (
                     <Link className="mc-step-text-link" href="/operations">
-                      Agents protected
+                      Open Operations
                     </Link>
                   ) : null}
                 </div>

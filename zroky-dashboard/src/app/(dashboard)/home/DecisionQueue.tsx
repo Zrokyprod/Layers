@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowRight, Inbox } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
@@ -10,10 +11,11 @@ export type HomeQueueFilter = "all" | "needs" | "bypass";
 type DecisionQueueProps = {
   rows: HomeQueueRow[];
   selectedId: string | null;
-  filter: HomeQueueFilter;
-  onFilterChange: (filter: HomeQueueFilter) => void;
-  onSelect: (row: HomeQueueRow) => void;
+  filter?: HomeQueueFilter;
+  onFilterChange?: (filter: HomeQueueFilter) => void;
+  onSelect?: (row: HomeQueueRow) => void;
   loading: boolean;
+  maxRows?: number;
 };
 
 function matchesFilter(row: HomeQueueRow, filter: HomeQueueFilter): boolean {
@@ -36,12 +38,13 @@ function filterLabel(filter: HomeQueueFilter, rows: HomeQueueRow[]): string {
 export function DecisionQueue({
   rows,
   selectedId,
-  filter,
+  filter = "all",
   onFilterChange,
   onSelect,
   loading,
+  maxRows = 5,
 }: DecisionQueueProps) {
-  const filteredRows = rows.filter((row) => matchesFilter(row, filter));
+  const filteredRows = rows.filter((row) => matchesFilter(row, filter)).slice(0, maxRows);
 
   return (
     <section className="mc-queue-panel" aria-label="Decision queue">
@@ -50,18 +53,20 @@ export function DecisionQueue({
           <p className="mc-eyebrow">Decision queue</p>
           <h2>What needs attention</h2>
         </div>
-        <div className="mc-filter-group" aria-label="Queue filter">
-          {(["all", "needs", "bypass"] as const).map((item) => (
-            <button
-              className={`mc-filter-chip${filter === item ? " is-active" : ""}`}
-              type="button"
-              key={item}
-              onClick={() => onFilterChange(item)}
-            >
-              {filterLabel(item, rows)}
-            </button>
-          ))}
-        </div>
+        {onFilterChange ? (
+          <div className="mc-filter-group" aria-label="Queue filter">
+            {(["all", "needs", "bypass"] as const).map((item) => (
+              <button
+                className={`mc-filter-chip${filter === item ? " is-active" : ""}`}
+                type="button"
+                key={item}
+                onClick={() => onFilterChange(item)}
+              >
+                {filterLabel(item, rows)}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {loading ? (
@@ -77,11 +82,11 @@ export function DecisionQueue({
       ) : filteredRows.length > 0 ? (
         <div className="mc-queue-list">
           {filteredRows.map((row) => (
-            <button
+            <Link
               className={`mc-queue-row mc-tone-${row.tone}${selectedId === row.id ? " is-selected" : ""}`}
-              type="button"
+              href={row.href}
               key={row.id}
-              onClick={() => onSelect(row)}
+              onClick={() => onSelect?.(row)}
             >
               <span className="mc-priority">{row.priority}</span>
               <span className="mc-queue-content">
@@ -93,7 +98,7 @@ export function DecisionQueue({
               </span>
               <StatusPill value={row.status} tone={row.tone} />
               <ArrowRight className="mc-row-arrow" aria-hidden="true" size={15} />
-            </button>
+            </Link>
           ))}
         </div>
       ) : (

@@ -497,12 +497,16 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Action mismatch" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "1 mismatches caught" })).toBeInTheDocument();
     const proofMetrics = screen.getByLabelText("Proof metrics");
-    expect(within(proofMetrics).getByText("Agents protected")).toBeInTheDocument();
-    expect(within(proofMetrics).getByText("Actions controlled")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Mismatches caught")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Proven outcomes")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Unverifiable")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Open incidents")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Pending approvals")).toBeInTheDocument();
-    expect(within(proofMetrics).getByText("Proof generated")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Coverage")).toBeInTheDocument();
+    expect(screen.getByLabelText("Trust-machine health")).toBeInTheDocument();
+    expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
     const agentHealth = screen.getByLabelText("Agent health over time");
     expect(within(agentHealth).getByRole("heading", { name: "Timeframe-wise control confidence" })).toBeInTheDocument();
     expect(within(agentHealth).getByText("Health score")).toBeInTheDocument();
@@ -519,7 +523,7 @@ describe("Mission Control Home", () => {
     expect(within(proofChecks).getByText(/deleted flag was still false/i)).toBeInTheDocument();
   });
 
-  it("shows protected agent count without repeating runner status", async () => {
+  it("shows trust-machine health without resurrecting agent vanity metrics", async () => {
     mockHomeData({
       profiles: [
         profile(),
@@ -542,9 +546,10 @@ describe("Mission Control Home", () => {
     render(<HomePage />);
 
     const proofMetrics = await screen.findByLabelText("Proof metrics");
-    const agentsCard = within(proofMetrics).getByText("Agents protected").closest(".mc-proof-card") as HTMLElement;
-    expect(agentsCard).toBeInTheDocument();
-    expect(within(agentsCard).getByText("2")).toBeInTheDocument();
+    expect(within(proofMetrics).queryByText("Agents protected")).not.toBeInTheDocument();
+    const trustHealth = screen.getByLabelText("Trust-machine health");
+    expect(within(trustHealth).getByText("Executor health")).toBeInTheDocument();
+    expect(within(trustHealth).getByText("1/2 online")).toBeInTheDocument();
     expect(screen.queryByLabelText("Agent fleet context")).not.toBeInTheDocument();
   });
 
@@ -563,7 +568,8 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect((await screen.findAllByText("Guard-only approval hold")).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "1 actions need approval" })).toBeInTheDocument();
+    expect((await screen.findAllByText(/Guard-only approval hold/)).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Send customer email").length).toBeGreaterThan(0);
   });
 
@@ -572,30 +578,27 @@ describe("Mission Control Home", () => {
 
     const { container } = render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Your agent control center" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Set up proof before trusting Home" })).toBeInTheDocument();
     expect(container.querySelector(".mc-locked-home")).not.toBeInTheDocument();
     expect(container.querySelector(".mc-locked-preview")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
-    expect(screen.getByText("Actions controlled")).toBeInTheDocument();
+    expect(screen.getByText("Mismatches caught")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Get Home reporting real activity" })).toBeInTheDocument();
     const agentHealth = screen.getByLabelText("Agent health over time");
     expect(within(agentHealth).getByText("No signal")).toBeInTheDocument();
     expect(within(agentHealth).getByText("No agent health events in this timeframe yet.")).toBeInTheDocument();
     expect(screen.getByText("Setup checklist")).toBeInTheDocument();
-    const runnerCard = screen.getAllByText("Connect runner")[0].closest(".mc-first-run-step-card");
-    const verificationCard = screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card");
-    const actionCard = screen.getByText("Run first protected action").closest(".mc-first-run-step-card");
-    const receiptCard = screen.getByText("Generate first receipt").closest(".mc-first-run-step-card");
-    expect(runnerCard?.getAttribute("data-state")).toBe("current");
-    expect(verificationCard?.getAttribute("data-state")).toBe("locked");
-    expect(actionCard?.getAttribute("data-state")).toBe("locked");
-    expect(receiptCard?.getAttribute("data-state")).toBe("locked");
+    const sourceCard = screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card");
+    const packCard = screen.getByText("Define Assurance Pack").closest(".mc-first-run-step-card");
+    const agentCard = screen.getByText("Connect agent").closest(".mc-first-run-step-card");
+    const verifiedCard = screen.getByText("See first verified run").closest(".mc-first-run-step-card");
+    expect(sourceCard?.getAttribute("data-state")).toBe("current");
+    expect(packCard?.getAttribute("data-state")).toBe("locked");
+    expect(agentCard?.getAttribute("data-state")).toBe("locked");
+    expect(verifiedCard?.getAttribute("data-state")).toBe("locked");
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Connect runner/i }).getAttribute("href")).toBe(
-      "/workflows?intent=connect-runner&source=home",
-    );
-    expect(screen.getAllByRole("link", { name: /Agents protected/i }).some((link) => link.getAttribute("href") === "/operations")).toBe(true);
+    expect(screen.getByRole("link", { name: /Connect source/i }).getAttribute("href")).toBe("/integrations");
     expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
   });
 
@@ -610,12 +613,12 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Your agent control center" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Set up proof before trusting Home" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Get Home reporting real activity" })).toBeInTheDocument();
-    expect(screen.getByText("Connect runner").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
     expect(screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
+    expect(screen.getByText("Define Assurance Pack").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("locked");
     expect(screen.getByText("Connect the system Zroky checks after an action runs.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Connect verification/i }).getAttribute("href")).toBe("/integrations");
+    expect(screen.getByRole("link", { name: /Connect source/i }).getAttribute("href")).toBe("/integrations");
   });
 
   it("opens the mission dashboard after the first protected action signal", async () => {
@@ -629,7 +632,7 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "1 actions proven" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Get Home reporting real activity" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
@@ -666,14 +669,14 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "1 unverifiable actions" })).toBeInTheDocument();
     const proofMetrics = screen.getByLabelText("Proof metrics");
-    const approvalsCard = within(proofMetrics).getByText("Pending approvals").closest(".mc-proof-card") as HTMLElement;
-    expect(approvalsCard).toBeInTheDocument();
-    expect(approvalsCard.classList.contains("mc-tone-warning")).toBe(true);
-    expect(within(approvalsCard).getByText("— unavailable")).toBeInTheDocument();
-    expect(within(approvalsCard).getByText("Home summary unavailable")).toBeInTheDocument();
-    expect(within(approvalsCard).queryByText("0")).not.toBeInTheDocument();
+    const mismatchCard = within(proofMetrics).getByText("Mismatches caught").closest(".mc-proof-card") as HTMLElement;
+    expect(mismatchCard).toBeInTheDocument();
+    expect(mismatchCard.classList.contains("mc-tone-warning")).toBe(true);
+    expect(within(mismatchCard).getByText("— unavailable")).toBeInTheDocument();
+    expect(within(mismatchCard).getByText("Home summary unavailable")).toBeInTheDocument();
+    expect(within(mismatchCard).queryByText("0")).not.toBeInTheDocument();
     expect(screen.getByText("1 data source unavailable")).toBeInTheDocument();
   });
 

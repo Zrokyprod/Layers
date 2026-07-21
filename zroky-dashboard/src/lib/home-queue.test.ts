@@ -176,7 +176,7 @@ describe("buildDecisionQueue", () => {
     expect(rows[0]).toMatchObject({
       kind: "guard_approval",
       priority: "P1",
-      href: "/approvals?decision_id=guard_decision",
+      href: "/operations?decision_id=guard_decision",
     });
   });
 
