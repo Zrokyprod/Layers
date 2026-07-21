@@ -41,14 +41,14 @@ def test_owner_router_not_mounted_when_legacy_owner_disabled(monkeypatch) -> Non
     get_settings.cache_clear()
 
 
-def test_launch_legacy_surfaces_are_hidden_but_control_dependencies_stay_mounted(monkeypatch) -> None:
+def test_launch_legacy_surfaces_are_removed_from_final_router(monkeypatch) -> None:
     router_module = _reload_api_router(
         monkeypatch,
-        FEATURE_LEGACY_OBSERVABILITY_API="false",
-        FEATURE_LEGACY_REPLAY_API="false",
-        FEATURE_LEGACY_DIAGNOSIS_API="false",
-        FEATURE_LEGACY_ISSUES_API="false",
-        FEATURE_LEGACY_DIAGNOSIS_ALIAS="false",
+        FEATURE_LEGACY_OBSERVABILITY_API="true",
+        FEATURE_LEGACY_REPLAY_API="true",
+        FEATURE_LEGACY_DIAGNOSIS_API="true",
+        FEATURE_LEGACY_ISSUES_API="true",
+        FEATURE_LEGACY_DIAGNOSIS_ALIAS="true",
     )
     tags = _router_tags(router_module)
     paths = sorted({getattr(route, "path", "") for route in router_module.api_router.routes})

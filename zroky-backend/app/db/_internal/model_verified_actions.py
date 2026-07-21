@@ -133,6 +133,7 @@ class ActionRunner(Base):
     environment: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'production'"))
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'registered'"))
     supported_operation_kinds_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    capability_manifest_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     credential_scope_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     heartbeat_payload_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     capability_version: Mapped[str | None] = mapped_column(String(64), nullable=True)

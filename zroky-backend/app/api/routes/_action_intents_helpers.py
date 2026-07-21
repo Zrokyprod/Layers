@@ -14,6 +14,7 @@ from app.services.action_receipts import (
     verify_action_receipt_signature,
 )
 from app.services.action_runner import (
+    action_runner_capability_manifest,
     action_runner_credential_scope,
     action_runner_heartbeat_payload,
     action_runner_supported_operation_kinds,
@@ -116,6 +117,7 @@ def _runner_response(row) -> ActionRunnerResponse:
         status=row.status,
         supported_operation_kinds=action_runner_supported_operation_kinds(row),
         credential_scope=action_runner_credential_scope(row),
+        capability_manifest=action_runner_capability_manifest(row),
         heartbeat_payload=action_runner_heartbeat_payload(row),
         capability_version=row.capability_version,
         last_heartbeat_at=row.last_heartbeat_at,

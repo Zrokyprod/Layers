@@ -122,6 +122,7 @@ def register_runner(
             supported_operation_kinds=body.supported_operation_kinds,
             credential_scope=body.credential_scope,
             capability_version=body.capability_version,
+            capability_manifest=body.capability_manifest,
             registered_by_subject=context.subject,
         )
     except ActionRunnerConflict as exc:
@@ -164,6 +165,7 @@ def runner_heartbeat(
             heartbeat_payload=body.heartbeat_payload,
             supported_operation_kinds=body.supported_operation_kinds,
             capability_version=body.capability_version,
+            capability_manifest=body.capability_manifest,
         )
     except ActionRunnerNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

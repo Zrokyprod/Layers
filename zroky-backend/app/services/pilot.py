@@ -28,6 +28,7 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import PilotAction, PilotPolicy
@@ -388,7 +389,16 @@ def get_or_create_policy(
         updated_by=None,
     )
     db.add(policy)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing_after_race = db.execute(
+            select(PilotPolicy).where(PilotPolicy.project_id == project_id)
+        ).scalar_one_or_none()
+        if existing_after_race is not None:
+            return existing_after_race
+        raise
     db.refresh(policy)
     logger.info("pilot_policy_seeded_default project=%s", project_id)
     return policy

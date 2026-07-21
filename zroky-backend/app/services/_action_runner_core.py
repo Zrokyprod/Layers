@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models import ActionExecutionAttempt, ActionIntent, ActionRunner
 from app.services.action_kernel import (
     ActionIntentNotFound,
@@ -61,6 +62,8 @@ class ActionExecutionPlanError(ActionRunnerError):
 ALLOWED_CREDENTIAL_REF_PREFIXES = (
     "zroky-secret://",
     "vault://",
+    "openbao://",
+    "bao://",
     "aws-secretsmanager://",
     "gcp-secretmanager://",
     "azure-keyvault://",
@@ -87,6 +90,14 @@ RAW_SECRET_VALUE_MARKERS = (
     "github_pat_",
     "-----begin private key-----",
 )
+LOCAL_VAULT_CREDENTIAL_REF_PREFIXES = ("vault://", "openbao://", "bao://")
+CAPABILITY_MANIFEST_SCHEMA_VERSION = "zroky.runner_capability_manifest.v1"
+ENFORCEMENT_SCHEMA_VERSION = "zroky.executor_enforcement.v1"
+EXECUTOR_ENFORCEMENT_OPTIONS = {
+    "isolation": ["gvisor"],
+    "policy": ["kyverno"],
+    "telemetry": ["tetragon"],
+}
 
 EXECUTION_ADAPTER_CONTRACTS: dict[str, dict[str, Any]] = {
     "stripe_refund": {
@@ -185,6 +196,17 @@ def validate_credential_ref(credential_ref: str) -> str:
         )
     if any(marker in normalized.lower() for marker in ("sk_live_", "sk_test_", "secret=", "password=", "bearer ")):
         raise ActionCredentialReferenceError("credential_ref appears to contain raw secret material.")
+    settings = get_settings()
+    if settings.CUSTOMER_LOCAL_SECRETS_MODE:
+        prefixes = tuple(
+            item.strip()
+            for item in settings.CUSTOMER_LOCAL_SECRET_REF_PREFIXES.split(",")
+            if item.strip()
+        ) or LOCAL_VAULT_CREDENTIAL_REF_PREFIXES
+        if not normalized.startswith(prefixes):
+            raise ActionCredentialReferenceError(
+                "credential_ref must point to the customer-local Vault/OpenBao secret backend."
+            )
     return normalized
 
 
@@ -195,9 +217,76 @@ def list_execution_adapter_contracts() -> list[dict[str, Any]]:
             "schema_version": "zroky.execution_adapter.v1",
             "credential_boundary": "runner_resolves_credential_ref",
             "protected_credential_returned": False,
+            "executor_enforcement_options": EXECUTOR_ENFORCEMENT_OPTIONS,
         }
         for contract in EXECUTION_ADAPTER_CONTRACTS.values()
     ]
+
+
+def _normalize_executor_enforcement(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ActionRunnerError("capability_manifest.enforcement must be an object.")
+    schema_version = str(value.get("schema_version") or ENFORCEMENT_SCHEMA_VERSION).strip()
+    if schema_version != ENFORCEMENT_SCHEMA_VERSION:
+        raise ActionRunnerError(f"capability_manifest.enforcement.schema_version must be {ENFORCEMENT_SCHEMA_VERSION}.")
+    normalized: dict[str, Any] = {"schema_version": ENFORCEMENT_SCHEMA_VERSION}
+    for key, allowed in EXECUTOR_ENFORCEMENT_OPTIONS.items():
+        selected = str(value.get(key) or "").strip().lower()
+        if not selected:
+            continue
+        if selected not in allowed:
+            raise ActionRunnerError(
+                f"capability_manifest.enforcement.{key} must be one of: {', '.join(allowed)}."
+            )
+        normalized[key] = selected
+    if len(normalized) == 1:
+        raise ActionRunnerError("capability_manifest.enforcement must declare isolation, policy, or telemetry.")
+    references = value.get("references")
+    if references is not None:
+        if not isinstance(references, Mapping):
+            raise ActionRunnerError("capability_manifest.enforcement.references must be an object.")
+        normalized["references"] = {str(key): str(item) for key, item in references.items()}
+    return normalized
+
+
+def normalize_capability_manifest(manifest: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not manifest:
+        return {}
+    if not isinstance(manifest, Mapping):
+        raise ActionRunnerError("capability_manifest must be an object.")
+    payload = {key: value for key, value in dict(manifest).items() if key != "signature"}
+    if payload.get("schema_version") != CAPABILITY_MANIFEST_SCHEMA_VERSION:
+        raise ActionRunnerError(f"capability_manifest.schema_version must be {CAPABILITY_MANIFEST_SCHEMA_VERSION}.")
+    signature = manifest.get("signature")
+    if not isinstance(signature, Mapping) or not str(signature.get("digest") or "").strip():
+        raise ActionRunnerError("capability_manifest.signature.digest is required.")
+    if str(signature["digest"]).strip() != sha256_digest(canonical_json(payload)):
+        raise ActionRunnerError("capability_manifest signature digest does not match payload.")
+    capabilities = payload.get("capabilities")
+    if not isinstance(capabilities, list) or not capabilities:
+        raise ActionRunnerError("capability_manifest.capabilities must be a non-empty list.")
+    normalized_capabilities: list[dict[str, str]] = []
+    for item in capabilities:
+        if not isinstance(item, Mapping):
+            raise ActionRunnerError("capability_manifest capabilities must be objects.")
+        adapter = str(item.get("adapter") or "").strip().lower()
+        operation_kind = str(item.get("operation_kind") or "").strip()
+        operation = str(item.get("operation") or "").strip()
+        contract = EXECUTION_ADAPTER_CONTRACTS.get(adapter)
+        if contract is None:
+            raise ActionRunnerError(f"Unsupported capability adapter: {adapter}.")
+        if operation_kind not in contract["operation_kinds"]:
+            raise ActionRunnerError(f"Capability adapter {adapter} does not allow operation_kind {operation_kind}.")
+        if operation not in contract["operations"]:
+            raise ActionRunnerError(f"Capability adapter {adapter} does not allow operation {operation}.")
+        normalized_capabilities.append({"adapter": adapter, "operation_kind": operation_kind, "operation": operation})
+    normalized = {**payload, "capabilities": normalized_capabilities, "signature": dict(signature)}
+    enforcement = _normalize_executor_enforcement(payload.get("enforcement"))
+    if enforcement is not None:
+        normalized["enforcement"] = enforcement
+    return normalized
 
 
 def _contains_raw_secret(value: Any, *, key_path: tuple[str, ...] = ()) -> str | None:
@@ -329,6 +418,7 @@ def register_action_runner(
     supported_operation_kinds: list[str] | None = None,
     credential_scope: Mapping[str, Any] | None = None,
     capability_version: str | None = None,
+    capability_manifest: Mapping[str, Any] | None = None,
     registered_by_subject: str | None = None,
 ) -> RegisteredActionRunner:
     existing = db.execute(
@@ -340,11 +430,13 @@ def register_action_runner(
     ).scalar_one_or_none()
     supported_json = _json_list(supported_operation_kinds)
     scope_json = _json_dumps(credential_scope)
+    manifest_json = _json_dumps(normalize_capability_manifest(capability_manifest))
     if existing is not None:
         if existing.runner_type != runner_type:
             raise ActionRunnerConflict("Action runner already exists with a different runner_type.")
         existing.supported_operation_kinds_json = supported_json
         existing.credential_scope_json = scope_json
+        existing.capability_manifest_json = manifest_json
         existing.capability_version = capability_version
         db.add(existing)
         db.flush()
@@ -357,6 +449,7 @@ def register_action_runner(
         environment=environment,
         supported_operation_kinds_json=supported_json,
         credential_scope_json=scope_json,
+        capability_manifest_json=manifest_json,
         capability_version=capability_version,
         registered_by_subject=registered_by_subject,
     )

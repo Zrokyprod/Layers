@@ -36,6 +36,7 @@ from app.services._action_runner_core import (
     get_action_runner,
     normalize_execution_plan_for_intent,
     validate_credential_ref,
+    normalize_capability_manifest,
 )
 
 
@@ -116,6 +117,8 @@ def _runner_matches_capability(
         return False
     if runner.environment not in ("*", "all", intent.environment):
         return False
+    if not _runner_allows_execution_plan(runner, intent=intent, execution_plan=execution_plan):
+        return False
     if not _runner_supports_intent(runner, intent):
         return False
     runner_type = _text(capability.get("runner_type"))
@@ -134,6 +137,25 @@ def _runner_matches_capability(
     if operation and operation != execution_plan.get("operation"):
         return False
     return True
+
+
+def _runner_allows_execution_plan(
+    runner: ActionRunner,
+    *,
+    intent: ActionIntent,
+    execution_plan: Mapping[str, Any],
+) -> bool:
+    manifest = action_runner_capability_manifest(runner)
+    manifest_capabilities = manifest.get("capabilities")
+    if not isinstance(manifest_capabilities, list) or not manifest_capabilities:
+        return _runner_supports_intent(runner, intent)
+    return any(
+        isinstance(item, Mapping)
+        and (not _text(item.get("operation_kind")) or _text(item.get("operation_kind")) == intent.operation_kind)
+        and (not _text(item.get("adapter")) or _text(item.get("adapter")) == execution_plan.get("adapter"))
+        and (not _text(item.get("operation")) or _text(item.get("operation")) == execution_plan.get("operation"))
+        for item in manifest_capabilities
+    )
 
 
 def _eligible_runners(
@@ -243,6 +265,7 @@ def record_runner_heartbeat(
     heartbeat_payload: Mapping[str, Any] | None = None,
     supported_operation_kinds: list[str] | None = None,
     capability_version: str | None = None,
+    capability_manifest: Mapping[str, Any] | None = None,
 ) -> ActionRunner:
     row = get_action_runner(db, project_id=project_id, runner_id=runner_id)
     row.status = status
@@ -252,6 +275,8 @@ def record_runner_heartbeat(
         row.supported_operation_kinds_json = _json_list(supported_operation_kinds)
     if capability_version is not None:
         row.capability_version = capability_version
+    if capability_manifest is not None:
+        row.capability_manifest_json = _json_dumps(normalize_capability_manifest(capability_manifest))
     db.add(row)
     db.flush()
     return row
@@ -271,6 +296,7 @@ def _build_execution_plan_document(
     credential_ref: str,
     execution_plan: Mapping[str, Any],
 ) -> dict[str, Any]:
+    manifest = action_runner_capability_manifest(runner)
     return {
         "action_intent_id": intent.id,
         "intent_digest": intent.intent_digest,
@@ -283,6 +309,7 @@ def _build_execution_plan_document(
             "type": runner.runner_type,
             "environment": runner.environment,
             "capability_version": runner.capability_version,
+            "enforcement": manifest.get("enforcement", {}),
         },
         "credential_ref": credential_ref,
         "execution_plan": dict(execution_plan),
@@ -320,6 +347,8 @@ def create_execution_attempt(
         intent=intent,
         execution_plan=execution_plan,
     )
+    if not _runner_allows_execution_plan(runner, intent=intent, execution_plan=normalized_execution_plan):
+        raise ActionRunnerError("Action runner capability manifest does not allow this execution plan.")
     plan_document = _build_execution_plan_document(
         intent=intent,
         runner=runner,
@@ -624,6 +653,11 @@ def action_runner_supported_operation_kinds(row: ActionRunner) -> list[str]:
 
 def action_runner_credential_scope(row: ActionRunner) -> dict[str, Any]:
     value = _json_loads(row.credential_scope_json, {})
+    return value if isinstance(value, dict) else {}
+
+
+def action_runner_capability_manifest(row: ActionRunner) -> dict[str, Any]:
+    value = _json_loads(row.capability_manifest_json, {})
     return value if isinstance(value, dict) else {}
 
 

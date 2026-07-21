@@ -77,6 +77,8 @@ def validate_runtime_settings(settings: Any) -> None:
 
     if settings.DATABASE_URL.startswith("sqlite"):
         failures.append("DATABASE_URL must point to managed PostgreSQL in production")
+    if not settings.REQUIRE_POSTGRES_RLS:
+        failures.append("REQUIRE_POSTGRES_RLS must be true in production so tenant tables fail closed under Postgres RLS")
 
     if _is_local_url(settings.REDIS_URL):
         failures.append("REDIS_URL must point to managed Redis in production")
@@ -100,6 +102,10 @@ def validate_runtime_settings(settings: Any) -> None:
 
     if settings.ALLOW_PROJECT_HEADER_CONTEXT:
         failures.append("ALLOW_PROJECT_HEADER_CONTEXT must be false in production")
+    if settings.ACCEPT_LEGACY_TENANT_HEADER:
+        failures.append("ACCEPT_LEGACY_TENANT_HEADER must be false in production")
+    if not settings.ENFORCE_JWT_PROJECT_MEMBERSHIP:
+        failures.append("ENFORCE_JWT_PROJECT_MEMBERSHIP must be true in production for tenant/RLS boundary enforcement")
 
     if not settings.REQUIRE_PROVISIONING_TOKEN:
         failures.append("REQUIRE_PROVISIONING_TOKEN must be true in production")
@@ -219,10 +225,6 @@ def validate_runtime_settings(settings: Any) -> None:
             failures.append("JWT_ISSUER must be configured when JWT auth is enabled in production")
         if not settings.JWT_AUDIENCE:
             failures.append("JWT_AUDIENCE must be configured when JWT auth is enabled in production")
-        if not settings.ENFORCE_JWT_PROJECT_MEMBERSHIP:
-            failures.append(
-                "ENFORCE_JWT_PROJECT_MEMBERSHIP must be true when JWT auth is enabled in production"
-            )
 
     pii_encryption_key = (settings.PII_ENCRYPTION_KEY or "").strip()
     github_token_encryption_key = (settings.GITHUB_TOKEN_ENCRYPTION_KEY or "").strip()

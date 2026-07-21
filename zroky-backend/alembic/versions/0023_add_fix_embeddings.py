@@ -82,9 +82,11 @@ def upgrade() -> None:
         )
     if is_postgres:
         op.execute("ALTER TABLE fix_embeddings ENABLE ROW LEVEL SECURITY")
+        op.execute("ALTER TABLE fix_embeddings FORCE ROW LEVEL SECURITY")
         op.execute(
             "CREATE POLICY fix_embeddings_tenant_isolation ON fix_embeddings "
-            "USING (project_id = current_setting('app.current_tenant')::text)"
+            "USING (project_id = current_setting('app.current_tenant_id', true)) "
+            "WITH CHECK (project_id = current_setting('app.current_tenant_id', true))"
         )
 
 def downgrade() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -7,13 +8,14 @@ from typing import Any
 from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.authorization import ROLE_RANK
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.limiter import limiter
-from app.db.models import ActionIntent, OutcomeReconciliationCheck, RuntimePolicyDecision
+from app.db.models import ActionIntent, FinalEvidenceBundle, OutcomeReconciliationCheck, RuntimePolicyDecision
 from app.db.session import get_db_session
 from app.schemas.evidence import (
     EvidenceManifestFilter,
@@ -22,9 +24,100 @@ from app.schemas.evidence import (
     EvidenceManifestScope,
     EvidenceManifestVerification,
 )
-from app.services.action_receipts import action_receipt_public_key_payload
+from app.services.action_receipts import (
+    SIGNATURE_ALGORITHM,
+    _ed25519_private_key,
+    _ed25519_signature,
+    action_receipt_public_key_payload,
+    verify_receipt_json_with_public_key,
+)
+from app.services.privacy import mask_value
 
 router = APIRouter(prefix="/v1/evidence", tags=["evidence"])
+
+FINAL_EVIDENCE_BUNDLE_SCHEMA_VERSION = "zroky.final_evidence_bundle.v1"
+FINAL_EVIDENCE_BUNDLE_SECTIONS = {
+    "intent": dict,
+    "policy": dict,
+    "observations": list,
+    "snapshot": dict,
+    "incident": dict,
+    "recovery": dict,
+}
+
+
+class FinalEvidenceBundleCreateRequest(BaseModel):
+    environment: str = Field(default="production", min_length=1, max_length=64)
+    subject_type: str = Field(min_length=1, max_length=64)
+    subject_id: str = Field(min_length=1, max_length=36)
+    bundle: dict[str, Any]
+
+
+class FinalEvidenceBundleResponse(BaseModel):
+    id: str
+    project_id: str
+    environment: str
+    subject_type: str
+    subject_id: str
+    bundle_digest: str
+    bundle: dict[str, Any]
+    signature: dict[str, Any] | None
+    created_at: datetime
+
+
+class FinalEvidenceBundleVerificationResponse(BaseModel):
+    bundle_id: str
+    bundle_digest: str
+    verification_status: str
+    digest_valid: bool
+    signature_valid: bool
+    algorithm: str | None
+    key_id: str | None
+
+
+def _digest_json(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+
+
+def _normalize_final_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(bundle)
+    schema_version = normalized.setdefault("schema_version", FINAL_EVIDENCE_BUNDLE_SCHEMA_VERSION)
+    if schema_version != FINAL_EVIDENCE_BUNDLE_SCHEMA_VERSION:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported evidence bundle schema_version.")
+    for key, expected_type in FINAL_EVIDENCE_BUNDLE_SECTIONS.items():
+        if not isinstance(normalized.get(key), expected_type):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Evidence bundle requires {key}.")
+    return normalized
+
+
+def _final_bundle_signature(*, bundle_json: str, bundle_digest: str) -> dict[str, Any]:
+    private_key, key_id = _ed25519_private_key()
+    public_key = action_receipt_public_key_payload()["public_key"]
+    return {
+        "schema_version": "zroky.final_evidence_signature.v1",
+        "envelope": "dsse-like",
+        "payload_type": "application/vnd.zroky.final-evidence-bundle+json",
+        "payload_digest": f"sha256:{bundle_digest}",
+        "algorithm": SIGNATURE_ALGORITHM,
+        "key_id": key_id,
+        "public_key": public_key,
+        "signature": _ed25519_signature(bundle_json, private_key),
+        "signed_payload": "bundle_json",
+    }
+
+
+def _final_bundle_response(row: FinalEvidenceBundle) -> FinalEvidenceBundleResponse:
+    return FinalEvidenceBundleResponse(
+        id=row.id,
+        project_id=row.project_id,
+        environment=row.environment,
+        subject_type=row.subject_type,
+        subject_id=row.subject_id,
+        bundle_digest=row.bundle_digest,
+        bundle=json.loads(row.bundle_json),
+        signature=json.loads(row.signature_json) if row.signature_json else None,
+        created_at=row.created_at,
+    )
 
 
 @dataclass(frozen=True)
@@ -336,6 +429,93 @@ def _build_manifest_rows(
             rank.get(row.kind, 99),
             -(row.checked_at.timestamp() if row.checked_at else 0),
         ),
+    )
+
+
+@router.post("/bundles", response_model=FinalEvidenceBundleResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
+def create_final_evidence_bundle(
+    request: Request,
+    body: FinalEvidenceBundleCreateRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> FinalEvidenceBundleResponse:
+    _require_viewer(context)
+    redacted = mask_value(_normalize_final_bundle(body.bundle))
+    bundle_json = json.dumps(redacted, sort_keys=True, separators=(",", ":"), default=str)
+    bundle_digest = _digest_json(redacted)
+    row = FinalEvidenceBundle(
+        project_id=context.tenant_id,
+        environment=body.environment.strip().lower(),
+        subject_type=body.subject_type,
+        subject_id=body.subject_id,
+        bundle_digest=bundle_digest,
+        bundle_json=bundle_json,
+        signature_json=json.dumps(
+            _final_bundle_signature(bundle_json=bundle_json, bundle_digest=bundle_digest),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _final_bundle_response(row)
+
+
+@router.get("/bundles/{bundle_id}", response_model=FinalEvidenceBundleResponse)
+@limiter.limit("120/minute")
+def get_final_evidence_bundle(
+    request: Request,
+    bundle_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> FinalEvidenceBundleResponse:
+    _require_viewer(context)
+    row = db.execute(
+        select(FinalEvidenceBundle).where(
+            FinalEvidenceBundle.id == bundle_id,
+            FinalEvidenceBundle.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence bundle not found.")
+    return _final_bundle_response(row)
+
+
+@router.get("/bundles/{bundle_id}/verify", response_model=FinalEvidenceBundleVerificationResponse)
+@limiter.limit("120/minute")
+def verify_final_evidence_bundle(
+    request: Request,
+    bundle_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> FinalEvidenceBundleVerificationResponse:
+    _require_viewer(context)
+    row = db.execute(
+        select(FinalEvidenceBundle).where(
+            FinalEvidenceBundle.id == bundle_id,
+            FinalEvidenceBundle.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence bundle not found.")
+    bundle = json.loads(row.bundle_json)
+    signature = json.loads(row.signature_json or "{}")
+    digest_valid = _digest_json(bundle) == row.bundle_digest
+    signature_valid = verify_receipt_json_with_public_key(
+        receipt_json=row.bundle_json,
+        signature=str(signature.get("signature") or ""),
+        public_key=str(signature.get("public_key") or ""),
+    )
+    return FinalEvidenceBundleVerificationResponse(
+        bundle_id=row.id,
+        bundle_digest=row.bundle_digest,
+        verification_status="pass" if digest_valid and signature_valid else "fail",
+        digest_valid=digest_valid,
+        signature_valid=signature_valid,
+        algorithm=signature.get("algorithm"),
+        key_id=signature.get("key_id"),
     )
 
 

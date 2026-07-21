@@ -7,11 +7,14 @@ def _hardened_production_settings(**overrides: object) -> Settings:
     values = {
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
+        "REQUIRE_POSTGRES_RLS": True,
         "REDIS_URL": "redis://redis.example.com:6379/0",
         "ALLOWED_ORIGINS": "https://zroky.com",
         "TRUSTED_HOSTS": "api.zroky.com",
         "FRONTEND_URL": "https://zroky.com",
         "ALLOW_PROJECT_HEADER_CONTEXT": False,
+        "ACCEPT_LEGACY_TENANT_HEADER": False,
+        "ENFORCE_JWT_PROJECT_MEMBERSHIP": True,
         "REQUIRE_PROVISIONING_TOKEN": True,
         "PROVISIONING_TOKEN": "super-secret",
         "ENABLE_READY_DB_CHECK": True,
@@ -58,6 +61,9 @@ def test_production_config_rejects_insecure_defaults() -> None:
 
     error_text = str(exc.value)
     assert "ALLOW_PROJECT_HEADER_CONTEXT" in error_text
+    assert "ACCEPT_LEGACY_TENANT_HEADER" in error_text
+    assert "REQUIRE_POSTGRES_RLS" in error_text
+    assert "ENFORCE_JWT_PROJECT_MEMBERSHIP" in error_text
     assert "REQUIRE_PROVISIONING_TOKEN" in error_text
     assert "ENABLE_READY_DB_CHECK" in error_text
     assert "ENABLE_READY_REDIS_CHECK" in error_text
@@ -90,6 +96,24 @@ def test_production_config_rejects_malformed_receipt_signing_key() -> None:
         validate_runtime_settings(settings)
 
     assert "base64 raw Ed25519 seed bytes or PEM" in str(exc.value)
+
+
+def test_production_config_rejects_missing_final_live_hardening_controls() -> None:
+    settings = _hardened_production_settings(
+        REQUIRE_POSTGRES_RLS=False,
+        ENFORCE_JWT_PROJECT_MEMBERSHIP=False,
+        ACTION_RECEIPT_ED25519_PRIVATE_KEY=None,
+        PROVIDER_KEY_VAULT_KEK=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "REQUIRE_POSTGRES_RLS" in error_text
+    assert "ENFORCE_JWT_PROJECT_MEMBERSHIP" in error_text
+    assert "ACTION_RECEIPT_ED25519_PRIVATE_KEY" in error_text
+    assert "PROVIDER_KEY_VAULT_KEK" in error_text
 
 
 def test_production_config_rejects_wildcard_cors() -> None:

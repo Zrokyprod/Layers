@@ -28,6 +28,7 @@ from app.db.models import (
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.action_post_execution import process_action_post_execution_jobs, sweep_stale_execution_attempts
+from app.services.action_kernel import canonical_json, sha256_digest
 from app.services.action_receipts import verify_receipt_json_with_public_key
 from app.services.entitlements import set_override_entitlement
 from app.services.outcome_reconciliation import SourceRecord
@@ -1165,6 +1166,74 @@ def test_execution_request_auto_plans_after_direct_authorize(client: TestClient)
     assert claimed.json()["status"] == "running"
 
 
+def test_customer_local_secrets_mode_requires_vault_refs(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    request.addfinalizer(get_settings.cache_clear)
+    monkeypatch.setenv("CUSTOMER_LOCAL_SECRETS_MODE", "true")
+    monkeypatch.setenv("CUSTOMER_LOCAL_SECRET_REF_PREFIXES", "vault://,openbao://,bao://")
+    get_settings.cache_clear()
+    project_id = "proj_customer_local_secrets"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+    created = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "customer-local-secret-intent"},
+        json=_inventory_intent_payload(),
+    )
+    assert created.status_code == 201, created.text
+    intent = created.json()
+    with client._session_factory() as session:
+        row = session.get(ActionIntent, intent["action_id"])
+        assert row is not None
+        now = datetime.now(timezone.utc)
+        row.status = "authorized"
+        row.decided_at = now
+        row.authorized_at = now
+        session.commit()
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "local-vault-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["UPDATE"],
+            "credential_scope": {
+                "allowed_prefixes": ["vault://kv/zroky/"],
+                "default_credential_ref": "vault://kv/zroky/default",
+            },
+        },
+    )
+    assert runner.status_code == 201, runner.text
+
+    blocked = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "local-secret-blocked"},
+        json={
+            "runner_id": runner.json()["runner_id"],
+            "credential_ref": "customer-runner-secret://ops/default",
+            "execution_plan": _generic_rest_execution_request()["execution_plan"],
+        },
+    )
+    assert blocked.status_code == 422
+    assert "customer-local Vault/OpenBao" in blocked.json()["detail"]
+
+    allowed = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "local-secret-allowed"},
+        json={
+            "runner_id": runner.json()["runner_id"],
+            "credential_ref": "vault://kv/zroky/default",
+            "execution_plan": _generic_rest_execution_request()["execution_plan"],
+        },
+    )
+    assert allowed.status_code == 201, allowed.text
+    assert allowed.json()["credential_ref"] == "vault://kv/zroky/default"
+
+
 def test_execution_request_auto_plans_after_approval_auto_advance(client: TestClient) -> None:
     project_id = "proj_action_kernel_auto_approval"
     _seed_project(client, project_id)
@@ -1526,6 +1595,22 @@ def test_action_intent_denies_after_linked_runtime_rejection(client: TestClient)
     assert body["reasons"] == ["linked approval was rejected"]
 
 
+def _runner_capability_manifest(
+    *,
+    adapter: str = "stripe_refund",
+    operation_kind: str = "TRANSFER",
+    operation: str = "refund.create",
+    enforcement: dict | None = None,
+) -> dict:
+    payload = {
+        "schema_version": "zroky.runner_capability_manifest.v1",
+        "capabilities": [{"adapter": adapter, "operation_kind": operation_kind, "operation": operation}],
+    }
+    if enforcement is not None:
+        payload["enforcement"] = enforcement
+    return {**payload, "signature": {"algorithm": "sha256", "digest": sha256_digest(canonical_json(payload))}}
+
+
 def test_action_runner_registers_and_records_heartbeat(client: TestClient) -> None:
     project_id = "proj_action_runner_heartbeat"
     _seed_project(client, project_id)
@@ -1540,6 +1625,7 @@ def test_action_runner_registers_and_records_heartbeat(client: TestClient) -> No
             "supported_operation_kinds": ["TRANSFER", "UPDATE"],
             "credential_scope": {"allowed_prefixes": ["customer-runner-secret://support"]},
             "capability_version": "2026.06.26",
+            "capability_manifest": _runner_capability_manifest(),
         },
     )
     assert created.status_code == 201, created.text
@@ -1548,6 +1634,7 @@ def test_action_runner_registers_and_records_heartbeat(client: TestClient) -> No
     assert runner["status"] == "registered"
     assert runner["supported_operation_kinds"] == ["TRANSFER", "UPDATE"]
     assert runner["credential_scope"]["allowed_prefixes"] == ["customer-runner-secret://support"]
+    assert runner["capability_manifest"]["capabilities"][0]["adapter"] == "stripe_refund"
 
     heartbeat = client.post(
         f"/v1/action-runners/{runner['runner_id']}/heartbeat",
@@ -1557,6 +1644,7 @@ def test_action_runner_registers_and_records_heartbeat(client: TestClient) -> No
             "heartbeat_payload": {"host_id": "runner-host-1", "queue_depth": 0},
             "supported_operation_kinds": ["TRANSFER"],
             "capability_version": "2026.06.26-p1",
+            "capability_manifest": _runner_capability_manifest(operation="refund.cancel"),
         },
     )
     assert heartbeat.status_code == 200, heartbeat.text
@@ -1565,6 +1653,7 @@ def test_action_runner_registers_and_records_heartbeat(client: TestClient) -> No
     assert heartbeat_body["last_heartbeat_at"] is not None
     assert heartbeat_body["heartbeat_payload"]["queue_depth"] == 0
     assert heartbeat_body["supported_operation_kinds"] == ["TRANSFER"]
+    assert heartbeat_body["capability_manifest"]["capabilities"][0]["operation"] == "refund.cancel"
 
     listed = client.get("/v1/action-runners", headers={"X-Project-Id": project_id})
     assert listed.status_code == 200
@@ -1574,6 +1663,108 @@ def test_action_runner_registers_and_records_heartbeat(client: TestClient) -> No
         row = session.get(ActionRunner, runner["runner_id"])
         assert row.status == "online"
         assert row.last_heartbeat_at is not None
+
+
+def test_action_runner_capability_manifest_is_signed_and_allowlisted(client: TestClient) -> None:
+    project_id = "proj_action_runner_manifest"
+    _seed_project(client, project_id)
+    _register_contract(client, project_id)
+    intent = _create_intent(client, project_id)
+    _authorize_intent(client, project_id, intent["action_id"])
+
+    tampered = _runner_capability_manifest()
+    tampered["capabilities"][0]["operation"] = "refund.cancel"
+    rejected = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "tampered-manifest-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+            "capability_manifest": tampered,
+        },
+    )
+    assert rejected.status_code == 422
+    assert "signature digest" in rejected.json()["detail"]
+
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "cancel-only-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+            "credential_scope": {"allowed_prefixes": ["customer-runner-secret://support"]},
+            "capability_manifest": _runner_capability_manifest(operation="refund.cancel"),
+        },
+    )
+    assert runner.status_code == 201, runner.text
+
+    blocked = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "exec_manifest_blocked"},
+        json={
+            "runner_id": runner.json()["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    )
+    assert blocked.status_code == 422
+    assert "capability manifest" in blocked.json()["detail"]
+
+
+def test_action_runner_manifest_binds_executor_enforcement_to_plan(client: TestClient) -> None:
+    project_id = "proj_action_runner_enforcement"
+    _seed_project(client, project_id)
+    _register_contract(client, project_id)
+    intent = _create_intent(client, project_id)
+    _authorize_intent(client, project_id, intent["action_id"])
+
+    enforcement = {
+        "schema_version": "zroky.executor_enforcement.v1",
+        "isolation": "gvisor",
+        "policy": "kyverno",
+        "telemetry": "tetragon",
+        "references": {
+            "isolation_profile": "gvisor://profiles/zroky/protected-action",
+            "policy_profile": "kyverno://policies/zroky/protected-action",
+            "telemetry_profile": "tetragon://policies/zroky/protected-action",
+        },
+    }
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "sandbox-enforced-refund-runner",
+            "runner_type": "managed_sandbox",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+            "capability_manifest": _runner_capability_manifest(enforcement=enforcement),
+        },
+    )
+    assert runner.status_code == 201, runner.text
+    returned_enforcement = runner.json()["capability_manifest"]["enforcement"]
+    assert returned_enforcement["isolation"] == "gvisor"
+    assert returned_enforcement["policy"] == "kyverno"
+    assert returned_enforcement["telemetry"] == "tetragon"
+
+    planned = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "exec_enforced_refund"},
+        json={
+            "runner_id": runner.json()["runner_id"],
+            "credential_ref": "zroky-secret://payments/refund-runner",
+            "execution_plan": _refund_execution_plan(),
+        },
+    )
+    assert planned.status_code == 201, planned.text
+    plan_enforcement = planned.json()["execution_plan"]["runner"]["enforcement"]
+    assert plan_enforcement["isolation"] == "gvisor"
+    assert plan_enforcement["policy"] == "kyverno"
+    assert plan_enforcement["telemetry"] == "tetragon"
+    assert plan_enforcement["references"]["policy_profile"].startswith("kyverno://")
 
 
 def test_execution_adapter_contracts_are_exposed(client: TestClient) -> None:
@@ -1589,6 +1780,11 @@ def test_execution_adapter_contracts_are_exposed(client: TestClient) -> None:
     assert adapters["stripe_refund"]["required_target_fields"] == ["refund_id"]
     assert adapters["stripe_refund"]["credential_boundary"] == "runner_resolves_credential_ref"
     assert adapters["stripe_refund"]["protected_credential_returned"] is False
+    assert adapters["stripe_refund"]["executor_enforcement_options"] == {
+        "isolation": ["gvisor"],
+        "policy": ["kyverno"],
+        "telemetry": ["tetragon"],
+    }
 
 
 def test_execution_attempt_requires_authorized_action_intent(client: TestClient) -> None:

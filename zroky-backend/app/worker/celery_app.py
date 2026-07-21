@@ -51,6 +51,11 @@ beat_schedule["action-post-execution-sweep"] = {
     "schedule": max(5, int(settings.ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS)),
     "options": {"queue": "diagnosis_fast"},
 }
+beat_schedule["final-domain-outbox-sweep"] = {
+    "task": "app.worker.tasks.process_final_domain_outbox_jobs",
+    "schedule": max(5, int(settings.ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS)),
+    "options": {"queue": "diagnosis_fast"},
+}
 beat_schedule["stale-action-execution-attempt-sweep"] = {
     "task": "app.worker.tasks.sweep_stale_action_execution_attempts",
     "schedule": max(30, int(settings.ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS)),

@@ -16,12 +16,14 @@ logger = logging.getLogger(__name__)
 AUDIT_ACTION_DIAGNOSIS_VIEWED = "diagnosis_viewed"
 AUDIT_ACTION_FIX_COPIED = "fix_copied"
 AUDIT_ACTION_PR_GENERATED = "pr_generated"
+AUDIT_ACTION_RECOVERY_EXECUTE_REQUESTED = "recovery_execute_requested"
 AUDIT_ACTION_RESOLVED = "resolved"
 
 _ALLOWED_ACTIONS = {
     AUDIT_ACTION_DIAGNOSIS_VIEWED,
     AUDIT_ACTION_FIX_COPIED,
     AUDIT_ACTION_PR_GENERATED,
+    AUDIT_ACTION_RECOVERY_EXECUTE_REQUESTED,
     AUDIT_ACTION_RESOLVED,
 }
 
@@ -79,6 +81,28 @@ def create_audit_log(
     actor_subject: str | None,
     metadata: Mapping[str, Any] | None = None,
 ) -> AuditLog:
+    entry = add_audit_log(
+        db,
+        tenant_id=tenant_id,
+        diagnosis_id=diagnosis_id,
+        action=action,
+        actor_subject=actor_subject,
+        metadata=metadata,
+    )
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def add_audit_log(
+    db: Session,
+    *,
+    tenant_id: str,
+    diagnosis_id: str,
+    action: str,
+    actor_subject: str | None,
+    metadata: Mapping[str, Any] | None = None,
+) -> AuditLog:
     entry = AuditLog(
         tenant_id=tenant_id,
         diagnosis_id=diagnosis_id,
@@ -87,8 +111,6 @@ def create_audit_log(
         metadata_json=_serialize_metadata(metadata),
     )
     db.add(entry)
-    db.commit()
-    db.refresh(entry)
     return entry
 
 
