@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import FinalAgentRun, FinalObservation, FinalWorkflowIntent
 from app.db.session import get_db_session
 
 
 router = APIRouter(prefix="/v1/observations")
+WEBHOOK_CALLBACK_SIGNATURE_HEADER = "X-Zroky-Webhook-Signature"
 
 
 class ObservationCreateRequest(BaseModel):
@@ -101,13 +104,11 @@ def _response(row: FinalObservation) -> ObservationResponse:
     )
 
 
-@router.post("", response_model=ObservationResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("120/minute")
-def create_observation(
-    request: Request,
+def _create_observation_row(
     body: ObservationCreateRequest,
-    context: TenantContext = Depends(require_tenant_context),
-    db: Session = Depends(get_db_session),
+    *,
+    context: TenantContext,
+    db: Session,
 ) -> ObservationResponse:
     if body.intent_id:
         intent = db.execute(
@@ -154,6 +155,73 @@ def create_observation(
     db.commit()
     db.refresh(row)
     return _response(row)
+
+
+def _webhook_callback_secret() -> str:
+    secret = (get_settings().WEBHOOK_CALLBACK_SIGNING_SECRET or "").strip()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook callback signing secret is not configured.",
+        )
+    return secret
+
+
+def _verify_webhook_callback_signature(raw_body: bytes, signature: str | None) -> None:
+    if not signature or not signature.startswith("sha256="):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook callback signature.")
+    expected = "sha256=" + hmac.new(_webhook_callback_secret().encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook callback signature.")
+
+
+@router.post("", response_model=ObservationResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("120/minute")
+def create_observation(
+    request: Request,
+    body: ObservationCreateRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> ObservationResponse:
+    return _create_observation_row(body, context=context, db=db)
+
+
+@router.post("/webhook-callback", response_model=ObservationResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("120/minute")
+async def create_webhook_callback_observation(
+    request: Request,
+    x_zroky_webhook_signature: str | None = Header(default=None, alias=WEBHOOK_CALLBACK_SIGNATURE_HEADER),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> ObservationResponse:
+    raw_body = await request.body()
+    _verify_webhook_callback_signature(raw_body, x_zroky_webhook_signature)
+
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid webhook callback JSON.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Webhook callback payload must be an object.")
+
+    try:
+        body = ObservationCreateRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+    provenance = {
+        **body.provenance,
+        "connector_primitive": "webhook_callback",
+        "signature_verified": True,
+        "source_kind_claimed": body.source_kind,
+    }
+    signed_body = body.model_copy(
+        update={
+            "source_kind": "webhook_callback",
+            "provenance": provenance,
+            "read_at": body.read_at or datetime.now(UTC),
+        }
+    )
+    return _create_observation_row(signed_body, context=context, db=db)
 
 
 @router.get("/{observation_id}", response_model=ObservationResponse)

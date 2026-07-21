@@ -2,7 +2,7 @@
 
 Status: Complete
 Phase: Verification Connector Fabric
-Tracker IDs: P12-001 to P12-006
+Tracker IDs: P12-001 to P12-007
 
 ## Scope
 
@@ -22,6 +22,7 @@ Branded connectors are manifest presets first, not bespoke runtime code.
 - P12-004 Generic REST and Postgres proof by manifest.
 - P12-005 Branded verification presets.
 - P12-006 Manifest-driven connector UI contract.
+- P12-007 Signed webhook callback observation intake.
 
 ## Changed Code
 
@@ -31,6 +32,7 @@ Branded connectors are manifest presets first, not bespoke runtime code.
 - Added `manifest_id` to existing `ToolRegistryItem` rows and `/v1/tools/registry` responses.
 - Added ServiceNow as a template registry preset backed by a manifest, without adding a legacy DB connector enum or bespoke service path.
 - Extended Generic REST relay reads to support manifest-declared path keys, used by GitHub-style `owner/repo` paths.
+- Added signed inbound webhook callback observation intake for the push-based `webhook_callback` primitive.
 - Updated dashboard connector inventory to read manifest IDs from the backend registry and show them in connector details.
 
 ## Tests And Checks
@@ -39,6 +41,7 @@ Branded connectors are manifest presets first, not bespoke runtime code.
 - `python -m pytest tests/test_tool_registry_routes.py -q` passed.
 - `python -m pytest tests/test_connector_manifest.py tests/test_final_relay_protocol.py -q` passed.
 - `python -m pytest tests/test_connector_manifest.py tests/test_connector_manifest_presets.py tests/test_final_relay_protocol.py tests/test_tool_registry_routes.py -q` passed.
+- `python -m pytest tests/test_final_intents_api.py::test_signed_webhook_callback_creates_immutable_observation tests/test_final_intents_api.py::test_webhook_callback_rejects_bad_signature tests/test_final_intents_api.py::test_webhook_callback_fails_closed_when_secret_unset -q` passed.
 - Backend connector manifest, relay, registry, and agent-profile compile checks passed.
 - `npm test -- --run src/lib/connector-inventory.test.ts` passed.
 - `npm test -- --run src/lib/connector-inventory.test.ts 'src/app/(dashboard)/integrations/page.test.tsx'` passed.
@@ -49,10 +52,10 @@ Branded connectors are manifest presets first, not bespoke runtime code.
 
 - Presets are not full one-click OAuth installs yet. They are read-only manifest contracts plus registry/dashboard visibility.
 - ServiceNow is a template manifest only; no old SOR DB enum or native ServiceNow config route was added.
-- Webhook callback is represented in the manifest contract, but no new webhook installer UI was added in Phase 12.
+- Webhook callback now has signed inbound observation intake; no webhook installer UI was added in Phase 12.
 - Dashboard shows manifest IDs and uses registry metadata; it does not yet install or edit manifest presets.
 - Real credential validation still requires design-partner keys or test tenants.
 
 ## Decision
 
-P12-001 through P12-006 are complete. The connector layer is now manifest-first: three primitives, branded presets, read-only validation, and dashboard visibility.
+P12-001 through P12-007 are complete. The connector layer is now manifest-first: three primitives, branded presets, read-only validation, signed webhook intake, and dashboard visibility.

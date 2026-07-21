@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+import hashlib
+import hmac
 import importlib
 import json
 from datetime import UTC, datetime, timedelta
@@ -10,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import AuditLog, FinalDomainOutboxJob, FinalEvidenceBundle
 from app.db.session import get_db_session
@@ -975,6 +978,92 @@ def test_immutable_observation_create_read_and_digest_replay(client: TestClient)
     fetched = client.get(f"/v1/observations/{body['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["observation_digest"] == body["observation_digest"]
+
+
+def test_signed_webhook_callback_creates_immutable_observation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WEBHOOK_CALLBACK_SIGNING_SECRET", "test-webhook-callback-secret")
+    get_settings.cache_clear()
+    payload = {
+        "environment": "Production",
+        "source_kind": "stripe_refund",
+        "observed_object_ref": "refund:rf_webhook",
+        "observed_state": {"id": "rf_webhook", "status": "succeeded"},
+        "provenance": {"delivery_id": "evt_123"},
+        "observed_at": "2026-07-22T10:00:00+00:00",
+        "read_at": "2026-07-22T10:00:10+00:00",
+    }
+    raw_body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    signature = "sha256=" + hmac.new(b"test-webhook-callback-secret", raw_body, hashlib.sha256).hexdigest()
+
+    try:
+        created = client.post(
+            "/v1/observations/webhook-callback",
+            content=raw_body,
+            headers={"Content-Type": "application/json", "X-Zroky-Webhook-Signature": signature},
+        )
+        replay = client.post(
+            "/v1/observations/webhook-callback",
+            content=raw_body,
+            headers={"Content-Type": "application/json", "X-Zroky-Webhook-Signature": signature},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == body["id"]
+    assert body["source_kind"] == "webhook_callback"
+    assert body["observed_object_ref"] == "refund:rf_webhook"
+    assert body["observation"]["provenance"]["connector_primitive"] == "webhook_callback"
+    assert body["observation"]["provenance"]["signature_verified"] is True
+    assert body["observation"]["provenance"]["source_kind_claimed"] == "stripe_refund"
+
+
+def test_webhook_callback_rejects_bad_signature(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WEBHOOK_CALLBACK_SIGNING_SECRET", "test-webhook-callback-secret")
+    get_settings.cache_clear()
+    payload = {
+        "source_kind": "github_ci",
+        "observed_object_ref": "check-run:123",
+        "observed_state": {"conclusion": "success"},
+        "observed_at": "2026-07-22T10:00:00+00:00",
+    }
+    raw_body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    try:
+        response = client.post(
+            "/v1/observations/webhook-callback",
+            content=raw_body,
+            headers={"Content-Type": "application/json", "X-Zroky-Webhook-Signature": "sha256=bad"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 401
+
+
+def test_webhook_callback_fails_closed_when_secret_unset(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("WEBHOOK_CALLBACK_SIGNING_SECRET", raising=False)
+    get_settings.cache_clear()
+    payload = {
+        "source_kind": "github_ci",
+        "observed_object_ref": "check-run:123",
+        "observed_state": {"conclusion": "success"},
+        "observed_at": "2026-07-22T10:00:00+00:00",
+    }
+    raw_body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    try:
+        response = client.post(
+            "/v1/observations/webhook-callback",
+            content=raw_body,
+            headers={"Content-Type": "application/json", "X-Zroky-Webhook-Signature": "sha256=irrelevant"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 503
 
 
 def test_observation_marks_stale_authoritative_read(client: TestClient) -> None:

@@ -148,6 +148,7 @@ class Settings(BaseSettings):
     OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS: bool = False
     OUTCOME_CONNECTOR_TIMEOUT_SECONDS: float = 5.0
     OUTCOME_CONNECTOR_MAX_ATTEMPTS: int = 2
+    WEBHOOK_CALLBACK_SIGNING_SECRET: Optional[str] = None
     # New receipts use Ed25519 so customers and auditors can verify signatures
     # with only the published public key. The old HMAC secret is retained only
     # for legacy receipt verification.
