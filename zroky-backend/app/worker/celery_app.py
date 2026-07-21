@@ -98,57 +98,11 @@ if (
         "options": {"queue": "diagnosis_fast"},
     }
 
-# Wedge 3: Judge Calibration.
-if settings.JUDGE_CALIBRATION_ENABLED:
-    _cal_hour = min(max(int(settings.JUDGE_CALIBRATION_CRON_HOUR), 0), 23)
-    _cal_minute = min(max(int(settings.JUDGE_CALIBRATION_CRON_MINUTE), 0), 59)
-    beat_schedule["judge-calibration-daily"] = {
-        "task": "app.worker.tasks.run_judge_calibration_all_projects",
-        "schedule": crontab(minute=_cal_minute, hour=_cal_hour),
-        "options": {"queue": "diagnosis_fast"},
-    }
-
-# Wedge 2: Provider Drift Watch.
-if settings.PROVIDER_DRIFT_WATCH_ENABLED:
-    _drift_minute = min(max(int(settings.PROVIDER_DRIFT_WATCH_CRON_MINUTE), 0), 59)
-    _drift_hour = min(max(int(settings.PROVIDER_DRIFT_WATCH_CRON_HOUR), 0), 23)
-    beat_schedule["provider-drift-daily"] = {
-        "task": "app.worker.tasks.run_provider_drift_watch",
-        "schedule": crontab(minute=_drift_minute, hour=_drift_hour),
-        "options": {"queue": "diagnosis_fast"},
-    }
-
-if settings.CLICKHOUSE_ENABLED:
-    _ch_interval = max(10, int(settings.CLICKHOUSE_SYNC_INTERVAL_SECONDS))
-    beat_schedule["clickhouse-sync"] = {
-        "task": "app.worker.tasks.sync_clickhouse",
-        "schedule": _ch_interval,
-        "options": {"queue": "diagnosis_fast"},
-    }
-
 if settings.GATEWAY_INGEST_STREAM_ENABLED:
     _gateway_interval = max(1, int(settings.GATEWAY_INGEST_POLL_INTERVAL_SECONDS))
     beat_schedule["gateway-ingest-stream"] = {
         "task": "app.worker.tasks.consume_gateway_ingest_stream",
         "schedule": _gateway_interval,
-        "options": {"queue": "diagnosis_fast"},
-    }
-
-if settings.DISCOVERY_ENABLED:
-    _discovery_refresh_hour = min(max(int(settings.DISCOVERY_REFRESH_CRON_HOUR), 0), 23)
-    _discovery_refresh_minute = min(max(int(settings.DISCOVERY_REFRESH_CRON_MINUTE), 0), 59)
-    _discovery_scan_interval = max(60, int(settings.DISCOVERY_SCAN_INTERVAL_SECONDS))
-    beat_schedule["discovery-baseline-refresh-daily"] = {
-        "task": "app.worker.tasks.refresh_discovery_baselines",
-        "schedule": crontab(
-            minute=_discovery_refresh_minute,
-            hour=_discovery_refresh_hour,
-        ),
-        "options": {"queue": "diagnosis_fast"},
-    }
-    beat_schedule["discovery-anomaly-scan"] = {
-        "task": "app.worker.tasks.scan_discovery_anomalies",
-        "schedule": _discovery_scan_interval,
         "options": {"queue": "diagnosis_fast"},
     }
 

@@ -28,7 +28,6 @@ OSS_DIRS = [
     "zroky-sdk-js/tests",
     "zroky-gateway/internal",
     "zroky-gateway/cmd",
-    "zroky-replay-worker/app",
 ]
 
 ROOT = Path(__file__).parent.parent

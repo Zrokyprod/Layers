@@ -12,7 +12,6 @@ from fastapi import APIRouter
 from app.api.routes.alerts import router as alerts_router
 from app.api.v1.actions import router as action_intents_router
 from app.api.v1.assurance_packs import router as assurance_packs_router
-from app.mcp.routes import router as mcp_ingress_router
 from app.api.routes.actions import router as actions_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.auth import router as auth_router
@@ -80,9 +79,6 @@ api_router.include_router(runs_router, tags=["runs"])
 api_router.include_router(events_router, tags=["events"])
 api_router.include_router(assurance_packs_router, tags=["assurance-packs"])
 api_router.include_router(action_intents_router, tags=["verified-actions"])
-# MCP-native interception ingress. Always registered but inert (404) unless
-# Settings.MCP_INTERCEPTION_ENABLED is true — see app.mcp.routes.
-api_router.include_router(mcp_ingress_router, tags=["mcp"])
 api_router.include_router(actions_router, tags=["actions"])
 api_router.include_router(evidence_router, tags=["evidence"])
 api_router.include_router(agents_router, tags=["agents"])  # Agent tool-control profiles

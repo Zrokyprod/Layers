@@ -1,7 +1,7 @@
 """create final domain tables
 
 Revision ID: 0123_create_final_domain_tables
-Revises: 0122_mcp_interception
+Revises: 0121_add_user_totp_mfa
 Create Date: 2026-07-21
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision = "0123_create_final_domain_tables"
-down_revision = "0122_mcp_interception"
+down_revision = "0121_add_user_totp_mfa"
 branch_labels = None
 depends_on = None
 

@@ -2,7 +2,7 @@
 
 Status: In Progress
 Phase: Production Surface Cleanup And Launch Packaging
-Tracker IDs: P11-001 to P11-010
+Tracker IDs: P11-001 to P11-011
 
 ## Scope
 
@@ -20,6 +20,7 @@ Phase 11 removes old production surfaces that do not belong to the final Zroky p
 - P11-008 Final approval resolution API.
 - P11-009 Stripe refund test-loop contract.
 - P11-010 Live Stripe test-loop runner.
+- P11-011 Section 7 production cleanup.
 
 ## P11-001 Result
 
@@ -58,6 +59,9 @@ The old `/actions` and `/agents` dashboard route trees were removed from the pro
 - Added final `/v1/approvals` list, approve, and deny endpoints for `FinalApprovalRequirement` rows while preserving old `/v1/runtime-policy/approvals` compatibility routes.
 - Added a Stripe-shaped refund loop contract that verifies a real source-of-record observation and catches a false agent success claim with an incident.
 - Added a live Stripe test-loop runner that refuses to run without `STRIPE_TEST_SECRET_KEY=sk_test_*` and either an existing refund ID or explicit test-refund creation.
+- Removed unused beat schedules for ClickHouse sync, discovery refresh/scan, judge calibration, and provider drift.
+- Removed legacy worker task modules for diagnosis, replay, regression CI, drift, and discovery from the final worker aggregator.
+- Removed standalone dead directories `clickhouse/`, `zroky-replay-worker/`, and the unmounted MCP ingress surface under `zroky-backend/app/mcp/`.
 - Repointed final worker facade modules for verification, recovery, and evidence jobs to the final-domain outbox task.
 
 ## Tests And Checks
@@ -78,6 +82,7 @@ The old `/actions` and `/agents` dashboard route trees were removed from the pro
 - `python -m pytest tests/test_final_intents_api.py::test_final_approval_resolution_requires_role_and_binding_digest tests/test_final_intents_api.py::test_final_approval_deny_blocks_bound_intent -q` passed in `zroky-backend`.
 - `python -m pytest tests/test_final_intents_api.py::test_stripe_refund_test_loop_verifies_real_sor_and_catches_false_success -q` passed in `zroky-backend`.
 - `python -m py_compile scripts/run_stripe_test_loop.py` passed; missing-key refusal passed.
+- `python -m pytest tests/test_final_backend_route_allowlist.py tests/test_final_codebase_shape.py tests/test_final_domain_outbox_worker.py tests/test_rls_migration_guards.py -q` passed in `zroky-backend`.
 - `python -m pytest tests/test_final_sdk_shape.py tests/test_final_sdk_public_surface.py -q` passed in `zroky-sdk`.
 
 ## Known Risks
@@ -91,7 +96,8 @@ The old `/actions` and `/agents` dashboard route trees were removed from the pro
 - Final approval resolution enforces tenant, role, pending-state, and binding digest checks. True human separation-of-duties needs an approver/originator identity column in the final approval schema before it can be enforced beyond role level.
 - P11-009 is a Stripe-shaped contract with authoritative observation payloads. It does not call the live Stripe API or store a Stripe key.
 - P11-010 has not been run against real Stripe credentials in this workspace because no Stripe test secret was provided.
+- Legacy diagnosis/replay route source still exists where not mounted by the final router; full source deletion is separate from Section 7 worker/attack-surface cleanup.
 
 ## Decision
 
-P11-001 through P11-010 are complete.
+P11-001 through P11-011 are complete.

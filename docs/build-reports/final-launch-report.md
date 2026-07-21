@@ -2,7 +2,7 @@
 
 Date: 2026-07-22
 Status: Release-candidate ready with final production release workflow
-Tracker scope: P0-001 through P11-010
+Tracker scope: P0-001 through P11-011
 
 ## Launch Decision
 
@@ -35,6 +35,7 @@ The final product is an autonomous-agent control and assurance platform with the
 - Final approval requirements are actionable through digest-bound approve/deny endpoints.
 - Stripe-shaped refund test loop proves both verified refund evidence and false-success incident creation.
 - Live Stripe test-loop runner is available and fails closed unless a Stripe test secret is explicitly provided.
+- Section 7 cleanup removed unused beat jobs, legacy worker task modules, MCP ingress, and standalone dead directories from the production cutover branch.
 
 ### Dashboard Evidence
 
@@ -53,6 +54,7 @@ The final product is an autonomous-agent control and assurance platform with the
 - Final `/v1/approvals` endpoints resolve `FinalApprovalRequirement` rows with tenant, role, pending-state, and binding-digest checks.
 - Stripe refund contract uses final APIs end to end: Assurance Pack, intent, policy, approval, run, Stripe source-of-record observation, outcome graph, incident, and signed evidence.
 - Live runner can execute the same flow against Stripe test API with an existing test refund or explicit test-refund creation.
+- Final worker beat schedule no longer includes ClickHouse sync, discovery refresh/scan, judge calibration, or provider drift jobs.
 
 ### SDK Evidence
 
@@ -85,6 +87,7 @@ The final product is an autonomous-agent control and assurance platform with the
 - `python -m pytest tests/test_final_intents_api.py::test_final_approval_resolution_requires_role_and_binding_digest tests/test_final_intents_api.py::test_final_approval_deny_blocks_bound_intent -q`
 - `python -m pytest tests/test_final_intents_api.py::test_stripe_refund_test_loop_verifies_real_sor_and_catches_false_success -q`
 - `python -m py_compile scripts/run_stripe_test_loop.py`
+- `python -m pytest tests/test_final_backend_route_allowlist.py tests/test_final_codebase_shape.py tests/test_final_domain_outbox_worker.py tests/test_rls_migration_guards.py -q`
 - `python -m pytest tests/test_final_sdk_shape.py tests/test_final_sdk_public_surface.py -q`
 - `powershell -ExecutionPolicy Bypass -File 'D:\Zroky AI\scripts\verify_zroky_build_plan.ps1'`
 - static workflow contract check for `.github/workflows/paid-launch-readiness.yml`
@@ -112,6 +115,7 @@ If the release candidate fails during deployment or production smoke:
 - Human separation-of-duties for final approvals is role-gated today; strict approver/originator inequality requires a schema field before enforcement can be made exact.
 - Stripe loop evidence is still contract-level; a live Stripe test API run with customer-local secret reference remains the next external proof.
 - No Stripe test secret was present in this workspace, so P11-010 verified runner safety but not a real Stripe network run.
+- Legacy diagnosis/replay route source still exists where not mounted by the final router; P11-011 removed production scheduling and standalone dead surfaces, not every historical source file.
 
 ## Required Next Step
 

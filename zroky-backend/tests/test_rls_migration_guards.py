@@ -25,20 +25,3 @@ def test_fix_embeddings_rls_is_forced_and_write_scoped() -> None:
 
     assert "ALTER TABLE fix_embeddings FORCE ROW LEVEL SECURITY" in text
     assert "WITH CHECK (project_id = current_setting('app.current_tenant_id', true))" in text
-
-
-def test_mcp_interception_tables_are_project_rls_scoped() -> None:
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "alembic"
-        / "versions"
-        / "0122_mcp_interception.py"
-    )
-    text = path.read_text(encoding="utf-8")
-
-    for table_name in ("mcp_tool_bindings", "mcp_interception_events"):
-        assert f'_enable_project_rls("{table_name}")' in text
-
-    assert 'ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY' in text
-    assert 'CREATE POLICY {policy_name}' in text
-    assert "WITH CHECK (project_id = current_setting('app.current_tenant_id', true))" in text

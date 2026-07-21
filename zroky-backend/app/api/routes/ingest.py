@@ -9,7 +9,6 @@ from app.db.session import get_db_session
 from app.schemas.ingest import IngestBatchRequest, IngestBatchResponse
 from app.services.cost_buckets import enrich_payload_with_cost_buckets
 from app.services.redis_client import get_redis_client
-from app.worker.tasks import process_diagnosis
 
 router = APIRouter(prefix="/v1")
 
@@ -20,7 +19,6 @@ _set_redis_idempotency = _ingest_processor._set_redis_idempotency
 
 def _sync_ingest_processor_compat_hooks() -> None:
     """Keep historical monkeypatch paths on this route module effective."""
-    _ingest_processor.process_diagnosis = process_diagnosis
     _ingest_processor.enrich_payload_with_cost_buckets = enrich_payload_with_cost_buckets
     _ingest_processor.get_redis_client = get_redis_client
     _ingest_processor._check_redis_idempotency = _check_redis_idempotency
