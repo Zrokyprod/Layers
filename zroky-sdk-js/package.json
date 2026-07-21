@@ -1,7 +1,7 @@
 {
   "name": "@zroky-ai/sdk",
   "version": "0.1.0",
-  "description": "Zroky AI SDK — capture + preflight for OpenAI and compatible providers.",
+  "description": "Zroky AI SDK for pre-execution policy guardrails, protected actions, and outcome evidence.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -32,7 +32,7 @@
   "peerDependenciesMeta": {
     "openai": { "optional": true }
   },
-  "keywords": ["zroky", "ai", "observability", "openai", "proxy"],
+  "keywords": ["zroky", "ai", "agent-safety", "policy", "outcome-evidence"],
   "license": "FSL-1.1-MIT",
   "repository": {
     "type": "git",

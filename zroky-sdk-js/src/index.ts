@@ -18,10 +18,9 @@ export {
   ZrokyVerifiedActionError,
 } from "./verified-action";
 export { protect } from "./protect";
+export { preExecutionGuard } from "./intent";
 export { verifyOutcome, ZrokyOutcomeVerificationError } from "./verify";
 export { outcome } from "./outcome";
-export { promptFingerprint } from "./fingerprint";
-export { captureHandoff, captureMemory, capturePolicyDecision, captureRetrieval, captureToolCall } from "./spans";
 export {
   PHASE1_NATIVE_TOOL_FAMILIES,
   PHASE1_RISKY_ACTION_TYPES,
@@ -38,6 +37,7 @@ export type {
   VerifiedActionOptions,
 } from "./verified-action";
 export type { ProtectOptions, ProtectResult } from "./protect";
+export type { PreExecutionGuardOptions, PreExecutionGuardResult } from "./intent";
 export type {
   OutcomeReconciliationView,
   OutcomeVerificationVerdict,
@@ -65,11 +65,3 @@ export type {
   ZrokyVerificationResult,
   ZrokyVerificationVerdict,
 } from "./contracts";
-export type {
-  HandoffCaptureOptions,
-  MemoryCaptureOptions,
-  PolicyDecisionCaptureOptions,
-  RetrievalCaptureOptions,
-  RetrievedDocument,
-  ToolCaptureOptions,
-} from "./spans";

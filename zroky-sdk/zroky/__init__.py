@@ -3,7 +3,7 @@
 
 """
 ZROKY Python SDK
-Production AI diagnosis engine — capture, diagnose, fix.
+Pre-execution policy guardrails, protected actions, and outcome evidence for AI agents.
 
 This file is the thin public surface of the SDK.  Heavy implementation is
 split across:
@@ -28,11 +28,6 @@ from zroky._async import acall, aflush, ainit, ashutdown  # noqa: F401
 from zroky._call import (  # noqa: F401
     agent,
     call,
-    capture_handoff,
-    capture_memory,
-    capture_policy_decision,
-    capture_retrieval,
-    capture_tool_call,
     record,
     trace,
     trace_run,
@@ -72,7 +67,6 @@ from zroky._internal.metrics import (
     unregister_flush_callback,
 )
 from zroky._internal.models import CallEvent
-from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint  # noqa: F401
 from zroky._internal.queue import EventQueue
 from zroky._internal.rate_limiter import RateLimiter
 from zroky._internal.timeout_manager import TimeoutManager
@@ -82,6 +76,7 @@ from zroky._outcome import outcome  # noqa: F401
 from zroky._protect import protect  # noqa: F401
 from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
 from zroky._verified_action import await_action_proof, verified_action  # noqa: F401
+from zroky.intent import pre_execution_guard  # noqa: F401
 from zroky._runner import (  # noqa: F401
     EnvCredentialResolver,
     RUNNER_CAPABILITY_VERSION,
