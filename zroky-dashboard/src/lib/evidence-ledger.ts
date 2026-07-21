@@ -7,7 +7,7 @@ import { statusLabel, statusTone, type StatusTone } from "@/lib/action-status";
 import { buildActionView } from "@/lib/action-view";
 import { humanize } from "@/lib/format";
 
-export type EvidenceLedgerRowKind = "action_receipt" | "orphan_decision" | "unlinked_outcome";
+export type EvidenceLedgerRowKind = "action_receipt" | "orphan_decision" | "unlinked_outcome" | "final_bundle";
 
 export type EvidenceLedgerFilter = "all" | "matched" | "needs_verification" | "exceptions";
 
@@ -31,7 +31,7 @@ export type EvidenceLedgerRow = {
   checkedAt: string | null;
   href: string;
   exportable: boolean;
-  exportKind: "receipt" | "evidence_pack" | null;
+  exportKind: "receipt" | "evidence_pack" | "final_bundle" | null;
   detail: string;
 };
 
@@ -306,7 +306,7 @@ export function buildEvidenceLedger({
   }
 
   return rows.sort((a, b) => {
-    const rank = { action_receipt: 0, orphan_decision: 1, unlinked_outcome: 2 } satisfies Record<EvidenceLedgerRowKind, number>;
+    const rank = { action_receipt: 0, orphan_decision: 1, final_bundle: 2, unlinked_outcome: 3 } satisfies Record<EvidenceLedgerRowKind, number>;
     if (rank[a.kind] !== rank[b.kind]) return rank[a.kind] - rank[b.kind];
     const timeA = a.checkedAt ? new Date(a.checkedAt).getTime() : 0;
     const timeB = b.checkedAt ? new Date(b.checkedAt).getTime() : 0;

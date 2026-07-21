@@ -193,7 +193,7 @@ function toolRegistry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegist
         supported_action_types: ["custom"],
         recommended_for_action_types: ["custom"],
         requires_customer_credentials: false,
-        dashboard_href: "/agents/setup",
+        dashboard_href: "/workflows",
         backend_capability: "agent_profile.runtime_path",
         availability_notes: null,
       },

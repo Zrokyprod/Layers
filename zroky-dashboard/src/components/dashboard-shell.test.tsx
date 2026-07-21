@@ -339,14 +339,17 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
-    expect(labels).toEqual(["Home", "Approvals", "Actions", "Agents", "Outcomes", "Evidence", "Policies", "Connectors", "Settings"]);
-    expect(labels).toContain("Actions");
-    expect(labels).toContain("Agents");
-    expect(labels).toContain("Approvals");
-    expect(labels).toContain("Outcomes");
+    expect(labels).toEqual(["Home", "Operations", "Workflows", "Systems", "Evidence", "Settings"]);
+    expect(labels).toContain("Operations");
+    expect(labels).toContain("Workflows");
+    expect(labels).toContain("Systems");
     expect(labels).toContain("Evidence");
-    expect(labels).toContain("Connectors");
-    expect(labels).toContain("Policies");
+    expect(labels).not.toContain("Actions");
+    expect(labels).not.toContain("Agents");
+    expect(labels).not.toContain("Approvals");
+    expect(labels).not.toContain("Outcomes");
+    expect(labels).not.toContain("Connectors");
+    expect(labels).not.toContain("Policies");
     expect(labels).not.toContain("Incidents");
     expect(labels).not.toContain("Replay");
     expect(labels).not.toContain("Contracts");
@@ -358,8 +361,9 @@ describe("DashboardShell primary navigation", () => {
     expect(labels).not.toContain("Trace Graphs");
     expect(labels).not.toContain("Alerts");
 
-    expect(navItem("actions").getAttribute("href")).toBe("/actions");
-    expect(navItem("connectors").getAttribute("href")).toBe("/integrations");
+    expect(navItem("operations").getAttribute("href")).toBe("/operations");
+    expect(navItem("workflows").getAttribute("href")).toBe("/workflows");
+    expect(navItem("systems").getAttribute("href")).toBe("/integrations");
     expect(navItem("evidence").getAttribute("href")).toBe("/evidence");
   });
 
@@ -367,11 +371,11 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const primary = screen.getByRole("navigation", { name: "Primary" });
-    const sections = within(primary).getAllByText(/Control|Proof|Configure|Workspace/).map((node) => node.textContent);
-    expect(sections).toEqual(["Control", "Proof", "Configure", "Workspace"]);
+    const sections = within(primary).getAllByText(/Control|Proof|Workspace/).map((node) => node.textContent);
+    expect(sections).toEqual(["Control", "Proof", "Workspace"]);
     expect(primary.querySelector('[data-nav-section="control"]')).toBeInTheDocument();
     expect(primary.querySelector('[data-nav-section="proof"]')).toBeInTheDocument();
-    expect(primary.querySelector('[data-nav-section="configure"]')).toBeInTheDocument();
+    expect(primary.querySelector('[data-nav-section="configure"]')).not.toBeInTheDocument();
   });
 
   it("does not show fake workspace or account data while identity APIs are unavailable", () => {
@@ -636,16 +640,19 @@ describe("DashboardShell primary navigation", () => {
 
     expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Home/ }).getAttribute("href")).toBe("/home");
-    expect(screen.getByRole("menuitem", { name: /Agents/ }).getAttribute("href")).toBe("/agents");
-    expect(screen.getByRole("menuitem", { name: /Approvals/ }).getAttribute("href")).toBe("/approvals");
-    expect(screen.getByRole("menuitem", { name: /Outcomes/ }).getAttribute("href")).toBe("/outcomes");
+    expect(screen.getByRole("menuitem", { name: /Operations/ }).getAttribute("href")).toBe("/operations");
+    expect(screen.getByRole("menuitem", { name: /Workflows/ }).getAttribute("href")).toBe("/workflows");
+    expect(screen.getByRole("menuitem", { name: /Systems/ }).getAttribute("href")).toBe("/integrations");
     const routeMenu = screen.getByRole("menu", { name: "Dashboard navigation" });
     expect(routeMenu.querySelector('[href="/evidence"]')).not.toBeNull();
     expect(routeMenu.querySelector('[href="/integrations"]')).not.toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Agents/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Approvals/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Outcomes/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Contracts/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /^CI$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Traces/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Policies/ }).getAttribute("href")).toBe("/policies");
+    expect(screen.queryByRole("menuitem", { name: /Policies/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Integrations/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Cost/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Alerts/ })).not.toBeInTheDocument();

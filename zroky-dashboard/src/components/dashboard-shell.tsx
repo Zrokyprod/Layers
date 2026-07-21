@@ -9,8 +9,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
-  Activity,
-  Bot,
   Calendar,
   Check,
   ChevronDown,
@@ -24,6 +22,7 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
+  Network,
   Plug,
   RotateCcw,
   Settings2,
@@ -69,20 +68,20 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: visibleInPrimaryNav("/home"),
   },
   {
-    id: "actions",
-    href: "/actions",
-    label: "Actions",
-    subtitle: "Protected action lifecycle, quotas, receipts, verification, and bypass risk.",
-    Icon: Activity,
-    visibleInNav: visibleInPrimaryNav("/actions"),
+    id: "operations",
+    href: "/operations",
+    label: "Operations",
+    subtitle: "Live incidents, run intake, approvals, and remediation queues.",
+    Icon: Gauge,
+    visibleInNav: visibleInPrimaryNav("/operations"),
   },
   {
-    id: "agents",
-    href: "/agents",
-    label: "Agents",
-    subtitle: "Protected agents, mandates, high-risk action coverage, and outcome proof readiness.",
-    Icon: Bot,
-    visibleInNav: visibleInPrimaryNav("/agents"),
+    id: "workflows",
+    href: "/workflows",
+    label: "Workflows",
+    subtitle: "Draft, validate, and publish Workflow Assurance Packs before agents execute.",
+    Icon: Network,
+    visibleInNav: visibleInPrimaryNav("/workflows"),
   },
   {
     id: "approvals",
@@ -109,10 +108,10 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: visibleInPrimaryNav("/evidence"),
   },
   {
-    id: "connectors",
+    id: "systems",
     href: "/integrations",
-    label: "Connectors",
-    subtitle: "System-of-record connectors, preflight status, and pilot handoff readiness.",
+    label: "Systems",
+    subtitle: "System-of-record connectors, preflight status, and proof readiness.",
     Icon: Plug,
     visibleInNav: visibleInPrimaryNav("/integrations"),
   },
@@ -137,9 +136,8 @@ const NAV_ITEMS: NavItem[] = [
 const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
 
 const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; itemIds: string[] }> = [
-  { id: "control", label: "Control", itemIds: ["home", "approvals", "actions", "agents"] },
-  { id: "proof", label: "Proof", itemIds: ["outcomes", "evidence"] },
-  { id: "configure", label: "Configure", itemIds: ["policies", "connectors"] },
+  { id: "control", label: "Control", itemIds: ["home", "operations", "workflows"] },
+  { id: "proof", label: "Proof", itemIds: ["systems", "evidence"] },
 ];
 
 const SETTINGS_CHILD_LINKS = [

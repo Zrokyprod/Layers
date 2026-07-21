@@ -533,7 +533,7 @@ function BypassStrip({
               <small>{timeSince(row.occurredAt)}</small>
             </article>
           ))}
-          <DashboardButtonLink href="/actions?filter=bypassed" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
+          <DashboardButtonLink href="/operations?filter=bypassed" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
             Investigate in Actions
           </DashboardButtonLink>
         </div>

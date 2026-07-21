@@ -242,7 +242,7 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
     attemptSummary: emptyAttemptSummary(),
     latestActivityAt: profile.updated_at,
     actionRows: [],
-    href: `/agents/${encodeURIComponent(profile.id)}`,
+    href: `/operations/${encodeURIComponent(profile.id)}`,
   };
 }
 

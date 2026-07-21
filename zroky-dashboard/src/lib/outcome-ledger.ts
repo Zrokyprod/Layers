@@ -205,7 +205,7 @@ function evidenceHref(check: OutcomeReconciliationView): string | null {
 function actionHref(check: OutcomeReconciliationView): string | null {
   const actionId = check.metadata?.action_id ?? check.metadata?.zroky_action_id;
   return typeof actionId === "string" && actionId.trim()
-    ? `/actions?action_id=${encodeURIComponent(actionId)}`
+    ? `/operations?action_id=${encodeURIComponent(actionId)}`
     : null;
 }
 

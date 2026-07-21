@@ -263,7 +263,7 @@ describe("OutcomesPage", () => {
       "/evidence?decision_id=decision_1",
     );
     expect(screen.getByRole("link", { name: /Open action/ }).getAttribute("href")).toBe(
-      "/actions?action_id=action_1",
+      "/operations?action_id=action_1",
     );
   });
 

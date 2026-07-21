@@ -468,8 +468,8 @@ function runnerMatchesRow(
 }
 
 function rowHref(row: MutableFleetRow): string {
-  if (row.profile) return `/agents/${encodeURIComponent(row.profile.id)}`;
-  return `/agents?agent_name=${encodeURIComponent(row.agentName)}`;
+  if (row.profile) return `/operations/${encodeURIComponent(row.profile.id)}`;
+  return `/operations?agent_name=${encodeURIComponent(row.agentName)}`;
 }
 
 function finalizeRow(

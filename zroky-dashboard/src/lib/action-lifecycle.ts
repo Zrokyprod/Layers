@@ -502,7 +502,7 @@ export function buildActionLifecycle({
       createdAt: intent.created_at,
       updatedAt: attempt?.updated_at ?? outcome?.checked_at ?? intent.authorized_at ?? intent.decided_at ?? intent.created_at,
       hrefs: {
-        action: `/actions?action_id=${encodeURIComponent(intent.action_id)}`,
+        action: `/operations?action_id=${encodeURIComponent(intent.action_id)}`,
         approvals: intent.runtime_policy_decision_id
           ? `/approvals?decision_id=${encodeURIComponent(intent.runtime_policy_decision_id)}`
           : null,

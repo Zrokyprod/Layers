@@ -174,7 +174,7 @@ function toolRegistry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegist
         supported_action_types: ["custom"],
         recommended_for_action_types: [],
         requires_customer_credentials: false,
-        dashboard_href: "/agents",
+        dashboard_href: "/operations",
         backend_capability: null,
         availability_notes: "Planned after launch partner demand.",
       },

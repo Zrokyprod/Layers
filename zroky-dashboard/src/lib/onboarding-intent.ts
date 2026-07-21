@@ -1,5 +1,5 @@
 const DEFAULT_POST_AUTH_PATH = "/home";
-const PROTECTED_AGENT_SETUP_PATH = "/agents/setup";
+const PROTECTED_AGENT_SETUP_PATH = "/workflows";
 const PROTECTED_AGENT_INTENT = "protect-agent";
 const SAFE_TOKEN_PATTERN = /^[a-z0-9_-]{1,48}$/i;
 const PLAN_CODES = new Set(["free", "starter", "pro", "enterprise"]);

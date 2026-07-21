@@ -27,26 +27,17 @@ const PRIMARY_COMMAND_COPY: Record<DashboardPrimaryRoute["id"], PrimaryCommandCo
     description: "Protected agents, risky actions, outcome proof, approvals, and evidence gaps",
     shortcut: "Ctrl+H",
   },
-  actions: {
-    description: "Protected action lifecycle, quota, receipts, verification, and bypass risk",
+  operations: {
+    description: "Live runs, outcome incidents, approval queues, and recovery state",
   },
-  agents: {
-    description: "Protected agents, mandates, safety coverage, and proof readiness",
+  workflows: {
+    description: "Workflow Assurance Packs, validation, and immutable workflow versions",
   },
-  approvals: {
-    description: "Held risky actions, runtime policy decisions, and approval audit",
-  },
-  outcomes: {
-    description: "System-of-record matches, mismatches, and not-verified actions",
+  systems: {
+    description: "System-of-record connectors, preflight runs, and proof coverage",
   },
   evidence: {
-    description: "Evidence packs, audit hashes, linked decisions, and export proof",
-  },
-  connectors: {
-    description: "System-of-record connectors, preflight runs, and pilot handoff status",
-  },
-  policies: {
-    description: "Agent mandates, runtime limits, approval rules, and kill switch",
+    description: "Evidence bundles, audit hashes, linked decisions, and export proof",
   },
   settings: {
     href: "/settings/keys",

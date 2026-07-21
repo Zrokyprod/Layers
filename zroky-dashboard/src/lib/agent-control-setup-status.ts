@@ -107,7 +107,7 @@ function statusCopy(state: AgentControlSetupState): Pick<AgentControlSetupStatus
       title: "Agent control setup required",
       body: "Zroky does not yet know your product context, agent workflow, risky tool calls, runner, or verifier.",
       ctaLabel: "Start setup",
-      ctaHref: "/agents/setup",
+      ctaHref: "/workflows",
     };
   }
   if (state === "incomplete") {
@@ -115,7 +115,7 @@ function statusCopy(state: AgentControlSetupState): Pick<AgentControlSetupStatus
       title: "Agent control setup incomplete",
       body: "Finish the product map, action contracts, policy, runner, and verifier before trusting protected actions.",
       ctaLabel: "Continue setup",
-      ctaHref: "/agents/setup",
+      ctaHref: "/workflows",
     };
   }
   if (state === "plan_saved") {
@@ -123,7 +123,7 @@ function statusCopy(state: AgentControlSetupState): Pick<AgentControlSetupStatus
       title: "Control plan saved",
       body: "The setup plan is saved, but enforcement is not active until a runtime-policy mandate and real action proof are wired.",
       ctaLabel: "Open setup",
-      ctaHref: "/agents/setup",
+      ctaHref: "/workflows",
     };
   }
   if (state === "policy_enforced") {
@@ -131,14 +131,14 @@ function statusCopy(state: AgentControlSetupState): Pick<AgentControlSetupStatus
       title: "Project policy enabled",
       body: "The project runtime policy is enforced. Route one real protected action to generate the first verified receipt.",
       ctaLabel: "Open actions",
-      ctaHref: "/actions",
+      ctaHref: "/operations",
     };
   }
   return {
     title: "Agent control setup live",
     body: "Zroky has saved setup metadata, protected actions, runner, verifier, and real action signals for this project.",
     ctaLabel: "Review setup",
-    ctaHref: "/agents/setup",
+    ctaHref: "/workflows",
   };
 }
 

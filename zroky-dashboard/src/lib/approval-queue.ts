@@ -344,7 +344,7 @@ export function buildApprovalQueue({
       hrefs: {
         approvals: `/approvals?decision_id=${encodeURIComponent(decision.id)}`,
         evidence: `/evidence?decision_id=${encodeURIComponent(decision.id)}`,
-        action: intent ? `/actions?action_id=${encodeURIComponent(intent.action_id)}` : null,
+        action: intent ? `/operations?action_id=${encodeURIComponent(intent.action_id)}` : null,
       },
       view,
       intent,

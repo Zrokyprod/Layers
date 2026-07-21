@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +35,7 @@ const api = vi.hoisted(() => ({
 const storeState = vi.hoisted(() => ({
   selectedProject: "proj_1",
   realTimeEnabled: false,
+  dateRange: { from: null, to: null },
 }));
 
 vi.mock("next/link", () => ({
@@ -55,7 +56,11 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/lib/store", () => ({
   useDashboardStore: <T,>(
-    selector: (state: { selectedProject: string; realTimeEnabled: boolean }) => T,
+    selector: (state: {
+      selectedProject: string;
+      realTimeEnabled: boolean;
+      dateRange: { from: Date | null; to: Date | null };
+    }) => T,
   ) => selector(storeState),
 }));
 
@@ -346,8 +351,8 @@ function homeSummary(
 ): HomeSummaryResponse {
   return {
     project_id: "proj_1",
-    window_days: 30,
-    window_start: "2026-04-29T10:00:00.000Z",
+    window_days: 7,
+    window_start: "2026-05-22T10:00:00.000Z",
     generated_at: now,
     metrics: {
       controlled_actions: 0,
@@ -470,9 +475,10 @@ describe("Mission Control Home", () => {
     vi.clearAllMocks();
     storeState.selectedProject = "proj_1";
     storeState.realTimeEnabled = false;
+    storeState.dateRange = { from: null, to: null };
   });
 
-  it("renders kernel verdict, proof strip, and prioritized queue rows", async () => {
+  it("renders kernel verdict, top KPIs, and real activity sections", async () => {
     mockHomeData({
       intents: [
         intent({
@@ -492,24 +498,28 @@ describe("Mission Control Home", () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Action mismatch" })).toBeInTheDocument();
-    expect(screen.getByText("Controlled actions")).toBeInTheDocument();
-    expect(screen.getByText("66.67% matched")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Propose to evidence, with policy in the middle" })).toBeInTheDocument();
-    expect(screen.getByText("Verified action loop")).toBeInTheDocument();
-    expect(screen.getByText("Sequence risk watch")).toBeInTheDocument();
-    expect(screen.getByText("bulk read")).toBeInTheDocument();
-    const queue = screen.getByLabelText("Decision queue");
-    expect(within(queue).getByText(/Source-of-record mismatch/)).toBeInTheDocument();
-    expect(within(queue).getByText(/Policy bypass mutation/)).toBeInTheDocument();
-    expect(within(queue).getByText(/Action held for approval/)).toBeInTheDocument();
-    expect(within(queue).getAllByText(/Agent:/).length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole("button", { name: /Bypass 1/i }));
-    expect(within(queue).getByText(/Policy bypass mutation/)).toBeInTheDocument();
-    expect(within(queue).queryByText(/Source-of-record mismatch/)).not.toBeInTheDocument();
+    const proofMetrics = screen.getByLabelText("Proof metrics");
+    expect(within(proofMetrics).getByText("Agents protected")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Actions controlled")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Pending approvals")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("Proof generated")).toBeInTheDocument();
+    const agentHealth = screen.getByLabelText("Agent health over time");
+    expect(within(agentHealth).getByRole("heading", { name: "Timeframe-wise control confidence" })).toBeInTheDocument();
+    expect(within(agentHealth).getByText("Health score")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("0 / 0 online")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("2 signals")).toBeInTheDocument();
+    expect(screen.queryByText("Verified action loop")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sequence risk watch")).not.toBeInTheDocument();
+    const protectedActions = screen.getByLabelText("Recent protected actions");
+    const proofChecks = screen.getByLabelText("Recent proof checks");
+    expect(protectedActions).toBeInTheDocument();
+    expect(screen.getByLabelText("Recent approvals")).toBeInTheDocument();
+    expect(proofChecks).toBeInTheDocument();
+    expect(within(protectedActions).getAllByText("Delete inventory item").length).toBeGreaterThan(0);
+    expect(within(proofChecks).getByText(/deleted flag was still false/i)).toBeInTheDocument();
   });
 
-  it("shows fleet context only for multi-agent projects", async () => {
+  it("shows protected agent count without repeating runner status", async () => {
     mockHomeData({
       profiles: [
         profile(),
@@ -531,11 +541,11 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    const fleetLine = await screen.findByLabelText("Agent fleet context");
-    expect(within(fleetLine).getByText("2")).toBeInTheDocument();
-    expect(within(fleetLine).getByText("managed agents")).toBeInTheDocument();
-    expect(within(fleetLine).getByText("1 / 2")).toBeInTheDocument();
-    expect(within(fleetLine).getByText("runners online")).toBeInTheDocument();
+    const proofMetrics = await screen.findByLabelText("Proof metrics");
+    const agentsCard = within(proofMetrics).getByText("Agents protected").closest(".mc-proof-card") as HTMLElement;
+    expect(agentsCard).toBeInTheDocument();
+    expect(within(agentsCard).getByText("2")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent fleet context")).not.toBeInTheDocument();
   });
 
   it("keeps guard-only runtime approvals visible", async () => {
@@ -562,65 +572,67 @@ describe("Mission Control Home", () => {
 
     const { container } = render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
-    const lockedHome = container.querySelector(".mc-locked-home");
-    const lockedPreview = container.querySelector(".mc-locked-preview");
-    expect(lockedHome).toBeInTheDocument();
-    expect(lockedPreview?.getAttribute("aria-hidden")).toBe("true");
-    expect(lockedPreview?.hasAttribute("inert")).toBe(true);
-    expect(lockedPreview?.querySelector('[aria-label="Proof metrics"]')).toBeInTheDocument();
-    expect(lockedPreview?.textContent).toContain("Controlled actions");
-    expect(lockedPreview?.textContent).toContain("Refund Agent");
-    expect(lockedPreview?.textContent).toContain("Verified action loop");
-    expect(lockedPreview?.textContent).toContain("Sequence risk caught");
-    expect(lockedPreview?.textContent).toContain("Policy bypass mutation");
-    expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
-    expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
-    const installCard = screen.getByText("Install SDK").closest(".mc-first-run-step-card");
-    const submitCard = screen.getByText("Submit action").closest(".mc-first-run-step-card");
-    const proofCard = screen.getByText("Approve and prove").closest(".mc-first-run-step-card");
-    expect(installCard?.getAttribute("data-state")).toBe("current");
-    expect(submitCard?.getAttribute("data-state")).toBe("locked");
-    expect(proofCard?.getAttribute("data-state")).toBe("locked");
+    expect(await screen.findByRole("heading", { name: "Your agent control center" })).toBeInTheDocument();
+    expect(container.querySelector(".mc-locked-home")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-locked-preview")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
+    expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
+    expect(screen.getByText("Actions controlled")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Get Home reporting real activity" })).toBeInTheDocument();
+    const agentHealth = screen.getByLabelText("Agent health over time");
+    expect(within(agentHealth).getByText("No signal")).toBeInTheDocument();
+    expect(within(agentHealth).getByText("No agent health events in this timeframe yet.")).toBeInTheDocument();
+    expect(screen.getByText("Setup checklist")).toBeInTheDocument();
+    const runnerCard = screen.getAllByText("Connect runner")[0].closest(".mc-first-run-step-card");
+    const verificationCard = screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card");
+    const actionCard = screen.getByText("Run first protected action").closest(".mc-first-run-step-card");
+    const receiptCard = screen.getByText("Generate first receipt").closest(".mc-first-run-step-card");
+    expect(runnerCard?.getAttribute("data-state")).toBe("current");
+    expect(verificationCard?.getAttribute("data-state")).toBe("locked");
+    expect(actionCard?.getAttribute("data-state")).toBe("locked");
+    expect(receiptCard?.getAttribute("data-state")).toBe("locked");
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe(
-      "/agents/setup?intent=protect-agent&source=home",
+    expect(screen.getByRole("link", { name: /Connect runner/i }).getAttribute("href")).toBe(
+      "/workflows?intent=connect-runner&source=home",
     );
-    expect(screen.getByRole("link", { name: /Project keys/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getAllByRole("link", { name: /Agents protected/i }).some((link) => link.getAttribute("href") === "/operations")).toBe(true);
     expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
   });
 
-  it("tracks key and active-agent progress before the first action signal", async () => {
+  it("tracks runner and verification progress before the first action signal", async () => {
     mockHomeData({
       apiKeys: [apiKey()],
       profiles: [
         profile(),
       ],
+      runners: [runner()],
     });
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
-    expect(screen.getByText("Install SDK").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
-    expect(screen.getByText("Submit action").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
-    expect(screen.getByText("Agent profile is active. Send the first verified action.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Send first action/i }).getAttribute("href")).toBe("/agents/setup");
+    expect(await screen.findByRole("heading", { name: "Your agent control center" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Get Home reporting real activity" })).toBeInTheDocument();
+    expect(screen.getByText("Connect runner").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
+    expect(screen.getByText("Connect source-of-record").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
+    expect(screen.getByText("Connect the system Zroky checks after an action runs.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Connect verification/i }).getAttribute("href")).toBe("/integrations");
   });
 
   it("opens the mission dashboard after the first protected action signal", async () => {
     mockHomeData({
       apiKeys: [apiKey()],
       profiles: [profile()],
-      intents: [intent({ status: "authorized", runtime_policy_decision_id: null })],
+      runners: [runner()],
+      intents: [intent({ status: "authorized", proof_status: "matched", receipt_status: "generated", runtime_policy_decision_id: null })],
+      outcomes: [outcome({ verdict: "matched", verification_status: "matched" })],
     });
 
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Protect your first agent action" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Get Home reporting real activity" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
-    expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
+    expect(screen.getByLabelText("Recent Home activity")).toBeInTheDocument();
   });
 
   it("does not turn a failed home summary into zero KPI metrics", async () => {
@@ -654,7 +666,7 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
     const proofMetrics = screen.getByLabelText("Proof metrics");
     const approvalsCard = within(proofMetrics).getByText("Pending approvals").closest(".mc-proof-card") as HTMLElement;
     expect(approvalsCard).toBeInTheDocument();
@@ -665,7 +677,7 @@ describe("Mission Control Home", () => {
     expect(screen.getByText("1 data source unavailable")).toBeInTheDocument();
   });
 
-  it("surfaces stale runner attempts as a P2 queue item", async () => {
+  it("keeps stale runner attempts out of the real activity grid", async () => {
     mockHomeData({
       intents: [
         intent({
@@ -681,10 +693,12 @@ describe("Mission Control Home", () => {
 
     render(<HomePage />);
 
-    expect((await screen.findAllByText(/No runner claimed execution/)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Attempt 1 planned/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText("Recent protected actions")).toBeInTheDocument();
+    const activityGrid = screen.getByLabelText("Recent Home activity");
+    expect(within(activityGrid).queryByText(/No runner claimed execution/)).not.toBeInTheDocument();
+    expect(within(activityGrid).queryByText(/Attempt 1 planned/i)).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(api.getHomeSummary).toHaveBeenCalledWith(30, expect.any(AbortSignal));
+      expect(api.getHomeSummary).toHaveBeenCalledWith(7, expect.any(AbortSignal));
       expect(api.listProjectActionExecutionAttempts).not.toHaveBeenCalled();
     });
   });

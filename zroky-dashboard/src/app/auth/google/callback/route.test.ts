@@ -55,7 +55,7 @@ describe("/auth/google/callback", () => {
         }),
       ),
     );
-    const pendingNext = encodeURIComponent("/agents/setup?intent=protect-agent&plan=pro");
+    const pendingNext = encodeURIComponent("/workflows?intent=protect-agent&plan=pro");
     const request = new NextRequest(
       "https://zroky.com/auth/google/callback?state=oauth-state&code=oauth-code",
       {
@@ -69,7 +69,7 @@ describe("/auth/google/callback", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "https://zroky.com/agents/setup?intent=protect-agent&plan=pro",
+      "https://zroky.com/workflows?intent=protect-agent&plan=pro",
     );
     expect(response.headers.get("set-cookie")).toContain("zroky_post_auth_redirect=");
   });

@@ -256,6 +256,86 @@ export interface RuntimePolicyRuleUpdatePayload {
   is_enabled?: boolean;
 }
 
+export type AssurancePackJson = Record<string, unknown>;
+
+export interface AssurancePackValidatePayload {
+  pack: AssurancePackJson;
+}
+
+export interface AssurancePackValidateResponse {
+  valid: boolean;
+  schema_version: string;
+  workflow_key: string;
+  version: string;
+}
+
+export interface AssurancePackCreatePayload {
+  environment: string;
+  pack: AssurancePackJson;
+}
+
+export interface AssurancePackResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  workflow_key: string;
+  version: string;
+  pack_digest: string;
+  status: string;
+  pack: AssurancePackJson;
+  created_at: string;
+}
+
+export interface FinalRunResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  idempotency_key: string;
+  external_run_id: string | null;
+  intent_id: string | null;
+  workflow_key: string | null;
+  agent_ref: string | null;
+  status: string;
+  run_digest: string;
+  run: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface FinalRunListResponse {
+  items: FinalRunResponse[];
+}
+
+export interface FinalIncidentResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  outcome_graph_id: string;
+  severity: string;
+  status: string;
+  incident: Record<string, unknown>;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface FinalApprovalRequirementResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  intent_id: string;
+  policy_decision_id: string;
+  required_role: string;
+  binding_digest: string;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface FinalApprovalRequirementListResponse {
+  items: FinalApprovalRequirementResponse[];
+}
+
 export interface RuntimePolicyResolvePreviewPayload {
   agent_id?: string | null;
   action_type?: string | null;
@@ -397,6 +477,38 @@ export interface EvidenceManifestResponse {
     title: string;
     trace_id: string | null;
   }>;
+}
+
+export interface FinalEvidenceBundleResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  subject_type: string;
+  subject_id: string;
+  bundle_digest: string;
+  bundle: Record<string, unknown>;
+  signature: {
+    schema_version: string;
+    envelope: string;
+    payload_type: string;
+    payload_digest: string;
+    algorithm: string;
+    key_id: string;
+    public_key: string;
+    signature: string;
+    signed_payload: string;
+  } | null;
+  created_at: string;
+}
+
+export interface FinalEvidenceBundleVerificationResponse {
+  bundle_id: string;
+  bundle_digest: string;
+  verification_status: "pass" | "fail" | string;
+  digest_valid: boolean;
+  signature_valid: boolean;
+  algorithm: string | null;
+  key_id: string | null;
 }
 
 export type ActionIntentStatus =
@@ -1058,6 +1170,35 @@ export function resendVerification(): Promise<{ detail: string }> {
   return request<{ detail: string }>("/v1/auth/resend-verification", {
     method: "POST",
   });
+}
+
+export function validateAssurancePack(pack: AssurancePackJson): Promise<AssurancePackValidateResponse> {
+  return request<AssurancePackValidateResponse>("/v1/assurance-packs/validate", {
+    method: "POST",
+    body: { pack } satisfies AssurancePackValidatePayload,
+  });
+}
+
+export function publishAssurancePack(
+  pack: AssurancePackJson,
+  environment: string,
+): Promise<AssurancePackResponse> {
+  return request<AssurancePackResponse>("/v1/assurance-packs", {
+    method: "POST",
+    body: { pack, environment } satisfies AssurancePackCreatePayload,
+  });
+}
+
+export function listFinalRuns(signal?: AbortSignal): Promise<FinalRunListResponse> {
+  return request<FinalRunListResponse>("/v1/runs", { signal });
+}
+
+export function listFinalIncidents(signal?: AbortSignal): Promise<FinalIncidentResponse[]> {
+  return request<FinalIncidentResponse[]>("/v1/incidents", { signal });
+}
+
+export function listFinalApprovalRequirements(signal?: AbortSignal): Promise<FinalApprovalRequirementListResponse> {
+  return request<FinalApprovalRequirementListResponse>("/v1/policy/approval-requirements", { signal });
 }
 
 export function forgotPassword(email: string): Promise<{ message: string }> {
@@ -5011,6 +5152,20 @@ export function getEvidenceManifest(
     query,
     signal,
   });
+}
+
+export function getFinalEvidenceBundle(
+  bundleId: string,
+  signal?: AbortSignal,
+): Promise<FinalEvidenceBundleResponse> {
+  return request<FinalEvidenceBundleResponse>(`/v1/evidence/bundles/${encodeURIComponent(bundleId)}`, { signal });
+}
+
+export function verifyFinalEvidenceBundle(
+  bundleId: string,
+  signal?: AbortSignal,
+): Promise<FinalEvidenceBundleVerificationResponse> {
+  return request<FinalEvidenceBundleVerificationResponse>(`/v1/evidence/bundles/${encodeURIComponent(bundleId)}/verify`, { signal });
 }
 
 export function approveRuntimePolicyDecision(

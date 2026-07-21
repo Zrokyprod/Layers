@@ -227,6 +227,6 @@ describe("home queue summary helpers", () => {
       tone: "danger",
     });
     expect(queueCounts(rows)).toEqual({ all: 1, needsDecision: 0, bypass: 1 });
-    expect(homeVerdictForQueue([], false).title).toBe("Setup required");
+    expect(homeVerdictForQueue([], false).title).toBe("Your agent control center");
   });
 });

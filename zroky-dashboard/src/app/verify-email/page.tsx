@@ -13,7 +13,7 @@ function VerifyEmailContent() {
   const token = searchParams.get("token");
   const email = searchParams.get("email") ?? "";
   const nextPath = safeAppPath(searchParams.get("next"), "/home");
-  const isSetupNext = nextPath.startsWith("/agents/setup");
+  const isSetupNext = nextPath.startsWith("/workflows");
   const [status, setStatus] = useState<"pending" | "loading" | "success" | "error">(token ? "loading" : "pending");
   const [message, setMessage] = useState("");
   const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
