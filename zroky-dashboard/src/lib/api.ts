@@ -824,6 +824,7 @@ export interface ToolRegistryItemResponse {
   requires_customer_credentials: boolean;
   dashboard_href: string | null;
   backend_capability: string | null;
+  manifest_id?: string | null;
   availability_notes: string | null;
 }
 

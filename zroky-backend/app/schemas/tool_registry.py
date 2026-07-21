@@ -19,6 +19,7 @@ class ToolRegistryItemResponse(BaseModel):
     requires_customer_credentials: bool = False
     dashboard_href: str | None = None
     backend_capability: str | None = None
+    manifest_id: str | None = None
     availability_notes: str | None = None
 
 

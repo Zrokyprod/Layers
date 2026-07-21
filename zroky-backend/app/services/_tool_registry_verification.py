@@ -16,6 +16,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.ledger_refund_api",
+        manifest_id="ledger_refund.v1",
     ),
     ToolRegistryItem(
         id="stripe_refund",
@@ -30,6 +31,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.stripe_refund",
+        manifest_id="stripe_refund.v1",
         availability_notes="Uses a Stripe restricted secret key with read-only refunds access.",
     ),
     ToolRegistryItem(
@@ -44,6 +46,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.customer_record_api",
+        manifest_id="crm_record.v1",
     ),
     ToolRegistryItem(
         id="hubspot_crm",
@@ -58,6 +61,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.hubspot_crm",
+        manifest_id="hubspot_crm.v1",
         availability_notes="Uses a HubSpot private app bearer token today; OAuth app install is planned.",
     ),
     ToolRegistryItem(
@@ -73,6 +77,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.salesforce_crm",
+        manifest_id="salesforce_crm.v1",
         availability_notes="Manual bearer-token verification exists, but production OAuth refresh is not launch-grade yet.",
     ),
     ToolRegistryItem(
@@ -88,6 +93,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.zoho_crm",
+        manifest_id="zoho_crm.v1",
         availability_notes="OAuth connect UI exists, but refresh-token verification lifecycle still needs launch hardening.",
     ),
     ToolRegistryItem(
@@ -101,6 +107,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         recommended_for_action_types=("ticket_close",),
         requires_customer_credentials=True,
         dashboard_href="/integrations",
+        manifest_id="ticket_status.v1",
     ),
     ToolRegistryItem(
         id="zendesk_ticket",
@@ -115,6 +122,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.zendesk_ticket",
+        manifest_id="zendesk_ticket.v1",
         availability_notes="Supports read-scoped Zendesk OAuth bearer tokens or API token basic auth; one-click OAuth install is planned.",
     ),
     ToolRegistryItem(
@@ -130,6 +138,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.jira_issue",
+        manifest_id="jira_issue.v1",
         availability_notes="Supports Atlassian email plus API token basic auth today; OAuth app install is planned.",
     ),
     ToolRegistryItem(
@@ -145,6 +154,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.razorpay_refund",
+        manifest_id="razorpay_refund.v1",
         availability_notes="Supports Razorpay key-id plus key-secret basic auth today; OAuth is not required for server API keys.",
     ),
     ToolRegistryItem(
@@ -160,6 +170,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.stripe_payment",
+        manifest_id="stripe_payment.v1",
         availability_notes="Uses a Stripe restricted secret key with read-only PaymentIntent access.",
     ),
     ToolRegistryItem(
@@ -175,6 +186,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.shopify_admin",
+        manifest_id="shopify_admin.v1",
         availability_notes="Uses a read-only Shopify Admin API access token.",
     ),
     ToolRegistryItem(
@@ -190,6 +202,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.netsuite_finance",
+        manifest_id="netsuite_finance.v1",
         availability_notes="Manual read-token verification exists, but production NetSuite TBA/OAuth setup is not launch-grade yet.",
     ),
     ToolRegistryItem(
@@ -203,6 +216,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         recommended_for_action_types=("email_send",),
         requires_customer_credentials=True,
         dashboard_href="/integrations",
+        manifest_id="email_delivery.v1",
     ),
     ToolRegistryItem(
         id="github_ci",
@@ -215,6 +229,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         recommended_for_action_types=("deploy_change",),
         requires_customer_credentials=True,
         dashboard_href="/integrations",
+        manifest_id="github_ci.v1",
     ),
     ToolRegistryItem(
         id="generic_rest",
@@ -228,6 +243,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         requires_customer_credentials=True,
         dashboard_href="/integrations",
         backend_capability="system_of_record.generic_rest_api",
+        manifest_id="generic_rest.v1",
     ),
     ToolRegistryItem(
         id="webhook_callback",
@@ -240,6 +256,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         recommended_for_action_types=("invoice_spend_approval", "custom"),
         requires_customer_credentials=False,
         dashboard_href="/integrations",
+        manifest_id="webhook_callback.v1",
     ),
     ToolRegistryItem(
         id="database_read",
@@ -252,6 +269,7 @@ VERIFICATION_CONNECTORS: tuple[ToolRegistryItem, ...] = (
         recommended_for_action_types=("database_record_update", "internal_api_mutation"),
         requires_customer_credentials=True,
         dashboard_href="/integrations",
+        manifest_id="database_read.v1",
     ),
 )
 

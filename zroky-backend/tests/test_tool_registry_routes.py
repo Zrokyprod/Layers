@@ -110,6 +110,10 @@ def test_tool_registry_exposes_phase1_catalog_with_honest_status(client: TestCli
     generic_rest = _by_id(body["verification_connectors"], "generic_rest")
     assert generic_rest["implementation_status"] == "available"
     assert generic_rest["backend_capability"] == "system_of_record.generic_rest_api"
+    assert generic_rest["manifest_id"] == "generic_rest.v1"
+    assert _by_id(body["verification_connectors"], "stripe_refund")["manifest_id"] == "stripe_refund.v1"
+    assert all(item["manifest_id"] for item in body["verification_connectors"])
+    assert _by_id(body["runtime_paths"], "sdk")["manifest_id"] is None
     assert _by_id(body["native_tool_families"], "slack_approval_alert")["implementation_status"] == "available"
     assert _by_id(body["native_tool_families"], "zroky_dashboard_approval")["implementation_status"] == "available"
     stripe = _by_id(body["native_tool_families"], "stripe_refund")

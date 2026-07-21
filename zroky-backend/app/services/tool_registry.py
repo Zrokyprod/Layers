@@ -29,6 +29,7 @@ def serialize_registry_item(item: ToolRegistryItem) -> dict[str, object]:
         "requires_customer_credentials": item.requires_customer_credentials,
         "dashboard_href": item.dashboard_href,
         "backend_capability": item.backend_capability,
+        "manifest_id": item.manifest_id,
         "availability_notes": item.availability_notes,
     }
 
