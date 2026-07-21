@@ -852,6 +852,35 @@ Exit criteria:
 - final launch report is complete;
 - rollback path is documented and tested.
 
+### Phase 12: Verification Connector Fabric
+
+Goal: make Zroky system-agnostic without hand-building every SaaS connector.
+
+Product rule:
+
+- one-click connect means read-only proof access, least-privilege scopes, successful test-read, known object schema, correlation rule, freshness rule, and an installed evidence template;
+- one-click connect does not mean Zroky receives write access or executes customer-side actions;
+- Slack, Teams, and email approval paths are interaction surfaces, not business proof connectors unless verifying message delivery itself.
+
+Tasks:
+
+- add a declarative connector manifest contract for `generic_rest`, `webhook_callback`, and `postgres_read`;
+- wire existing `ToolRegistryItem` connector catalog rows to manifest IDs instead of creating a second catalog;
+- enforce read-only manifest rules at validation time: no mutation methods, no write scopes, no raw customer secrets in the control plane;
+- prove Generic REST and Postgres source-of-record verification through manifest data, not new backend connector code;
+- ship branded presets as manifest data first: Stripe, GitHub, Jira, ServiceNow, Salesforce, HubSpot, Zendesk, Shopify;
+- add bespoke auth adapters only where the primitive cannot safely cover auth, such as GitHub App installation tokens or OAuth refresh;
+- install starter Assurance Pack templates from connector manifests so verification semantics live in data, not hardcoded routes;
+- keep dashboard UI manifest-driven and build it after backend contract tests pass.
+
+Exit criteria:
+
+- a new source-of-record workflow can be added with manifest data and an Assurance Pack template, without a new backend route or service;
+- Generic REST, Webhook, and Postgres are launch-grade primitives;
+- branded connector presets declare capabilities, auth mode, test-read, object schema, correlation, freshness, and evidence template;
+- interaction surfaces are not counted as verification connectors;
+- production validation fails closed for write-capable manifests, missing test-read config, missing correlation rules, or raw secret storage.
+
 ## 12. Testing Strategy
 
 Required test groups:
