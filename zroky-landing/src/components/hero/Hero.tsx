@@ -6,8 +6,6 @@ import { SIGN_UP_URL } from '../../lib/links';
 const ease = [0.16, 1, 0.3, 1] as const;
 const loopSeconds = 6.2;
 
-const statusFrames = ['ACTION CAPTURED', 'POLICY ENFORCED', 'SCOPE LOCKED', 'PROOF SIGNED'] as const;
-
 function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
   const reduce = useReducedMotion();
   return (
@@ -38,9 +36,8 @@ function useHeroLoop() {
   }, [reduce]);
 
   const progress = reduce ? loopSeconds - 0.1 : ((elapsed % loopSeconds) + loopSeconds) % loopSeconds;
-  const frame = reduce ? statusFrames.length - 1 : Math.floor((progress / loopSeconds) * statusFrames.length) % statusFrames.length;
 
-  return { reduce, progress, frame };
+  return { progress };
 }
 
 function BifrostRingScene({ progress }: { progress: number }) {
@@ -70,20 +67,38 @@ function BifrostRingScene({ progress }: { progress: number }) {
       <svg className="h-full w-full" viewBox="0 0 1260 610" fill="none" preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="zroky-bifrost-line" x1="60" y1="305" x2="1200" y2="305" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#20241e" stopOpacity="0.02" />
-            <stop offset="0.22" stopColor="#20241e" stopOpacity="0.24" />
-            <stop offset="0.5" stopColor="#20241e" stopOpacity="0.045" />
-            <stop offset="0.78" stopColor="#20241e" stopOpacity="0.24" />
-            <stop offset="1" stopColor="#20241e" stopOpacity="0.02" />
+            <stop stopColor="#20241e" stopOpacity="0.01" />
+            <stop offset="0.22" stopColor="#20241e" stopOpacity="0.095" />
+            <stop offset="0.5" stopColor="#20241e" stopOpacity="0.025" />
+            <stop offset="0.78" stopColor="#20241e" stopOpacity="0.095" />
+            <stop offset="1" stopColor="#20241e" stopOpacity="0.01" />
           </linearGradient>
           <linearGradient id="zroky-bifrost-signal" x1="60" y1="305" x2="1200" y2="305" gradientUnits="userSpaceOnUse">
             <stop stopColor="#3a747c" stopOpacity="0" />
-            <stop offset="0.26" stopColor="#3a747c" stopOpacity="0.9" />
-            <stop offset="0.5" stopColor="#3a747c" stopOpacity="0.12" />
-            <stop offset="0.74" stopColor="#3a747c" stopOpacity="0.9" />
+            <stop offset="0.26" stopColor="#3a747c" stopOpacity="0.28" />
+            <stop offset="0.5" stopColor="#3a747c" stopOpacity="0.045" />
+            <stop offset="0.74" stopColor="#3a747c" stopOpacity="0.28" />
             <stop offset="1" stopColor="#3a747c" stopOpacity="0" />
           </linearGradient>
         </defs>
+
+        <g stroke="#20241e" strokeLinecap="round" strokeLinejoin="round" opacity="0.14">
+          <path d="M 346 220 L 398 190 L 452 220 L 400 250 Z" />
+          <path d="M 346 220 V 370 L 400 402 V 250 Z" />
+          <path d="M 452 220 V 370 L 400 402 V 250 Z" />
+          <path d="M 372 238 L 400 222 L 428 238" />
+          <path d="M 808 220 L 862 190 L 914 220 L 862 250 Z" />
+          <path d="M 808 220 V 370 L 862 402 V 250 Z" />
+          <path d="M 914 220 V 370 L 862 402 V 250 Z" />
+          <path d="M 836 238 L 862 222 L 890 238" />
+          <path d="M 806 414 C 846 406 880 423 880 462 C 880 492 850 507 820 488 C 802 476 810 452 838 462" />
+          <path d="M 810 444 H 868 M 814 461 H 858 M 818 478 H 846" />
+          <circle cx="398" cy="308" r="20" />
+          <path d="M 386 308 L 396 318 L 412 296" />
+          <path d="M 850 292 C 850 265 872 252 892 252 C 914 252 932 268 932 292" />
+          <path d="M 836 292 H 946 V 352 H 836 Z" />
+          <path d="M 886 318 H 896 V 338 H 886 Z" />
+        </g>
 
         {ringRows.map((offset, index) => (
           <motion.path
@@ -93,7 +108,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             strokeWidth="1"
             strokeDasharray={index % 3 === 0 ? '24 28' : index % 3 === 1 ? '3 38' : '1 46'}
             initial={false}
-            animate={reduce ? { opacity: 0.75 } : { opacity: [0.4, 0.82, 0.4], pathLength: [0.9, 1, 0.9], strokeDashoffset: [0, -74] }}
+            animate={reduce ? { opacity: 0.34 } : { opacity: [0.14, 0.34, 0.14], pathLength: [0.9, 1, 0.9], strokeDashoffset: [0, -74] }}
             transition={{ duration: 4.9, repeat: reduce ? 0 : Infinity, ease: 'linear', delay: index * 0.045 }}
           />
         ))}
@@ -105,7 +120,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             strokeWidth="1"
             strokeDasharray={index % 3 === 0 ? '24 28' : index % 3 === 1 ? '3 38' : '1 46'}
             initial={false}
-            animate={reduce ? { opacity: 0.75 } : { opacity: [0.4, 0.82, 0.4], pathLength: [0.9, 1, 0.9], strokeDashoffset: [0, 74] }}
+            animate={reduce ? { opacity: 0.34 } : { opacity: [0.14, 0.34, 0.14], pathLength: [0.9, 1, 0.9], strokeDashoffset: [0, 74] }}
             transition={{ duration: 4.9, repeat: reduce ? 0 : Infinity, ease: 'linear', delay: index * 0.045 }}
           />
         ))}
@@ -139,7 +154,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             y1={305 + particle.offset}
             y2={305 + particle.offset}
             stroke="#3a747c"
-            strokeOpacity="0.52"
+            strokeOpacity="0.28"
             strokeWidth="1.35"
             strokeLinecap="round"
             initial={false}
@@ -149,7 +164,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
                 : {
                     x: [0, 132],
                     y: [0, -particle.offset * 0.62],
-                    opacity: [0, 0.75, 0],
+                    opacity: [0, 0.38, 0],
                   }
             }
             transition={{ duration: 2.9, repeat: reduce ? 0 : Infinity, ease: 'linear', delay: particle.delay }}
@@ -163,7 +178,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             y1={305 + particle.offset}
             y2={305 + particle.offset}
             stroke="#3a747c"
-            strokeOpacity="0.52"
+            strokeOpacity="0.28"
             strokeWidth="1.35"
             strokeLinecap="round"
             initial={false}
@@ -173,7 +188,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
                 : {
                     x: [0, -132],
                     y: [0, -particle.offset * 0.62],
-                    opacity: [0, 0.75, 0],
+                    opacity: [0, 0.38, 0],
                   }
             }
             transition={{ duration: 2.9, repeat: reduce ? 0 : Infinity, ease: 'linear', delay: particle.delay }}
@@ -188,7 +203,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
           stroke="#fbfaf6"
           strokeWidth="4"
           initial={false}
-          animate={reduce ? { opacity: 0.9 } : { opacity: [0.55, 1, 0.55] }}
+          animate={reduce ? { opacity: 0.48 } : { opacity: [0.22, 0.48, 0.22] }}
           transition={{ duration: 1.25, repeat: reduce ? 0 : Infinity, ease: 'easeInOut' }}
         />
         <motion.circle
@@ -199,18 +214,18 @@ function BifrostRingScene({ progress }: { progress: number }) {
           stroke="#fbfaf6"
           strokeWidth="4"
           initial={false}
-          animate={reduce ? { opacity: 0.9 } : { opacity: [0.55, 1, 0.55] }}
+          animate={reduce ? { opacity: 0.48 } : { opacity: [0.22, 0.48, 0.22] }}
           transition={{ duration: 1.25, repeat: reduce ? 0 : Infinity, ease: 'easeInOut' }}
         />
 
-        <g opacity="0.78">
+        <g opacity="0.44">
           <motion.ellipse
             cx={leftRingX}
             cy="305"
             rx="54"
             ry="188"
             stroke="#20241e"
-            strokeOpacity="0.22"
+            strokeOpacity="0.15"
             strokeWidth="1.1"
             initial={false}
             animate={reduce ? { opacity: 0.78, rx: 54 } : { opacity: [0.62, 0.86, 0.62], rx: [54, 58, 54] }}
@@ -222,7 +237,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             rx="38"
             ry="164"
             stroke="#20241e"
-            strokeOpacity="0.14"
+            strokeOpacity="0.085"
             strokeWidth="1"
             initial={false}
             animate={reduce ? { opacity: 0.76, rx: 38 } : { opacity: [0.5, 0.82, 0.5], rx: [38, 41, 38] }}
@@ -234,7 +249,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             rx="24"
             ry="190"
             stroke="#20241e"
-            strokeOpacity="0.22"
+            strokeOpacity="0.14"
             strokeWidth="1.05"
             initial={false}
             animate={reduce ? { opacity: 0.82, rx: 24 } : { opacity: [0.58, 0.88, 0.58], rx: [24, 27, 24] }}
@@ -247,7 +262,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             rx="54"
             ry="188"
             stroke="#20241e"
-            strokeOpacity="0.22"
+            strokeOpacity="0.15"
             strokeWidth="1.1"
             initial={false}
             animate={reduce ? { opacity: 0.78, rx: 54 } : { opacity: [0.62, 0.86, 0.62], rx: [54, 58, 54] }}
@@ -259,7 +274,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             rx="38"
             ry="164"
             stroke="#20241e"
-            strokeOpacity="0.14"
+            strokeOpacity="0.085"
             strokeWidth="1"
             initial={false}
             animate={reduce ? { opacity: 0.76, rx: 38 } : { opacity: [0.5, 0.82, 0.5], rx: [38, 41, 38] }}
@@ -271,7 +286,7 @@ function BifrostRingScene({ progress }: { progress: number }) {
             rx="24"
             ry="190"
             stroke="#20241e"
-            strokeOpacity="0.22"
+            strokeOpacity="0.14"
             strokeWidth="1.05"
             initial={false}
             animate={reduce ? { opacity: 0.82, rx: 24 } : { opacity: [0.58, 0.88, 0.58], rx: [24, 27, 24] }}
@@ -366,44 +381,8 @@ function BifrostRingScene({ progress }: { progress: number }) {
   );
 }
 
-function CommandModule({ progress, frame }: { progress: number; frame: number }) {
-  const reduce = Boolean(useReducedMotion());
-  const command = 'zroky guard refund --require approval';
-  const receipt = 'proof: signed_receipt.7f3a9e10';
-  const commandChars = reduce ? command.length : Math.round(command.length * clamp((progress - 0.5) / 1.35, 0, 1));
-  const receiptChars = reduce ? receipt.length : Math.round(receipt.length * clamp((progress - 3.45) / 1.2, 0, 1));
-  const status = statusFrames[frame];
-
-  return (
-    <Reveal delay={0.27} className="mx-auto mt-6 w-full max-w-[430px]">
-      <div className="relative border border-[#e2ded3] bg-[#fffefa]/92 px-4 py-4 text-left shadow-[0_22px_70px_-50px_rgba(23,25,22,0.62)] backdrop-blur">
-        <span className="absolute -left-1.5 -top-1.5 h-3 w-3 border-l border-t border-[#cfc9bd]" />
-        <span className="absolute -right-1.5 -top-1.5 h-3 w-3 border-r border-t border-[#cfc9bd]" />
-        <span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 border-b border-l border-[#cfc9bd]" />
-        <span className="absolute -bottom-1.5 -right-1.5 h-3 w-3 border-b border-r border-[#cfc9bd]" />
-
-        <p className="font-mono text-[12px] font-semibold text-[#3a747c]">/* Controlled agent action */</p>
-        <div className="mt-3 space-y-2 font-mono text-[13px] leading-relaxed text-[#20231f]">
-          <p>
-            <span className="text-[#3a747c]">$ </span>
-            {command.slice(0, commandChars)}
-            {!reduce && commandChars < command.length ? <span className="text-[#3a747c]">_</span> : null}
-          </p>
-          <p className="text-[#6d7068]">
-            status: <span className="text-[#2f5f66]">{status}</span>
-          </p>
-          <p className="text-[#6d7068]">
-            {receipt.slice(0, receiptChars)}
-            {!reduce && receiptChars > 0 && receiptChars < receipt.length ? <span className="text-[#3a747c]">_</span> : null}
-          </p>
-        </div>
-      </div>
-    </Reveal>
-  );
-}
-
 export default function Hero() {
-  const { progress, frame } = useHeroLoop();
+  const { progress } = useHeroLoop();
 
   return (
     <section
@@ -452,7 +431,6 @@ export default function Hero() {
             </div>
           </Reveal>
 
-          <CommandModule progress={progress} frame={frame} />
         </div>
       </div>
     </section>
