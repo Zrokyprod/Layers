@@ -416,6 +416,7 @@ function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryRe
         requires_customer_credentials: true,
         dashboard_href: "/integrations#generic-rest-connector",
         backend_capability: "generic_rest",
+        manifest_id: "generic_rest.v1",
         availability_notes: null,
       },
     ],
@@ -434,6 +435,7 @@ function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryRe
         requires_customer_credentials: true,
         dashboard_href: null,
         backend_capability: null,
+        manifest_id: null,
         availability_notes: null,
       },
     ],
@@ -1124,6 +1126,7 @@ describe("connector-inventory", () => {
 
     const generic = inventory.proofRows.find((row) => row.id === "generic_rest");
     expect(generic?.latestCheck?.id).toBe("new");
+    expect(generic?.metadata.manifestId).toBe("generic_rest.v1");
     expect(inventory.registry).toEqual({ available: 0, template: 1, planned: 1 });
     expect(inventory.coverageRows.map((row) => row.actionType)).toEqual([
       "crm.deal.update",

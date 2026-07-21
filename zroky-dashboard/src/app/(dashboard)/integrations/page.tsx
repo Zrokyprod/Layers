@@ -567,6 +567,7 @@ function connectorSearchText(row: ConnectorInventoryRow): string {
     row.statusLabel,
     row.detail,
     row.metadata.connectorType,
+    row.metadata.manifestId,
     row.metadata.maskedEndpoint,
     ...row.supportedActionTypes,
   ]
@@ -2912,6 +2913,7 @@ function ConnectorInspector({
         <div className="connector-fact-grid">
           <Fact label="Transport" value={humanize(row.transport)} />
           <Fact label="Template" value={row.templateKind ? humanize(row.templateKind) : "Custom"} />
+          <Fact label="Manifest" value={row.metadata.manifestId} />
           <Fact label="Connector type" value={row.metadata.connectorType} />
           <Fact label="Endpoint" value={row.metadata.maskedEndpoint} />
           <Fact label="Credential saved" value={row.metadata.credentialSaved} />
