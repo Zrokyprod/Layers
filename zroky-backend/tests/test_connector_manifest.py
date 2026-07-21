@@ -18,7 +18,7 @@ def _manifest(**overrides):
             "credential_ref": "vault://zroky/stripe/read-only",
             "allowed_scopes": ["refunds.read"],
         },
-        "read": {"method": "GET", "path_template": "/v1/refunds/{object_ref}"},
+        "read": {"method": "GET", "base_url": "https://api.stripe.com", "path_template": "/v1/refunds/{record_ref}"},
         "test_read": {"object_ref": "re_test"},
         "object_schema": {"id": "string", "status": "string"},
         "correlation": {"claim_field": "refund_id", "source_field": "id"},
@@ -69,6 +69,22 @@ def test_postgres_manifest_requires_read_only_query() -> None:
     )
 
     with pytest.raises(ValidationError, match="read-only"):
+        validate_connector_manifest(payload)
+
+
+def test_postgres_manifest_rejects_database_url_password() -> None:
+    payload = _manifest(
+        connector_id="postgres_read",
+        manifest_id="postgres_refunds.v1",
+        primitive="postgres_read",
+        read={
+            "method": "GET",
+            "database_url": "postgresql://readonly:secret@db.example.com/app",
+            "query": "SELECT refund_id FROM refunds WHERE refund_id = :refund_id",
+        },
+    )
+
+    with pytest.raises(ValidationError, match="password"):
         validate_connector_manifest(payload)
 
 

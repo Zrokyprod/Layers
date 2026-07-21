@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -47,9 +48,15 @@ class ConnectorReadManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     method: str = "GET"
+    base_url: str | None = Field(default=None, min_length=1)
+    database_url: str | None = Field(default=None, min_length=1)
     path_template: str | None = Field(default=None, min_length=1)
     query: str | None = Field(default=None, min_length=1)
+    query_params: dict[str, Any] = Field(default_factory=dict)
+    fixed_params: dict[str, Any] = Field(default_factory=dict)
+    record_path: str | None = None
     callback_schema: dict[str, Any] | None = None
+    timeout_seconds: float = Field(default=5.0, gt=0, le=30)
 
     @field_validator("method")
     @classmethod
@@ -64,6 +71,13 @@ class ConnectorReadManifest(BaseModel):
     def _read_only_query(cls, value: str | None) -> str | None:
         if value is not None and MUTATING_SQL_RE.search(value):
             raise ValueError("connector SQL query must be read-only")
+        return value
+
+    @field_validator("database_url")
+    @classmethod
+    def _no_password_in_database_url(cls, value: str | None) -> str | None:
+        if value is not None and urlsplit(value).password:
+            raise ValueError("connector database_url cannot include a password")
         return value
 
 
@@ -103,8 +117,12 @@ class ConnectorManifest(BaseModel):
         _reject_raw_secret_fields(self.model_dump())
         if self.primitive == "postgres_read" and not self.read.query:
             raise ValueError("postgres_read manifest requires read.query")
+        if self.primitive == "postgres_read" and not self.read.database_url:
+            raise ValueError("postgres_read manifest requires read.database_url")
         if self.primitive == "generic_rest" and not self.read.path_template:
             raise ValueError("generic_rest manifest requires read.path_template")
+        if self.primitive == "generic_rest" and not self.read.base_url:
+            raise ValueError("generic_rest manifest requires read.base_url")
         if self.primitive == "webhook_callback" and not self.read.callback_schema:
             raise ValueError("webhook_callback manifest requires read.callback_schema")
         return self

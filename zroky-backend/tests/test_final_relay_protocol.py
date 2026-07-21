@@ -6,6 +6,7 @@ import httpx
 import pytest
 from sqlalchemy import create_engine
 
+from app.domain.connector_manifest import execute_connector_manifest_read, validate_connector_manifest
 from app.infrastructure.relay_protocol import (
     GenericRestReadManifest,
     PostgresReadManifest,
@@ -145,3 +146,106 @@ def test_postgres_read_rejects_mutating_manifest_query() -> None:
                 query="UPDATE refunds SET status = 'posted'",
             ),
         )
+
+
+def test_generic_rest_relay_executes_from_connector_manifest_data() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"refund": {"id": "rf_1", "status": "succeeded"}})
+
+    manifest = validate_connector_manifest(
+        {
+            "manifest_id": "stripe_refund.v1",
+            "connector_id": "stripe_refund",
+            "primitive": "generic_rest",
+            "source_binding": "stripe",
+            "connector_capability": "refund.read",
+            "auth": {
+                "type": "bearer",
+                "credential_ref": "vault://zroky/stripe/read-only",
+                "allowed_scopes": ["refunds.read"],
+            },
+            "read": {
+                "method": "GET",
+                "base_url": "https://api.stripe.com",
+                "path_template": "/v1/refunds/{record_ref}",
+                "query_params": {"expand[]": "charge"},
+                "record_path": "refund",
+            },
+            "test_read": {"object_ref": "rf_test"},
+            "object_schema": {"id": "string", "status": "string"},
+            "correlation": {"claim_field": "refund_id", "source_field": "id"},
+            "expected_effect_mapping": {"refund.status": "status"},
+            "evidence_template_id": "stripe_refund_evidence.v1",
+        }
+    )
+    command = prepare_read_command(
+        "proj_1",
+        RelayReadCommandRequest(
+            source_binding="stripe",
+            connector_capability="refund.read",
+            object_ref="rf_1",
+            selector={"record_ref": "rf_1"},
+        ),
+    )
+
+    source = execute_connector_manifest_read(
+        command,
+        manifest,
+        bearer_token="secret-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert str(requests[0].url) == "https://api.stripe.com/v1/refunds/rf_1?expand%5B%5D=charge"
+    assert source.record == {"id": "rf_1", "status": "succeeded", "record_ref": "rf_1"}
+    assert source.metadata is not None
+    assert source.metadata["command_digest"] == command.command_digest
+    assert "secret-token" not in json.dumps(source.metadata)
+
+
+def test_postgres_relay_executes_from_connector_manifest_data(tmp_path) -> None:
+    source_db = tmp_path / "manifest-source.db"
+    engine = create_engine(f"sqlite:///{source_db}", future=True)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE tickets (ticket_id TEXT PRIMARY KEY, status TEXT)")
+        connection.exec_driver_sql("INSERT INTO tickets (ticket_id, status) VALUES (?, ?)", ("T-1", "closed"))
+    engine.dispose()
+
+    manifest = validate_connector_manifest(
+        {
+            "manifest_id": "postgres_ticket.v1",
+            "connector_id": "database_read",
+            "primitive": "postgres_read",
+            "source_binding": "support_db",
+            "connector_capability": "ticket.read",
+            "auth": {"type": "none"},
+            "read": {
+                "method": "GET",
+                "database_url": f"sqlite:///{source_db}",
+                "query": "SELECT ticket_id, status FROM tickets WHERE ticket_id = :ticket_id",
+            },
+            "test_read": {"object_ref": "T-1"},
+            "object_schema": {"ticket_id": "string", "status": "string"},
+            "correlation": {"claim_field": "ticket_id", "source_field": "ticket_id"},
+            "expected_effect_mapping": {"ticket.status": "status"},
+            "evidence_template_id": "ticket_evidence.v1",
+        }
+    )
+    command = prepare_read_command(
+        "proj_1",
+        RelayReadCommandRequest(
+            source_binding="support_db",
+            connector_capability="ticket.read",
+            object_ref="T-1",
+            selector={"ticket_id": "T-1"},
+        ),
+    )
+
+    source = execute_connector_manifest_read(command, manifest, allow_sqlite_for_tests=True)
+
+    assert source.record == {"ticket_id": "T-1", "status": "closed"}
+    assert source.metadata is not None
+    assert source.metadata["read_only"] is True
+    assert source.metadata["command_digest"] == command.command_digest
