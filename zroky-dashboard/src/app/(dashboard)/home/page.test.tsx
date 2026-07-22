@@ -15,7 +15,7 @@ import type {
   SourceMutationSummaryResponse,
   SourceMutationView,
 } from "@/lib/api";
-import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
+import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse, CurrentUserProjectResponse } from "@/lib/types";
 
 const api = vi.hoisted(() => ({
   getBillingUsage: vi.fn(),
@@ -30,6 +30,7 @@ const api = vi.hoisted(() => ({
   listProjectApiKeys: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
   listUnreceiptedSourceMutations: vi.fn(),
+  listMyProjects: vi.fn(),
 }));
 
 const storeState = vi.hoisted(() => ({
@@ -73,6 +74,19 @@ vi.mock("@/lib/api", async () => {
 });
 
 const now = "2026-05-29T10:00:00.000Z";
+
+function myProject(overrides: Partial<CurrentUserProjectResponse> = {}): CurrentUserProjectResponse {
+  return {
+    membership_id: "mem_1",
+    project_id: "proj_1",
+    project_name: "My Project",
+    role: "owner",
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
 
 function intent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResponse {
   return {
@@ -399,6 +413,7 @@ function mockHomeData(overrides: {
   apiKeys?: ApiKeyResponse[];
   billing?: BillingUsageResponse;
   homeSummary?: HomeSummaryResponse;
+  currentProjectRole?: string;
 } = {}) {
   const profiles = overrides.profiles ?? [];
   const agentProfileMeta = {
@@ -468,6 +483,7 @@ function mockHomeData(overrides: {
   });
   api.listProjectApiKeys.mockResolvedValue(overrides.apiKeys ?? [apiKey()]);
   api.getBillingUsage.mockResolvedValue(overrides.billing ?? billingUsage());
+  api.listMyProjects.mockResolvedValue([myProject({ role: overrides.currentProjectRole ?? "owner" })]);
 }
 
 describe("Mission Control Home", () => {
@@ -600,6 +616,17 @@ describe("Mission Control Home", () => {
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Connect source/i }).getAttribute("href")).toBe("/integrations");
     expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps setup actions read-only for non-admin members", async () => {
+    mockHomeData({ apiKeys: [], currentProjectRole: "member" });
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Set up proof before trusting Home" })).toBeInTheDocument();
+    expect(screen.getByText("Read-only: ask an owner or admin to change setup.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Connect source/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Start setup/i })).not.toBeInTheDocument();
   });
 
   it("tracks runner and verification progress before the first action signal", async () => {

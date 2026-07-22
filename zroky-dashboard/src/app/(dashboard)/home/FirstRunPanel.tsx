@@ -118,7 +118,7 @@ function stepHint(stepId: (typeof STEPS)[number]["id"], state: StepState): strin
   return "Verify first run now";
 }
 
-export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
+export function FirstRunPanel({ signals, readOnly = false }: { signals: FirstRunSignals; readOnly?: boolean }) {
   const states = STEPS.map((step) => stepState(step.id, signals));
   const currentIndex = states.findIndex((state) => state === "current");
   const completedCount = states.filter((state) => state === "done").length;
@@ -160,7 +160,7 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
                 </div>
                 <div className="mc-step-foot">
                   <span className="mc-step-hint">{stepHint(step.id, state)}</span>
-                  {state === "current" ? (
+                  {state === "current" && !readOnly ? (
                     <DashboardButtonLink href={step.href} icon={<ArrowRight />} iconPosition="right" size="sm" variant="primary">
                       {step.cta}
                     </DashboardButtonLink>
@@ -192,6 +192,7 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
         </div>
         <p className="mc-first-run-help">{completedCount} of {STEPS.length} setup steps complete.</p>
       </div>
+      {readOnly ? <p className="mc-muted">Read-only: ask an owner or admin to change setup.</p> : null}
     </section>
   );
 }

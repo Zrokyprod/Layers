@@ -15,6 +15,7 @@ import {
   type RuntimePolicyDecisionResponse,
   type SourceMutationSummaryResponse,
   type SourceMutationView,
+  listMyProjects,
 } from "@/lib/api";
 import { buildFleetView } from "@/lib/agent-fleet";
 import { formatCount, timeSince } from "@/lib/format";
@@ -61,6 +62,7 @@ type MissionSource =
   | "billingUsage";
 
 type MissionAvailability = Record<MissionSource, boolean>;
+type HomeRole = string | null;
 
 const DEFAULT_HOME_WINDOW_DAYS = 7;
 const MS_PER_DAY = 86_400_000;
@@ -146,6 +148,11 @@ function firstRunSignals(data: MissionData): FirstRunSignals {
 
 function hasProtectedActionSignal(signals: FirstRunSignals): boolean {
   return signals.hasActionIntent || signals.hasProofSignal;
+}
+
+function canChangeHomeSetup(role: HomeRole): boolean {
+  const normalized = role?.trim().toLowerCase();
+  return normalized === "owner" || normalized === "admin";
 }
 
 function quotaWarning(usage: BillingUsageResponse | null): string | null {
@@ -454,6 +461,7 @@ function unavailableSourceCount(availability: MissionAvailability): number {
 }
 
 export default function HomePage() {
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const dateRange = useDashboardStore((state) => state.dateRange);
   const summaryDays = useMemo(() => homeWindowDays(dateRange), [dateRange]);
@@ -462,18 +470,26 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
+  const [projectRole, setProjectRole] = useState<HomeRole>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
     try {
-      const summary = await getHomeSummary(summaryDays, signal);
+      const [summary, projects] = await Promise.all([
+        getHomeSummary(summaryDays, signal),
+        listMyProjects(signal).catch(() => []),
+      ]);
       if (signal?.aborted) {
         return;
       }
+      const project = selectedProject
+        ? projects.find((item) => item.project_id === selectedProject) ?? null
+        : projects[0] ?? null;
       const nextAvailability = availabilityFromSummary(summary);
       setData(missionDataFromSummary(summary));
       setAvailability(nextAvailability);
       setLoadErrors(unavailableSourceCount(nextAvailability));
+      setProjectRole(project?.role ?? null);
       setLastLoadedAt(new Date().toISOString());
     } catch {
       if (signal?.aborted) {
@@ -481,6 +497,7 @@ export default function HomePage() {
       }
       setData(EMPTY_DATA);
       setAvailability(NO_SOURCES_AVAILABLE);
+      setProjectRole(null);
       setLoadErrors(1);
       setLastLoadedAt(null);
     } finally {
@@ -488,7 +505,7 @@ export default function HomePage() {
         setIsLoading(false);
       }
     }
-  }, [summaryDays]);
+  }, [selectedProject, summaryDays]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -541,6 +558,7 @@ export default function HomePage() {
 
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
+  const canChangeSetup = canChangeHomeSetup(projectRole);
   const metrics = proofMetrics(data, availability);
   const trustItems = trustHealth(data, availability);
   const verdict = homeVerdict(data, trustItems, loadErrors, homeUnlocked);
@@ -571,12 +589,12 @@ export default function HomePage() {
           updatedLabel={updatedLabel}
           loading={isLoading}
           errorCount={loadErrors}
-          hideCta={showFirstRun}
+          hideCta={showFirstRun || !canChangeSetup}
           quotaWarning={quotaWarning(data.billingUsage)}
           onRefresh={() => void load()}
         />
 
-        {showFirstRun ? <FirstRunPanel signals={signals} /> : null}
+        {showFirstRun ? <FirstRunPanel signals={signals} readOnly={!canChangeSetup} /> : null}
         <ProofStrip metrics={metrics} loading={initialLoading} />
         {!showFirstRun ? <DecisionQueue rows={rows} selectedId={null} loading={initialLoading} /> : null}
         <TrustMachineHealth items={trustItems} loading={initialLoading} />
