@@ -49,7 +49,7 @@ describe("WorkflowsPage", () => {
 
     await waitFor(() => expect(api.publishAssurancePack).toHaveBeenCalledTimes(1));
     expect(api.validateAssurancePack).toHaveBeenCalledTimes(1);
-    expect(api.publishAssurancePack).toHaveBeenCalledWith(expect.objectContaining({ workflow_key: "refund_resolution" }), "production");
+    expect(api.publishAssurancePack).toHaveBeenCalledWith(expect.objectContaining({ workflow_key: "payroll_export" }), "production");
     expect(screen.getByText("refund_resolution@1.0.0 published to production.")).toBeInTheDocument();
   });
 
@@ -70,10 +70,10 @@ describe("WorkflowsPage", () => {
   it("selects a workflow pack from the library", () => {
     render(<WorkflowsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /payroll_export/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vendor_payment/i }));
 
-    expect(screen.getByRole("heading", { name: "payroll_export" })).toBeInTheDocument();
-    expect(screen.getAllByText("workday_payroll").length).toBeGreaterThan(0);
-    expect((screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement).value).toContain('"workflow_key": "payroll_export"');
+    expect(screen.getByRole("heading", { name: "vendor_payment" })).toBeInTheDocument();
+    expect(screen.getAllByText("payment_ledger").length).toBeGreaterThan(0);
+    expect((screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement).value).toContain('"workflow_key": "vendor_payment"');
   });
 });

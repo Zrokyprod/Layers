@@ -230,7 +230,7 @@ function errorMessage(error: unknown): string {
   return "Request failed.";
 }
 
-function fieldValue(item: unknown, key: string, fallback = "—"): string {
+function fieldValue(item: unknown, key: string, fallback = "-"): string {
   if (!item || typeof item !== "object") return fallback;
   const value = (item as Record<string, unknown>)[key];
   return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
@@ -260,7 +260,7 @@ function Sparkline({ tone }: { tone: WorkflowTone }) {
 }
 
 export default function WorkflowsPage() {
-  const [selectedWorkflowKey, setSelectedWorkflowKey] = useState(() => String(WORKFLOW_CATALOG[0]?.pack.workflow_key ?? ""));
+  const [selectedWorkflowKey, setSelectedWorkflowKey] = useState("payroll_export");
   const selectedWorkflow = WORKFLOW_CATALOG.find((workflow) => workflow.pack.workflow_key === selectedWorkflowKey) ?? WORKFLOW_CATALOG[0];
   const [draft, setDraft] = useState(() => prettyJson(selectedWorkflow.pack));
   const [environment, setEnvironment] = useState("production");
@@ -476,7 +476,15 @@ export default function WorkflowsPage() {
               <p>Select a workflow contract to inspect, validate, or publish.</p>
             </div>
           </div>
-          <div className={styles.packList}>
+          <div className={styles.packTable} aria-label="Workflow library">
+            <div className={styles.packTableHead}>
+              <span>Pack</span>
+              <span>Status</span>
+              <span>Source</span>
+              <span>Owner</span>
+              <span>Version</span>
+              <span>Action</span>
+            </div>
             {WORKFLOW_CATALOG.map((workflow) => {
               const workflowKey = String(workflow.pack.workflow_key ?? "");
               const selected = workflowKey === selectedWorkflowKey;
@@ -489,11 +497,17 @@ export default function WorkflowsPage() {
                   onClick={() => selectWorkflow(workflow)}
                   type="button"
                 >
-                  <span>
+                  <span className={styles.packName}>
                     <strong>{workflowKey}</strong>
                     <small>{workflow.description}</small>
                   </span>
-                  <StatusBadge tone={itemTone}>{workflow.status.replace("_", " ")}</StatusBadge>
+                  <span>
+                    <StatusBadge tone={itemTone}>{workflow.status.replace("_", " ")}</StatusBadge>
+                  </span>
+                  <code>{workflow.source}</code>
+                  <span>{workflow.owner}</span>
+                  <code>{String(workflow.pack.version ?? "-")}</code>
+                  <span className={styles.packAction} aria-hidden="true">...</span>
                 </button>
               );
             })}
