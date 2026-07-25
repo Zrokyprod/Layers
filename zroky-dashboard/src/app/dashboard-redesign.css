@@ -23668,6 +23668,109 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 13px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero {
+  display: grid !important;
+  gap: 14px !important;
+  min-height: 158px !important;
+  padding: 16px !important;
+  border: 1px solid var(--zk-border-strong) !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero-top {
+  display: grid !important;
+  grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.18fr) !important;
+  gap: 20px !important;
+  align-items: center !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-kicker {
+  color: #71717a !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero h1 {
+  margin: 0 !important;
+  color: #111827 !important;
+  font-size: 30px !important;
+  font-weight: 760 !important;
+  letter-spacing: -0.06em !important;
+  line-height: 1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero p {
+  max-width: 520px !important;
+  margin: 8px 0 0 !important;
+  color: #52525b !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-summary {
+  display: grid !important;
+  align-content: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  padding-left: 18px !important;
+  border-left: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-summary strong {
+  color: #111827 !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 25px !important;
+  font-weight: 760 !important;
+  letter-spacing: -0.055em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-summary span {
+  color: #52525b !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-updated,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 32px !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--zk-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #52525b !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-pill {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #047857 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-actions .dashboard-button {
+  min-height: 32px !important;
+  height: 32px !important;
+  font-size: 12px !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-button-primary {
   border-color: #09090b !important;
   background: #09090b !important;

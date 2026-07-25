@@ -50,6 +50,10 @@ function safeFilePart(value: string) {
   return value.replace(/[^a-zA-Z0-9_.-]+/g, "_");
 }
 
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
 function downloadJsonFile(payload: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -536,6 +540,8 @@ export default function EvidencePage() {
 
   const verdict = useDemoData ? demoEvidenceVerdict() : buildVerdict({ counts, error, loading });
   const proofMetrics = useDemoData ? demoEvidenceMetrics() : metricsForCounts(counts);
+  const heroSummaryTitle = `${formatCount(counts.total)} proof records`;
+  const heroSummaryDetail = `${formatCount(counts.exportReady)} export-ready · ${formatCount(counts.needsVerification)} need verification · ${formatCount(counts.exceptions)} exceptions`;
   const updatedAt = latestCheckedAt(rows);
   const isRefreshing = actionsQuery.isFetching || decisionsQuery.isFetching || outcomesQuery.isFetching;
 
@@ -554,6 +560,8 @@ export default function EvidencePage() {
         metrics={proofMetrics}
         onMetricClick={applyFilterHref}
         onRefresh={() => void refreshEvidence()}
+        summaryDetail={heroSummaryDetail}
+        summaryTitle={heroSummaryTitle}
         updatedLabel={loading ? "Syncing" : updatedAt ? `Updated ${formatDateTime(updatedAt)}` : "No records"}
       />
       <DashboardWorkspace
