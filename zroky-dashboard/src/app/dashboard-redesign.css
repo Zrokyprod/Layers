@@ -8987,24 +8987,24 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 /* Evidence Mission Control. Receipt-first proof ledger and selected export panel. */
 .app-shell[data-dashboard-system="control-v1"] .ev-page {
-  --ev-canvas: #f5f8f6;
-  --ev-card: #ffffff;
-  --ev-panel: #eef5f1;
-  --ev-border: #dae6df;
-  --ev-border-strong: #bdcdc5;
-  --ev-text: #1a1a17;
-  --ev-text-soft: #57564e;
-  --ev-text-muted: #778276;
-  --ev-accent: #2f5f66;
-  --ev-accent-hover: #244d53;
-  --ev-accent-soft: rgba(47, 95, 102, 0.08);
-  --ev-success: #16a34a;
-  --ev-success-soft: rgba(22, 163, 74, 0.1);
-  --ev-warning: #b7791f;
-  --ev-warning-soft: rgba(183, 121, 31, 0.1);
-  --ev-danger: #d14343;
-  --ev-danger-soft: rgba(209, 67, 67, 0.1);
-  --ev-neutral-soft: rgba(138, 134, 122, 0.1);
+  --ev-canvas: var(--zk-bg);
+  --ev-card: var(--zk-surface);
+  --ev-panel: var(--zk-surface-2);
+  --ev-border: var(--zk-border);
+  --ev-border-strong: var(--zk-border-strong);
+  --ev-text: var(--zk-text);
+  --ev-text-soft: var(--zk-muted);
+  --ev-text-muted: var(--zk-faint);
+  --ev-accent: var(--zk-accent);
+  --ev-accent-hover: var(--zk-accent-hover);
+  --ev-accent-soft: color-mix(in srgb, var(--zk-accent) 10%, transparent);
+  --ev-success: var(--zk-success);
+  --ev-success-soft: var(--zk-success-bg);
+  --ev-warning: var(--zk-warning);
+  --ev-warning-soft: var(--zk-warning-bg);
+  --ev-danger: var(--zk-danger);
+  --ev-danger-soft: var(--zk-danger-bg);
+  --ev-neutral-soft: var(--zk-surface-3);
   display: grid !important;
   gap: 14px !important;
   width: 100% !important;
@@ -9028,12 +9028,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 14px !important;
   align-items: stretch !important;
   padding: 16px !important;
-  border: 1px solid rgba(47, 95, 102, 0.2) !important;
-  border-radius: 10px !important;
-  background:
-    linear-gradient(135deg, rgba(47, 95, 102, 0.08), rgba(255, 255, 255, 0) 46%),
-    #ffffff !important;
-  box-shadow: 0 1px 2px rgba(23, 23, 19, 0.04) !important;
+  border: 1px solid var(--zk-border-strong) !important;
+  border-radius: var(--zk-radius-card) !important;
+  background: var(--zk-surface) !important;
+  box-shadow: none !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-command-copy {
@@ -9177,9 +9175,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-card,
 .app-shell[data-dashboard-system="control-v1"] .ev-proof-detail {
   border: 1px solid var(--ev-border) !important;
-  border-radius: 8px !important;
+  border-radius: var(--zk-radius-card) !important;
   background: var(--ev-card) !important;
-  box-shadow: 0 1px 2px rgba(23, 23, 19, 0.04) !important;
+  box-shadow: none !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-section-head p,
@@ -9339,9 +9337,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-filter-chip[data-active="true"] {
-  border-color: rgba(47, 95, 102, 0.22) !important;
-  background: var(--ev-accent-soft) !important;
-  color: var(--ev-accent) !important;
+  border-color: var(--zk-text) !important;
+  background: var(--zk-text) !important;
+  color: var(--zk-surface) !important;
   font-weight: 600 !important;
 }
 
@@ -23612,6 +23610,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-width: 0 1px 0 0 !important;
   border-color: rgba(15, 23, 42, 0.12) !important;
   border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-page .dashboard-verdict-hero {
+  border: 1px solid var(--zk-border-strong) !important;
+  border-left-width: 1px !important;
   box-shadow: none !important;
 }
 
