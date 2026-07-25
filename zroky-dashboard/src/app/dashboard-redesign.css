@@ -23639,6 +23639,194 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   box-shadow: none !important;
 }
 
+/* Evidence final polish: align proof ledger with Home / Operations / Workflows. */
+.app-shell[data-dashboard-system="control-v1"] .evidence-page {
+  --ev-accent: var(--zk-text);
+  --ev-accent-hover: #27272a;
+  --ev-accent-soft: #f4f4f5;
+  --ev-panel: #ffffff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-button-primary {
+  border-color: #09090b !important;
+  background: #09090b !important;
+  color: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-button-primary:hover {
+  border-color: #27272a !important;
+  background: #27272a !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-button-primary :where(.dashboard-button-label, .dashboard-button-glyph) {
+  color: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-verdict-hero,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page :where(.ev-ledger-panel, .ev-focused-card, .ev-proof-detail) {
+  border-color: var(--zk-border) !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-verdict-hero {
+  padding: 18px 20px !important;
+  border-left-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-strip {
+  gap: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid var(--zk-border) !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card {
+  min-height: 96px !important;
+  padding: 14px !important;
+  border-width: 0 1px 0 0 !important;
+  border-radius: 0 !important;
+  border-left-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card:last-child {
+  border-right-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card:hover {
+  background: #fafafa !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-head,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-eyebrow,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-row-kind {
+  color: #64748b !important;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card strong {
+  font-family: var(--font-jetbrains-mono), "SF Mono", Consolas, monospace !important;
+  font-size: 25px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-panel {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-section-head {
+  align-items: center !important;
+  margin: 0 !important;
+  padding: 16px 18px !important;
+  border-bottom: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-section-head h2,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-copy h2,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-simple-head h3 {
+  margin: 0 !important;
+  color: #0f172a !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-section-head p,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-copy p {
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-toolbar,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-search-row {
+  margin: 0 !important;
+  padding: 12px 18px !important;
+  border-bottom: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-filter-chip {
+  min-height: 32px !important;
+  border-color: var(--zk-border) !important;
+  background: #ffffff !important;
+  color: #52525b !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-filter-chip[data-active="true"] {
+  border-color: #09090b !important;
+  background: #09090b !important;
+  color: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-search-field,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-manifest-scope {
+  min-height: 36px !important;
+  border-color: var(--zk-border) !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-list {
+  gap: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 14px !important;
+  padding: 14px 18px !important;
+  border-width: 0 0 1px 0 !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row:last-child {
+  border-bottom-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row:hover {
+  background: #fafafa !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row[data-focused="true"] {
+  border-left: 3px solid #09090b !important;
+  background: #fafafa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-row-meta div,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-meta div,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .evidence-pack-proof-grid > div {
+  border-color: var(--zk-border) !important;
+  background: #fafafa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-link {
+  color: #18181b !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-detail {
+  padding: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list {
+  margin: 16px 18px !important;
+  border-color: var(--zk-border) !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list span {
+  border: 1px solid var(--zk-border) !important;
+  background: #f4f4f5 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .connectors-readiness-strip .dashboard-metric-card strong {
   font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 25px !important;
