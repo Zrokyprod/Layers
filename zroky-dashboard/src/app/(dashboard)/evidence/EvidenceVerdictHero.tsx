@@ -21,7 +21,6 @@ type EvidenceVerdictHeroProps = {
 };
 
 export function EvidenceVerdictHero({
-  badge,
   copy,
   ctaHref,
   ctaLabel,
@@ -32,7 +31,6 @@ export function EvidenceVerdictHero({
   summaryDetail,
   summaryTitle,
   title,
-  updatedLabel,
 }: EvidenceVerdictHeroProps) {
   return (
     <>
@@ -49,14 +47,18 @@ export function EvidenceVerdictHero({
           </div>
         </div>
         <div className="ev-operator-actions">
-          <span className="ev-operator-updated">{updatedLabel}</span>
-          <span className="ev-operator-pill">{badge}</span>
-          <DashboardButton icon={<RefreshCw />} onClick={onRefresh} disabled={isRefreshing} variant="soft">
-            {isRefreshing ? "Refreshing" : "Refresh"}
-          </DashboardButton>
           <DashboardButtonLink href={ctaHref} variant="primary">
             {ctaLabel}
           </DashboardButtonLink>
+          <DashboardButton
+            aria-label={isRefreshing ? "Refreshing evidence" : "Refresh evidence"}
+            icon={<RefreshCw />}
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            size="icon"
+            title={isRefreshing ? "Refreshing" : "Refresh"}
+            variant="soft"
+          />
         </div>
       </section>
       <DashboardMetricStrip
