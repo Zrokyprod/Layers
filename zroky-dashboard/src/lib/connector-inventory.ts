@@ -44,10 +44,15 @@ export type ConnectorInventoryId = ProofConnectorId | SupportConnectorId;
 
 export const LAUNCH_VISIBLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "generic_rest",
-  "stripe_refund",
-  "postgres_read",
   "github",
-  "slack",
+  "hubspot_crm",
+  "jira_issue",
+  "salesforce_crm",
+  "shopify_admin",
+  "stripe_refund",
+  "stripe_payment",
+  "zendesk_ticket",
+  "postgres_read",
 ]);
 
 export const CONNECTOR_DISPLAY_LABELS: Record<string, string> = {

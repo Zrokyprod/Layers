@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -645,6 +645,10 @@ function renderWithConnector(connector: string) {
   render(<IntegrationsPage />);
 }
 
+function clickFirstButton(name: string) {
+  fireEvent.click(screen.getAllByRole("button", { name })[0]);
+}
+
 describe("IntegrationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1148,17 +1152,17 @@ describe("IntegrationsPage", () => {
       await screen.findByRole("heading", { name: "Connectors" }),
     ).toBeInTheDocument();
 
-    expect(screen.getByRole("region", { name: "Verification coverage audit" })).toBeInTheDocument();
-    expect(screen.getAllByText("refund").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Verifier healthy").length).toBeGreaterThan(0);
-    expect(screen.getByText("custom")).toBeInTheDocument();
-    expect(screen.getByText("No verifier")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recent test-reads" })).toBeInTheDocument();
+    expect(screen.getByText("Primitive")).toBeInTheDocument();
+    expect(screen.queryByText("Action")).not.toBeInTheDocument();
+    expect(screen.getByText("Selected")).toBeInTheDocument();
+    expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
 
     expect(screen.getByRole("heading", { name: "Available systems" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
-    expect(screen.getByText("Verify refunds and payments from Stripe.")).toBeInTheDocument();
-    expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
+    expect(screen.getAllByText("Payments · Transactions · Refunds").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing / Not connected").length).toBeGreaterThan(0);
+    clickFirstButton("Connect Stripe");
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
@@ -1166,25 +1170,23 @@ describe("IntegrationsPage", () => {
     expect(screen.getByRole("region", { name: "Commerce" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Finance & ERP" })).toBeInTheDocument();
     expect(screen.getAllByText("Custom REST API").length).toBeGreaterThan(0);
-    expect(screen.getByText("HubSpot CRM")).toBeInTheDocument();
-    expect(screen.getByText("Salesforce CRM")).toBeInTheDocument();
-    expect(screen.getByText("Zoho CRM")).toBeInTheDocument();
-    expect(screen.getByText("Zendesk ticket")).toBeInTheDocument();
-    expect(screen.getByText("Jira / JSM")).toBeInTheDocument();
+    expect(screen.getAllByText("HubSpot CRM").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Salesforce CRM").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Zendesk ticket").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Jira / JSM").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Stripe").length).toBeGreaterThan(0);
-    expect(screen.getByText("Refunds + payments")).toBeInTheDocument();
-    expect(screen.getByText("Razorpay")).toBeInTheDocument();
-    expect(screen.getByText("Shopify Admin")).toBeInTheDocument();
-    expect(screen.getByText("Refund ledger")).toBeInTheDocument();
-    expect(screen.getByText("Customer / CRM record")).toBeInTheDocument();
+    expect(screen.getAllByText("Payments · Transactions · Refunds").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Shopify Admin").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SQL database").length).toBeGreaterThan(0);
-    expect(screen.getByText("Slack")).toBeInTheDocument();
-    expect(screen.getByText("GitHub")).toBeInTheDocument();
+    expect(screen.getAllByText("GitHub").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("region", { name: "Finance & ERP" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Razorpay")).not.toBeInTheDocument();
+    expect(screen.queryByText("Slack")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zoho CRM")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "stripe" } });
-    expect(screen.getByRole("button", { name: /Stripe.*Refunds \+ payments/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stripe.*Payments.*Transactions.*Refunds/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Stripe payment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /HubSpot CRM/i })).not.toBeInTheDocument();
 
@@ -1211,12 +1213,50 @@ describe("IntegrationsPage", () => {
     await waitFor(() => expect(api.getToolRegistry).toHaveBeenCalledTimes(1));
   });
 
+  it("keeps connect primary and lets refresh retry connector feeds", async () => {
+    api.getGenericRestConnectorStatus.mockRejectedValueOnce(new Error("feed unavailable"));
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Connectors" });
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Connect Stripe" }).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => expect(api.getGenericRestConnectorStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows only launch connector test-read activity", async () => {
+    api.listOutcomeReconciliations.mockResolvedValueOnce({
+      items: [
+        genericCheck({
+          connector_type: "stripe_refund",
+          metadata: { connector_kind: "stripe_refund" },
+          verdict: "mismatched",
+          checked_at: "2026-06-24T09:11:00Z",
+        }),
+        genericCheck({
+          connector_type: "razorpay_refund",
+          metadata: { connector_kind: "razorpay_refund" },
+          checked_at: "2026-06-24T09:12:00Z",
+        }),
+      ],
+      total_in_page: 2,
+    });
+    render(<IntegrationsPage />);
+
+    const audit = await screen.findByRole("region", { name: "Recent test-reads" });
+    await waitFor(() => expect(within(audit).getByText("Stripe")).toBeInTheDocument());
+
+    expect(within(audit).getByText("Mismatched")).toBeInTheDocument();
+    expect(within(audit).queryByText("Razorpay")).not.toBeInTheDocument();
+    expect(within(audit).queryByText("No test-reads yet.")).not.toBeInTheDocument();
+  });
+
   it("saves and tests the Generic REST verifier setup path", async () => {
     render(<IntegrationsPage />);
 
     await screen.findByRole("heading", { name: "Connectors" });
     fireEvent.click(screen.getByRole("button", { name: /Custom REST API/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Set up custom REST" }));
+    clickFirstButton("Connect custom REST");
     fireEvent.change(screen.getByLabelText("Base URL"), {
       target: { value: "https://internal.example.com/api" },
     });
@@ -1290,7 +1330,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("stripe_payment");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
+    clickFirstButton("Connect Stripe");
     fireEvent.change(screen.getByLabelText("Stripe secret key"), {
       target: { value: "sk_live_payment" },
     });
@@ -1340,69 +1380,11 @@ describe("IntegrationsPage", () => {
     expect(await screen.findByText("Stripe payment verifier test recorded matched.")).toBeInTheDocument();
   });
 
-  it("saves and tests the native Razorpay refund verifier setup path", async () => {
-    renderWithConnector("razorpay_refund");
-
-    await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Razorpay" }));
-    fireEvent.change(screen.getByLabelText("Razorpay key id"), {
-      target: { value: "rzp_test_key" },
-    });
-    fireEvent.change(screen.getByLabelText("Razorpay key secret"), {
-      target: { value: "razorpay-secret" },
-    });
-    fireEvent.change(screen.getByLabelText("Refund ID"), {
-      target: { value: "rfnd_123" },
-    });
-    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
-      target: {
-        value: JSON.stringify(
-          {
-            refund_id: "rfnd_123",
-            amount_minor: 4250,
-            amount_major: "42.5",
-            currency: "INR",
-            status: "processed",
-          },
-          null,
-          2,
-        ),
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
-
-    await waitFor(() => {
-      expect(api.saveRazorpayRefundConnectorConfig).toHaveBeenCalledWith({
-        key_id: "rzp_test_key",
-        key_secret: "razorpay-secret",
-      });
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
-
-    await waitFor(() => {
-      expect(api.testRazorpayRefundConnector).toHaveBeenCalledWith({
-        refund_id: "rfnd_123",
-        action_type: "refund",
-        claimed: {
-          refund_id: "rfnd_123",
-          amount_minor: 4250,
-          amount_major: "42.5",
-          currency: "INR",
-          status: "processed",
-        },
-        match_fields: ["refund_id", "amount_minor", "currency", "status"],
-      });
-    });
-    expect(await screen.findByText("Razorpay verifier test recorded matched.")).toBeInTheDocument();
-  });
-
   it("saves and tests the native Shopify Admin verifier setup path", async () => {
     renderWithConnector("shopify_admin");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Shopify Admin" }));
+    clickFirstButton("Connect Shopify Admin");
     fireEvent.change(screen.getByLabelText("Shop Admin base URL"), {
       target: { value: "https://example.myshopify.com" },
     });
@@ -1460,7 +1442,7 @@ describe("IntegrationsPage", () => {
     renderWithConnector("hubspot_crm");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect HubSpot CRM" }));
+    clickFirstButton("Connect HubSpot CRM");
     fireEvent.change(screen.getByLabelText("Private app token"), {
       target: { value: "hubspot-private-app-token" },
     });
@@ -1508,67 +1490,11 @@ describe("IntegrationsPage", () => {
     expect(await screen.findByText("HubSpot verifier test recorded matched.")).toBeInTheDocument();
   });
 
-  it("saves and tests the native Zoho CRM verifier setup path", async () => {
-    renderWithConnector("zoho_crm");
-
-    await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Zoho CRM" }));
-    fireEvent.change(screen.getByLabelText("Manual bearer token"), {
-      target: { value: "zoho-oauth-access-token" },
-    });
-    fireEvent.change(screen.getByLabelText("Module name"), {
-      target: { value: "Contacts" },
-    });
-    fireEvent.change(screen.getByLabelText("Record ID"), {
-      target: { value: "1234567890000000001" },
-    });
-    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
-      target: {
-        value: JSON.stringify(
-          {
-            zoho_record_id: "1234567890000000001",
-            Email: "owner@example.com",
-          },
-          null,
-          2,
-        ),
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
-
-    await waitFor(() => {
-      expect(api.saveZohoCrmConnectorConfig).toHaveBeenCalledWith({
-        base_url: "https://www.zohoapis.com",
-        query: {
-          fields: "id,Full_Name,Email,Phone,Company,Stage,Amount,Lead_Status,Owner,Modified_Time",
-        },
-        bearer_token: "zoho-oauth-access-token",
-      });
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
-
-    await waitFor(() => {
-      expect(api.testZohoCrmConnector).toHaveBeenCalledWith({
-        module_name: "Contacts",
-        record_ref: "1234567890000000001",
-        action_type: "customer_record_update",
-        claimed: {
-          zoho_record_id: "1234567890000000001",
-          Email: "owner@example.com",
-        },
-        match_fields: ["zoho_record_id", "Email"],
-      });
-    });
-    expect(await screen.findByText("Zoho CRM verifier test recorded matched.")).toBeInTheDocument();
-  });
-
   it("saves and tests the native Jira issue verifier setup path", async () => {
     renderWithConnector("jira_issue");
 
     await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect Jira / JSM" }));
+    clickFirstButton("Connect Jira / JSM");
     fireEvent.change(screen.getByLabelText("Atlassian email"), {
       target: { value: "agent@example.com" },
     });
@@ -1617,84 +1543,4 @@ describe("IntegrationsPage", () => {
     expect(await screen.findByText("Jira verifier test recorded matched.")).toBeInTheDocument();
   });
 
-  it("saves and tests the native NetSuite finance verifier setup path", async () => {
-    renderWithConnector("netsuite_finance");
-
-    await screen.findByRole("heading", { name: "Connectors" });
-    fireEvent.click(screen.getByRole("button", { name: "Connect NetSuite finance" }));
-    fireEvent.change(screen.getByLabelText("Bearer token"), {
-      target: { value: "netsuite-token" },
-    });
-    fireEvent.change(screen.getByLabelText("Record type"), {
-      target: { value: "vendorBill" },
-    });
-    fireEvent.change(screen.getByLabelText("Record ID"), {
-      target: { value: "12345" },
-    });
-    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
-      target: {
-        value: JSON.stringify(
-          {
-            netsuite_record_id: "12345",
-            record_type: "vendorBill",
-            tran_id: "VB1001",
-            amount_minor: 125000,
-            amount_major: "1250",
-            currency: "USD",
-            status: "approved",
-          },
-          null,
-          2,
-        ),
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Save access/i }));
-
-    await waitFor(() => {
-      expect(api.saveNetSuiteFinanceConnectorConfig).toHaveBeenCalledWith({
-        base_url: "https://example.suitetalk.api.netsuite.com",
-        bearer_token: "netsuite-token",
-      });
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: /Run preflight/i }));
-
-    await waitFor(() => {
-      expect(api.testNetSuiteFinanceConnector).toHaveBeenCalledWith({
-        record_type: "vendorBill",
-        record_ref: "12345",
-        action_type: "invoice_spend_approval",
-        claimed: {
-          netsuite_record_id: "12345",
-          record_type: "vendorBill",
-          tran_id: "VB1001",
-          amount_minor: 125000,
-          amount_major: "1250",
-          currency: "USD",
-          status: "approved",
-        },
-        match_fields: ["netsuite_record_id", "record_type", "tran_id", "amount_minor", "currency", "status"],
-      });
-    });
-    expect(await screen.findByText("NetSuite verifier test recorded matched.")).toBeInTheDocument();
-  });
-
-  it("starts the Zoho CRM OAuth connection flow", async () => {
-    const assignSpy = vi.spyOn(externalNavigator, "assign").mockImplementation(() => undefined);
-    try {
-      renderWithConnector("zoho_crm");
-
-      await screen.findByRole("heading", { name: "Connectors" });
-      fireEvent.click(screen.getByRole("button", { name: "Connect Zoho CRM" }));
-      fireEvent.click(await screen.findByRole("button", { name: /Connect with OAuth/i }));
-
-      await waitFor(() => expect(api.startZohoCrmOAuth).toHaveBeenCalledTimes(1));
-      expect(assignSpy).toHaveBeenCalledWith(
-        "https://accounts.zoho.com/oauth/v2/auth?state=test",
-      );
-    } finally {
-      assignSpy.mockRestore();
-    }
-  });
 });

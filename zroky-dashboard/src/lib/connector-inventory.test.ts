@@ -541,17 +541,25 @@ describe("connector-inventory", () => {
 
     expect(inventory.rows.map((row) => row.id)).toEqual([
       "generic_rest",
+      "hubspot_crm",
+      "salesforce_crm",
+      "zendesk_ticket",
+      "jira_issue",
       "stripe_refund",
+      "stripe_payment",
+      "shopify_admin",
       "postgres_read",
       "github",
-      "slack",
     ]);
     expect(inventory.categoryGroups.map((group) => group.category)).toEqual([
       "payments",
+      "commerce",
+      "crm",
+      "support_itsm",
       "workflow",
       "database_custom",
     ]);
-    expect(inventory.rows.some((row) => row.id === "hubspot_crm" || row.id === "stripe_payment")).toBe(false);
+    expect(inventory.rows.some((row) => row.id === "razorpay_refund" || row.id === "slack")).toBe(false);
   });
 
   it("focuses counts on verifier health, not vertical connector names", () => {
