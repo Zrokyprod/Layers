@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Database, FileJson, GitBranch, Rocket, ShieldCheck, Workflow } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Database, FileJson, GitBranch, Rocket, ShieldCheck, Workflow } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import {
@@ -77,7 +77,7 @@ const WORKFLOW_CATALOG: WorkflowCatalogItem[] = [
     pack: STARTER_PACK,
     policy: "High-value refunds require approval",
     sla: "Resolve mismatches in 4h",
-    source: "ledger_refunds",
+    source: "stripe_refunds",
     status: "draft",
     versions: ["1.0.0"],
   },
@@ -127,7 +127,7 @@ const WORKFLOW_CATALOG: WorkflowCatalogItem[] = [
   },
   {
     description: "Vendor payment claims must match the bank/payment system before proof is exportable.",
-    owner: "Procurement",
+    owner: "Finance Ops",
     pack: {
       ...STARTER_PACK,
       workflow_key: "vendor_payment",
@@ -166,7 +166,7 @@ const WORKFLOW_CATALOG: WorkflowCatalogItem[] = [
     },
     policy: "Exceptions require controller approval",
     sla: "Contain mismatches in 30m",
-    source: "payment_ledger",
+    source: "ap_system",
     status: "active",
     versions: ["1.0.0", "1.1.0", "1.2.0"],
   },
@@ -332,36 +332,24 @@ export default function WorkflowsPage() {
       tone: recoveryPlaybooks.length > 0 ? "ready" : "warning",
     },
   ] as const satisfies ReadonlyArray<{ detail: string; label: string; status: string; tone: WorkflowTone; value: string }>;
-  const readinessRows = [
+  const statusCards = [
     {
-      label: "Draft JSON",
-      detail: parsedDraft.error ?? "Parseable Assurance Pack object",
-      status: parsedDraft.error ? "Blocked" : "Ready",
-      tone: parsedDraft.error ? "critical" : "ready",
+      detail: needsBinding > 0 ? "Missing binding and SLA / owner." : "Ready to publish.",
+      status: needsBinding > 0 ? "Blocked" : "OK",
+      title: "Publish gate",
+      tone: needsBinding > 0 ? "critical" as WorkflowTone : "ready" as WorkflowTone,
     },
     {
-      label: "Backend schema",
-      detail: result.type === "validated" || result.type === "published" ? `${summary?.workflowKey}@${summary?.version} accepted` : "Validate before publish",
-      status: result.type === "error" ? "Blocked" : result.type === "idle" ? "Pending" : "Ready",
-      tone: result.type === "error" ? "critical" : result.type === "idle" ? "warning" : "ready",
+      detail: parsedDraft.error ?? (result.type === "idle" ? "Draft parse check passed." : result.message),
+      status: parsedDraft.error || result.type === "error" ? "Blocked" : "OK",
+      title: "Backend response",
+      tone: parsedDraft.error || result.type === "error" ? "critical" as WorkflowTone : "ready" as WorkflowTone,
     },
     {
-      label: "Source bindings",
-      detail: `${summary?.sourceBindings.length ?? 0} source-of-truth read path${summary?.sourceBindings.length === 1 ? "" : "s"}`,
-      status: (summary?.sourceBindings.length ?? 0) > 0 ? "Ready" : "Missing",
-      tone: (summary?.sourceBindings.length ?? 0) > 0 ? "ready" : "warning",
-    },
-    {
-      label: "Expected effects",
-      detail: `${summary?.effects.length ?? 0} outcome rule${summary?.effects.length === 1 ? "" : "s"} defined`,
-      status: (summary?.effects.length ?? 0) > 0 ? "Ready" : "Missing",
-      tone: (summary?.effects.length ?? 0) > 0 ? "ready" : "warning",
-    },
-    {
-      label: "Recovery playbook",
-      detail: `${summary?.recoveryPlaybooks.length ?? 0} recovery path${summary?.recoveryPlaybooks.length === 1 ? "" : "s"}`,
-      status: (summary?.recoveryPlaybooks.length ?? 0) > 0 ? "Ready" : "Missing",
-      tone: (summary?.recoveryPlaybooks.length ?? 0) > 0 ? "ready" : "warning",
+      detail: sourceBindings.length > 0 && expectedEffects.length > 0 ? "Contract schema and bindings valid." : "Binding or effect missing.",
+      status: sourceBindings.length > 0 && expectedEffects.length > 0 ? "Valid" : "Missing",
+      title: "Runtime contract",
+      tone: sourceBindings.length > 0 && expectedEffects.length > 0 ? "ready" as WorkflowTone : "warning" as WorkflowTone,
     },
   ] as const;
 
@@ -416,10 +404,7 @@ export default function WorkflowsPage() {
             <h2>{summary?.workflowKey ?? "Assurance Pack draft"}</h2>
             <StatusBadge tone={tone}>{validationLabel}</StatusBadge>
           </div>
-          <p>
-            Define what “correct” means before agents run. ZROKY uses this pack to govern intent,
-            verify source-of-truth outcomes, trigger recovery, and produce signed evidence.
-          </p>
+          <p>Workflow for exporting payroll data with policy-bound approval and verification.</p>
           <code className={styles.denominator}>
             {summary
               ? `${summary.workflowKey} · v${summary.version} · ${summary.effects.length} effects · ${summary.sourceBindings.length} sources · ${environment}`
@@ -428,10 +413,11 @@ export default function WorkflowsPage() {
         </div>
         <div className={styles.heroActions}>
           <DashboardButton
+            className={styles.blackButton}
             icon={<CheckCircle2 size={15} />}
             loading={busy === "validate"}
             onClick={runValidate}
-            variant={result.type === "validated" || result.type === "published" ? "soft" : "primary"}
+            variant="soft"
           >
             Validate
           </DashboardButton>
@@ -471,9 +457,7 @@ export default function WorkflowsPage() {
         <div className={cn(styles.card, styles.packListCard)}>
           <div className={styles.panelHeader}>
             <div>
-              <p className={styles.kicker}>Assurance Packs</p>
               <h2>Workflow library</h2>
-              <p>Select a workflow contract to inspect, validate, or publish.</p>
             </div>
           </div>
           <div className={styles.packTable} aria-label="Workflow library">
@@ -507,7 +491,7 @@ export default function WorkflowsPage() {
                   <code>{workflow.source}</code>
                   <span>{workflow.owner}</span>
                   <code>{String(workflow.pack.version ?? "-")}</code>
-                  <span className={styles.packAction}>Open</span>
+                  <span className={styles.packAction} aria-hidden="true">...</span>
                 </button>
               );
             })}
@@ -517,9 +501,7 @@ export default function WorkflowsPage() {
         <div className={cn(styles.card, styles.governanceCard)}>
           <div className={styles.panelHeader}>
             <div>
-              <p className={styles.kicker}>Binding</p>
-              <h2>Policy, source, SLA</h2>
-              <p>Operational controls attached to the selected workflow.</p>
+              <h2>Binding summary</h2>
             </div>
           </div>
           <div className={styles.bindingGrid}>
@@ -528,7 +510,7 @@ export default function WorkflowsPage() {
               ["Policy", selectedWorkflow.policy],
               ["SLA", selectedWorkflow.sla],
               ["Owner", selectedWorkflow.owner],
-              ["Versions", selectedWorkflow.versions.join(" → ")],
+              ["Versions", selectedWorkflow.versions.join(" -> ")],
             ].map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>
@@ -559,66 +541,29 @@ export default function WorkflowsPage() {
           <div className={styles.contractTable} role="list">
             {workflowRows.map((row) => (
               <div className={styles.contractRow} key={row.label} role="listitem">
+                <span>{row.label}</span>
                 <div>
-                  <span>{row.label}</span>
-                  <strong>{row.value}</strong>
-                  <small>{row.detail}</small>
+                  <strong data-tone={row.tone}>{row.value}</strong>
                 </div>
-                <StatusBadge tone={row.tone}>{row.status}</StatusBadge>
               </div>
             ))}
           </div>
         </section>
 
         <aside className={styles.sideStack} aria-label="Workflow readiness">
-          <section className={styles.card}>
-            <div className={styles.panelHeader}>
+          {statusCards.map((card) => (
+            <section className={cn(styles.card, styles.statusCard)} key={card.title}>
               <div>
-                <p className={styles.kicker}>Verification readiness</p>
-                <h2>Publish gate</h2>
+                <h2>{card.title}</h2>
+                <p>{card.detail}</p>
               </div>
-            </div>
-            <div className={styles.readinessList}>
-              {readinessRows.map((row) => (
-                <div className={styles.readinessRow} key={row.label}>
-                  <div>
-                    <strong>{row.label}</strong>
-                    <small>{row.detail}</small>
-                  </div>
-                  <StatusBadge tone={row.tone}>{row.status}</StatusBadge>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className={styles.card}>
-            <div className={styles.panelHeader}>
-              <div>
-                <p className={styles.kicker}>Result</p>
-                <h2>Backend response</h2>
-              </div>
-              <StatusBadge tone={tone}>{result.type}</StatusBadge>
-            </div>
-            {result.type !== "idle" ? <p className={styles.resultMessage}>{result.message}</p> : null}
-            <pre className={styles.resultPre} aria-label="Workflow API result">
-              {result.type === "idle" || result.type === "error" ? result.message : prettyJson(result.data)}
-            </pre>
-          </section>
-
-          <section className={styles.card}>
-            <div className={styles.panelHeader}>
-              <div>
-                <p className={styles.kicker}>Runtime contract</p>
-                <h2>What this controls</h2>
-              </div>
-            </div>
-            <ul className={styles.contractList}>
-              <li>Governance happens before execution.</li>
-              <li>Source bindings define proof reads after execution.</li>
-              <li>Recovery playbooks handle mismatched or missing outcomes.</li>
-              <li>Published workflow key and version are immutable.</li>
-            </ul>
-          </section>
+              <StatusBadge tone={card.tone}>{card.status}</StatusBadge>
+              <ChevronRight size={16} aria-hidden="true" />
+            </section>
+          ))}
+          <pre className={styles.resultPre} aria-label="Workflow API result">
+            {result.type === "idle" || result.type === "error" ? result.message : prettyJson(result.data)}
+          </pre>
         </aside>
       </div>
 

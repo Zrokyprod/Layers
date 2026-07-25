@@ -36,6 +36,26 @@
   box-sizing: border-box;
 }
 
+.workflowsDashboard :global(.dashboard-button-primary) {
+  color: #fff;
+  background: #09090b;
+  border-color: #09090b;
+}
+
+.workflowsDashboard :global(.dashboard-button-primary:hover:not(:disabled)) {
+  background: #27272a;
+  border-color: #27272a;
+}
+
+.workflowsDashboard .blackButton,
+:global(.app-shell[data-dashboard-system="control-v1"]) .workflowsDashboard .blackButton,
+.workflowsDashboard .blackButton:hover:not(:disabled),
+:global(.app-shell[data-dashboard-system="control-v1"]) .workflowsDashboard .blackButton:hover:not(:disabled) {
+  color: #fff !important;
+  background: #09090b !important;
+  border-color: #09090b !important;
+}
+
 .pageTitle {
   display: flex;
   align-items: end;
@@ -254,7 +274,7 @@
 }
 
 .editorCard {
-  min-height: 320px;
+  min-height: 0;
 }
 
 .contractCard {
@@ -360,9 +380,9 @@
 .packAction {
   justify-self: end;
   color: var(--text);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
 
 .bindingGrid {
@@ -406,11 +426,9 @@
 
 .contractRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-columns: 230px minmax(0, 1fr);
   align-items: center;
-  min-height: 66px;
-  padding: 11px 16px;
+  min-height: 42px;
   border-top: 1px solid var(--border);
 }
 
@@ -418,35 +436,60 @@
   border-top: 0;
 }
 
-.contractRow div {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
+.contractRow > span {
+  padding: 0 16px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.contractRow span {
-  color: var(--faint);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.contractRow div {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 16px;
+  border-left: 1px solid var(--border);
 }
 
 .contractRow strong {
+  min-width: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 14px;
-  font-weight: 720;
-  letter-spacing: -0.02em;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.contractRow small {
+.contractRow strong[data-tone="warning"],
+.contractRow strong[data-tone="critical"] {
+  color: var(--danger);
+}
+
+.statusCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 62px;
+  padding: 12px 16px;
+}
+
+.statusCard h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+.statusCard p {
+  margin: 3px 0 0;
   overflow: hidden;
   color: var(--muted);
   font-size: 11px;
-  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -495,8 +538,9 @@
 .editor {
   display: block;
   width: 100%;
-  min-height: 260px;
-  padding: 14px 16px;
+  height: 44px;
+  min-height: 44px;
+  padding: 12px 16px;
   color: var(--text);
   background: var(--surface);
   border: 0;
@@ -605,16 +649,13 @@
 }
 
 .resultPre {
-  max-height: 230px;
-  margin: 0;
-  overflow: auto;
-  padding: 13px 16px;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 0;
-  font-size: 11px;
-  line-height: 1.45;
-  white-space: pre-wrap;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .contractList {
