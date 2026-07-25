@@ -26,6 +26,7 @@ describe("dashboard route contract", () => {
       "approvals",
       "evidence",
       "home",
+      "incidents",
       "integrations",
       "operations",
       "outcomes",
@@ -49,7 +50,7 @@ describe("dashboard route contract", () => {
       "Home",
       "Operations",
       "Workflows",
-      "Systems",
+      "Connectors",
       "Evidence",
       "Settings",
     ]);
@@ -62,6 +63,7 @@ describe("dashboard route contract", () => {
       "/outcomes",
       "/policies",
       "/projects",
+      "/incidents",
     ]);
     expect(DASHBOARD_PROTECTED_PREFIXES).toEqual([
       "/home",
@@ -75,6 +77,7 @@ describe("dashboard route contract", () => {
       "/outcomes",
       "/policies",
       "/projects",
+      "/incidents",
     ]);
   });
 
@@ -92,7 +95,6 @@ describe("dashboard route contract", () => {
       "/contracts",
       "/cost",
       "/goldens",
-      "/incidents",
       "/issues",
       "/replay",
       "/trace",
@@ -100,8 +102,8 @@ describe("dashboard route contract", () => {
       "/labs",
     ]);
     expect(isDashboardRetiredPath("/contracts/contract_1")).toBe(true);
-    expect(isDashboardRetiredPath("/incidents")).toBe(true);
-    expect(isDashboardProtectedPath("/incidents")).toBe(false);
+    expect(isDashboardRetiredPath("/incidents")).toBe(false);
+    expect(isDashboardProtectedPath("/incidents")).toBe(true);
     expect(isDashboardRetiredPath("/labs/drift")).toBe(true);
     expect(isDashboardRetiredPath("/home")).toBe(false);
   });

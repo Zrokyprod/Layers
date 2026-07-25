@@ -24,7 +24,7 @@ type PrimaryCommandCopy = {
 
 const PRIMARY_COMMAND_COPY: Record<DashboardPrimaryRoute["id"], PrimaryCommandCopy> = {
   home: {
-    description: "Protected agents, risky actions, outcome proof, approvals, and evidence gaps",
+    description: "Proof posture, attention queue, verification readiness, and recent evidence",
     shortcut: "Ctrl+H",
   },
   operations: {
@@ -33,8 +33,8 @@ const PRIMARY_COMMAND_COPY: Record<DashboardPrimaryRoute["id"], PrimaryCommandCo
   workflows: {
     description: "Workflow Assurance Packs, validation, and immutable workflow versions",
   },
-  systems: {
-    description: "System-of-record connectors, preflight runs, and proof coverage",
+  connectors: {
+    description: "Read-only source connectors, test-read status, and proof readiness",
   },
   evidence: {
     description: "Evidence bundles, audit hashes, linked decisions, and export proof",

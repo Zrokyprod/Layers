@@ -2,8 +2,6 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DASHBOARD_PRIMARY_ROUTES } from "@/lib/dashboard-route-contract";
-
 import { DashboardShell } from "./dashboard-shell";
 
 const navState = vi.hoisted(() => ({
@@ -279,7 +277,14 @@ describe("DashboardShell primary navigation", () => {
   it("renders the primary nav in the required product order", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(primaryNavLabels()).toEqual(DASHBOARD_PRIMARY_ROUTES.map((route) => route.label));
+    expect(primaryNavLabels()).toEqual([
+      "Home",
+      "Operations",
+      "Workflows",
+      "Connectors",
+      "Evidence",
+      "Settings",
+    ]);
     expect(screen.queryByText("Provider Drift")).toBeNull();
     expect(navItem("home").getAttribute("href")).toBe("/home");
   });
@@ -339,18 +344,22 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
-    expect(labels).toEqual(["Home", "Operations", "Workflows", "Systems", "Evidence", "Settings"]);
+    expect(labels).toEqual([
+      "Home",
+      "Operations",
+      "Workflows",
+      "Connectors",
+      "Evidence",
+      "Settings",
+    ]);
     expect(labels).toContain("Operations");
     expect(labels).toContain("Workflows");
-    expect(labels).toContain("Systems");
+    expect(labels).toContain("Connectors");
     expect(labels).toContain("Evidence");
     expect(labels).not.toContain("Actions");
     expect(labels).not.toContain("Agents");
     expect(labels).not.toContain("Approvals");
     expect(labels).not.toContain("Outcomes");
-    expect(labels).not.toContain("Connectors");
-    expect(labels).not.toContain("Policies");
-    expect(labels).not.toContain("Incidents");
     expect(labels).not.toContain("Replay");
     expect(labels).not.toContain("Contracts");
     expect(labels).not.toContain("CI");
@@ -363,18 +372,21 @@ describe("DashboardShell primary navigation", () => {
 
     expect(navItem("operations").getAttribute("href")).toBe("/operations");
     expect(navItem("workflows").getAttribute("href")).toBe("/workflows");
-    expect(navItem("systems").getAttribute("href")).toBe("/integrations");
+    expect(navItem("connectors").getAttribute("href")).toBe("/integrations");
     expect(navItem("evidence").getAttribute("href")).toBe("/evidence");
+    expect(navItem("settings").getAttribute("href")).toBe("/settings");
   });
 
-  it("groups the sidebar around the control loop", () => {
+  it("uses one primary sidebar group from the route contract", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const primary = screen.getByRole("navigation", { name: "Primary" });
-    const sections = within(primary).getAllByText(/Control|Proof|Workspace/).map((node) => node.textContent);
-    expect(sections).toEqual(["Control", "Proof", "Workspace"]);
-    expect(primary.querySelector('[data-nav-section="control"]')).toBeInTheDocument();
-    expect(primary.querySelector('[data-nav-section="proof"]')).toBeInTheDocument();
+    expect(within(primary).queryByText(/Core|Governance|Workspace/)).not.toBeInTheDocument();
+    expect(primary.querySelectorAll(".nav-link")).toHaveLength(6);
+    expect(primary.querySelector('[data-nav-id="incidents"]')).toBeNull();
+    expect(primary.querySelector('[data-nav-id="policies"]')).toBeNull();
+    expect(primary.querySelector('[data-nav-id="trust-advisor"]')).toBeNull();
+    expect(primary.querySelector('[data-nav-id="reports"]')).toBeNull();
     expect(primary.querySelector('[data-nav-section="configure"]')).not.toBeInTheDocument();
   });
 
@@ -386,14 +398,14 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(screen.getAllByText("Project unavailable").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
     expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
     expect(screen.queryByText("sanket@acme.com")).not.toBeInTheDocument();
     expect(screen.queryByText("Sanket K.")).not.toBeInTheDocument();
   });
 
-  it("renders project memberships and switches the selected project", () => {
+  it("keeps project switching in the context gate instead of the global shell", () => {
+    storeState.selectedProject = null;
     navState.myProjects = [
       {
         membership_id: "mem_1",
@@ -417,11 +429,9 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open project menu" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Beta Lab/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Beta Lab/ }));
 
     expect(storeState.setSelectedProject).toHaveBeenCalledWith("proj_2");
-    expect(routerState.push).toHaveBeenCalledWith("/projects/proj_2");
     expect(queryClientState.invalidateQueries).toHaveBeenCalledWith({
       predicate: expect.any(Function),
     });
@@ -453,7 +463,7 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(screen.getByText("Select project")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Select a project to load this dashboard" })).toBeInTheDocument();
     expect(storeState.setSelectedProject).not.toHaveBeenCalled();
   });
 
@@ -493,7 +503,7 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(screen.getByText("Beta Lab")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
     expect(storeState.setSelectedProject).not.toHaveBeenCalled();
   });
 
@@ -508,84 +518,19 @@ describe("DashboardShell primary navigation", () => {
     expect(primaryNav.textContent).not.toContain("locked");
   });
 
-  it("uses the actual billing plan code for the sidebar plan badge", () => {
+  it("does not render duplicate sidebar footer status, environment, account, or billing blocks", () => {
     navState.planCode = "enterprise";
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(screen.getByText("Enterprise Plan")).toBeInTheDocument();
-    expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
-  });
-
-  it("renders protected-action usage from the active subscription meter", () => {
-    navState.planCode = "free";
-    navState.planTemplate = {
-      ...navState.planTemplate,
-      "actions.protected.monthly_quota": 500,
-    };
-    navState.protectedActionsUsage = {
-      used: 7,
-      limit: 500,
-      unlimited: false,
-      overage: null,
-      state: "ok",
-      resets_at: null,
-    };
-
-    const { container } = render(<DashboardShell>content</DashboardShell>);
-
-    expect(screen.getByText("Free Plan")).toBeInTheDocument();
-    expect(screen.getByText("Protected actions")).toBeInTheDocument();
-    expect(screen.getByText("7 / 500")).toBeInTheDocument();
-    expect(screen.getByText("used this month")).toBeInTheDocument();
-    expect(container.querySelector(".plan-usage-track")).toBeInTheDocument();
-  });
-
-  it("keeps the subscription quota visible while usage is still syncing", () => {
-    navState.planCode = "free";
-    navState.planTemplate = {
-      ...navState.planTemplate,
-      "actions.protected.monthly_quota": 500,
-    };
-    navState.billingUsageLoading = true;
-    navState.billingUsageDataAvailable = false;
-
-    render(<DashboardShell>content</DashboardShell>);
-
-    expect(screen.getByText("Free Plan")).toBeInTheDocument();
-    expect(screen.getByText("0 / 500")).toBeInTheDocument();
-    expect(screen.getByText("syncing usage")).toBeInTheDocument();
-  });
-
-  it("renders unlimited protected-action quota without exposing backend sentinel values or a meter", () => {
-    navState.planCode = "enterprise";
-    navState.planTemplate = {
-      ...navState.planTemplate,
-      "actions.protected.monthly_quota": -1,
-    };
-    navState.protectedActionsUsage = {
-      used: 1200,
-      limit: null,
-      unlimited: true,
-      overage: null,
-      state: "ok",
-      resets_at: null,
-    };
-    const { container } = render(<DashboardShell>content</DashboardShell>);
-
-    expect(screen.getByText("Unlimited")).toBeInTheDocument();
-    expect(screen.getByText("protected actions")).toBeInTheDocument();
-    expect(screen.queryByText("-1")).not.toBeInTheDocument();
-    expect(container.querySelector(".plan-usage-track")).toBeNull();
-  });
-
-  it("does not show Team Plan when billing data is unavailable", () => {
-    navState.billingDataAvailable = false;
-
-    render(<DashboardShell>content</DashboardShell>);
-
-    expect(screen.getByText("Plan unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("Team Plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("All systems operational")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated just now")).not.toBeInTheDocument();
+    expect(screen.queryByText("Environment")).not.toBeInTheDocument();
+    expect(screen.queryByText("Owner access")).not.toBeInTheDocument();
+    expect(screen.queryByText("Enterprise Plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Control surface")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open billing and usage")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Open account for/)).not.toBeInTheDocument();
   });
 
   it("keeps Replay available as a deep route without promoting it to primary nav", () => {
@@ -600,7 +545,7 @@ describe("DashboardShell primary navigation", () => {
   it("opens a profile menu from the topbar account control instead of logging out immediately", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: /Open profile menu/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
 
     expect(authState.clearAccessToken).not.toHaveBeenCalled();
     expect(screen.getByRole("menu", { name: "Account menu" })).toBeInTheDocument();
@@ -610,7 +555,7 @@ describe("DashboardShell primary navigation", () => {
   it("logs out only from the explicit account menu action", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: /Open profile menu/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Log out" }));
 
     expect(authState.clearAccessToken).toHaveBeenCalledTimes(1);
@@ -618,93 +563,42 @@ describe("DashboardShell primary navigation", () => {
     expect(routerState.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("opens real workspace and route menus from shell controls", () => {
+  it("keeps search in the global top utility bar without page route menus", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open project menu" }));
-
-    const projectMenu = screen.getByRole("menu", { name: "Project menu" });
-    expect(projectMenu).toBeInTheDocument();
-    expect(projectMenu.closest(".sidebar")).toBeNull();
-    expect(projectMenu.classList.contains("shell-popover-portal")).toBe(true);
-    expect((projectMenu as HTMLElement).style.position).toBe("fixed");
-    expect((projectMenu as HTMLElement).style.width).toBe("312px");
-    expect(screen.getByRole("menuitem", { name: /Manage projects/ }).getAttribute("href")).toBe("/projects");
-    expect(screen.queryByText("Project switcher")).not.toBeInTheDocument();
-    expect(screen.queryByText(/projects used/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /New project/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Upgrade to add more/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Project settings/ })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));
-
-    expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Home/ }).getAttribute("href")).toBe("/home");
-    expect(screen.getByRole("menuitem", { name: /Operations/ }).getAttribute("href")).toBe("/operations");
-    expect(screen.getByRole("menuitem", { name: /Workflows/ }).getAttribute("href")).toBe("/workflows");
-    expect(screen.getByRole("menuitem", { name: /Systems/ }).getAttribute("href")).toBe("/integrations");
-    const routeMenu = screen.getByRole("menu", { name: "Dashboard navigation" });
-    expect(routeMenu.querySelector('[href="/evidence"]')).not.toBeNull();
-    expect(routeMenu.querySelector('[href="/integrations"]')).not.toBeNull();
-    expect(screen.queryByRole("menuitem", { name: /Agents/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Approvals/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Outcomes/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Contracts/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /^CI$/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Traces/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Policies/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Integrations/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Cost/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Alerts/ })).not.toBeInTheDocument();
+    const searchButton = screen.getByRole("button", { name: "Search evidence, incidents, workflows" });
+    expect(searchButton.closest(".topbar")).toBeInTheDocument();
+    expect(searchButton.textContent).toContain("Search evidence, incidents, workflows…");
+    expect(screen.queryByRole("button", { name: "Open dashboard navigation menu" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose dashboard time window" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open environment status" })).not.toBeInTheDocument();
   });
 
-  it("toggles the desktop sidebar from the topbar control", () => {
+  it("keeps the desktop sidebar fixed even if persisted state says collapsed", () => {
+    storeState.sidebarOpen = false;
     const { container, rerender } = render(<DashboardShell>content</DashboardShell>);
 
     expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(false);
-
-    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
-
-    expect(storeState.toggleSidebar).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(false);
+    expect(screen.queryByRole("button", { name: "Toggle sidebar" })).not.toBeInTheDocument();
     rerender(<DashboardShell>content</DashboardShell>);
-    expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(true);
-    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(true);
+    expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(false);
+    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(false);
   });
 
-  it("applies a dashboard date preset and invalidates dashboard queries", () => {
-    render(<DashboardShell>content</DashboardShell>);
-
-    fireEvent.click(screen.getByRole("button", { name: "Choose dashboard time window" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Last 30 days/ }));
-
-    expect(storeState.setDateRange).toHaveBeenCalledTimes(1);
-    expect(storeState.setDateRange.mock.calls[0]?.[0]).toMatchObject({
-      from: expect.any(Date),
-      to: expect.any(Date),
-    });
-    expect(queryClientState.invalidateQueries).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens environment status and toggles live refresh", () => {
-    render(<DashboardShell>content</DashboardShell>);
-
-    fireEvent.click(screen.getByRole("button", { name: "Open environment status" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Live dashboard refresh/ }));
-
-    expect(storeState.toggleRealTime).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the profile in the topbar and the plan above workspace in the sidebar footer", () => {
+  it("keeps the profile and utility actions in the topbar while footer stays operational", () => {
     const { container } = render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.queryByRole("button", { name: "Open page actions and filters" })).not.toBeInTheDocument();
 
     const topbar = container.querySelector(".topbar");
-    const accountButton = screen.getByRole("button", { name: /Open profile menu/ });
+    const accountButton = screen.getByRole("button", { name: "Open account menu" });
     expect(topbar?.contains(accountButton)).toBe(true);
-
-    const planLink = screen.getByLabelText("Open billing and usage");
-    const workspaceButton = screen.getByRole("button", { name: "Open project menu" });
-    expect(planLink.compareDocumentPosition(workspaceButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(topbar?.contains(screen.getByRole("button", { name: "Notifications" }))).toBe(true);
+    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Settings" })).toHaveLength(1);
+    expect(topbar?.contains(screen.getByRole("link", { name: "Settings" }))).toBe(false);
+    expect(screen.queryByText("All systems operational")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open account for sanket@acme.com")).not.toBeInTheDocument();
   });
 });
