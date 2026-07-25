@@ -59,6 +59,119 @@ const STARTER_PACK: AssurancePackJson = {
   ],
 };
 
+type WorkflowCatalogItem = {
+  description: string;
+  owner: string;
+  pack: AssurancePackJson;
+  policy: string;
+  sla: string;
+  source: string;
+  status: "active" | "draft" | "needs_binding";
+  versions: string[];
+};
+
+const WORKFLOW_CATALOG: WorkflowCatalogItem[] = [
+  {
+    description: "Customer refund actions must match the ledger refund object before evidence is trusted.",
+    owner: "Finance Ops",
+    pack: STARTER_PACK,
+    policy: "High-value refunds require approval",
+    sla: "Resolve mismatches in 4h",
+    source: "ledger_refunds",
+    status: "draft",
+    versions: ["1.0.0"],
+  },
+  {
+    description: "Payroll exports must be independently observed in Workday before downstream release.",
+    owner: "People Ops",
+    pack: {
+      ...STARTER_PACK,
+      workflow_key: "payroll_export",
+      version: "0.9.0",
+      intent_schema: {
+        required: ["batch_id"],
+        properties: {
+          batch_id: { type: "string" },
+        },
+      },
+      object_types: [
+        {
+          name: "payroll_export",
+          schema: {
+            required: ["id", "batch_id", "status"],
+          },
+        },
+      ],
+      effects: [
+        {
+          name: "payroll_export_observed",
+          object_type: "payroll_export",
+          cardinality: "exactly_one",
+          predicate: "export.batch_id == intent.batch_id && export.status == 'complete'",
+        },
+      ],
+      source_bindings: [
+        {
+          name: "workday_payroll",
+          connector: "workday",
+          object_type: "payroll_export",
+          freshness_seconds: 600,
+        },
+      ],
+    },
+    policy: "Payroll exports require owner approval",
+    sla: "Investigate unverifiable exports in 1h",
+    source: "workday_payroll",
+    status: "needs_binding",
+    versions: ["0.8.0", "0.9.0"],
+  },
+  {
+    description: "Vendor payment claims must match the bank/payment system before proof is exportable.",
+    owner: "Procurement",
+    pack: {
+      ...STARTER_PACK,
+      workflow_key: "vendor_payment",
+      version: "1.2.0",
+      intent_schema: {
+        required: ["vendor_id", "amount_usd"],
+        properties: {
+          amount_usd: { type: "number" },
+          vendor_id: { type: "string" },
+        },
+      },
+      object_types: [
+        {
+          name: "payment",
+          schema: {
+            required: ["id", "vendor_id", "amount_usd", "status"],
+          },
+        },
+      ],
+      effects: [
+        {
+          name: "payment_settled",
+          object_type: "payment",
+          cardinality: "exactly_one",
+          predicate: "payment.vendor_id == intent.vendor_id && payment.amount_usd == intent.amount_usd",
+        },
+      ],
+      source_bindings: [
+        {
+          name: "payment_ledger",
+          connector: "stripe",
+          object_type: "payment",
+          freshness_seconds: 300,
+        },
+      ],
+    },
+    policy: "Exceptions require controller approval",
+    sla: "Contain mismatches in 30m",
+    source: "payment_ledger",
+    status: "active",
+    versions: ["1.0.0", "1.1.0", "1.2.0"],
+  },
+];
+
 type ResultState =
   | { type: "idle"; message: string }
   | { type: "validated"; message: string; data: AssurancePackValidateResponse }
@@ -147,13 +260,21 @@ function Sparkline({ tone }: { tone: WorkflowTone }) {
 }
 
 export default function WorkflowsPage() {
-  const [draft, setDraft] = useState(() => prettyJson(STARTER_PACK));
+  const [selectedWorkflowKey, setSelectedWorkflowKey] = useState(() => String(WORKFLOW_CATALOG[0]?.pack.workflow_key ?? ""));
+  const selectedWorkflow = WORKFLOW_CATALOG.find((workflow) => workflow.pack.workflow_key === selectedWorkflowKey) ?? WORKFLOW_CATALOG[0];
+  const [draft, setDraft] = useState(() => prettyJson(selectedWorkflow.pack));
   const [environment, setEnvironment] = useState("production");
   const [result, setResult] = useState<ResultState>({
     type: "idle",
     message: "No validation has run yet.",
   });
   const [busy, setBusy] = useState<"validate" | "publish" | null>(null);
+
+  function selectWorkflow(workflow: WorkflowCatalogItem) {
+    setSelectedWorkflowKey(String(workflow.pack.workflow_key ?? ""));
+    setDraft(prettyJson(workflow.pack));
+    setResult({ type: "idle", message: "No validation has run yet." });
+  }
 
   const parsedDraft = useMemo(() => {
     try {
@@ -167,6 +288,8 @@ export default function WorkflowsPage() {
   const tone = statusTone(result, parsedDraft.error);
   const summary = parsedDraft.summary;
   const validationLabel = parsedDraft.error ? "Invalid draft" : result.type === "published" ? "Published" : result.type === "validated" ? "Validated" : "Needs validation";
+  const activePacks = WORKFLOW_CATALOG.filter((workflow) => workflow.status === "active").length;
+  const needsBinding = WORKFLOW_CATALOG.filter((workflow) => workflow.status === "needs_binding").length;
   const sourceBindings = summary?.sourceBindings ?? [];
   const expectedEffects = summary?.effects ?? [];
   const recoveryPlaybooks = summary?.recoveryPlaybooks ?? [];
@@ -326,11 +449,11 @@ export default function WorkflowsPage() {
 
       <section className={styles.metricStrip} aria-label="Workflow contract metrics">
         {[
-          { label: "Expected effects", value: String(summary?.effects.length ?? 0), tone: "ready" as WorkflowTone, icon: ShieldCheck },
-          { label: "Source bindings", value: String(summary?.sourceBindings.length ?? 0), tone: "ready" as WorkflowTone, icon: Database },
+          { label: "Assurance Packs", value: String(WORKFLOW_CATALOG.length), tone: "neutral" as WorkflowTone, icon: Workflow },
+          { label: "Active packs", value: String(activePacks), tone: activePacks > 0 ? "ready" as WorkflowTone : "warning" as WorkflowTone, icon: ShieldCheck },
+          { label: "Needs binding", value: String(needsBinding), tone: needsBinding > 0 ? "warning" as WorkflowTone : "ready" as WorkflowTone, icon: Database },
           { label: "Intent fields", value: String(summary?.intentFields.length ?? 0), tone: "neutral" as WorkflowTone, icon: FileJson },
-          { label: "Object types", value: String(summary?.objectTypes.length ?? 0), tone: "neutral" as WorkflowTone, icon: GitBranch },
-          { label: "Recovery paths", value: String(summary?.recoveryPlaybooks.length ?? 0), tone: "warning" as WorkflowTone, icon: Workflow },
+          { label: "Versions", value: String(selectedWorkflow.versions.length), tone: "neutral" as WorkflowTone, icon: GitBranch },
           { label: "Publish state", value: result.type === "published" ? "active" : "draft", tone, icon: Rocket },
         ].map(({ label, value, tone: itemTone, icon: Icon }) => (
           <article className={styles.metricCell} data-tone={itemTone} key={label}>
@@ -342,6 +465,64 @@ export default function WorkflowsPage() {
             <Sparkline tone={itemTone} />
           </article>
         ))}
+      </section>
+
+      <section className={styles.packManager} aria-label="Assurance Pack manager">
+        <div className={cn(styles.card, styles.packListCard)}>
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.kicker}>Assurance Packs</p>
+              <h2>Workflow library</h2>
+              <p>Select a workflow contract to inspect, validate, or publish.</p>
+            </div>
+          </div>
+          <div className={styles.packList}>
+            {WORKFLOW_CATALOG.map((workflow) => {
+              const workflowKey = String(workflow.pack.workflow_key ?? "");
+              const selected = workflowKey === selectedWorkflowKey;
+              const itemTone: WorkflowTone = workflow.status === "active" ? "ready" : workflow.status === "needs_binding" ? "warning" : "neutral";
+              return (
+                <button
+                  className={styles.packRow}
+                  data-selected={selected ? "true" : undefined}
+                  key={workflowKey}
+                  onClick={() => selectWorkflow(workflow)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{workflowKey}</strong>
+                    <small>{workflow.description}</small>
+                  </span>
+                  <StatusBadge tone={itemTone}>{workflow.status.replace("_", " ")}</StatusBadge>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={cn(styles.card, styles.governanceCard)}>
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.kicker}>Binding</p>
+              <h2>Policy, source, SLA</h2>
+              <p>Operational controls attached to the selected workflow.</p>
+            </div>
+          </div>
+          <div className={styles.bindingGrid}>
+            {[
+              ["Source", selectedWorkflow.source],
+              ["Policy", selectedWorkflow.policy],
+              ["SLA", selectedWorkflow.sla],
+              ["Owner", selectedWorkflow.owner],
+              ["Versions", selectedWorkflow.versions.join(" -> ")],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <div className={styles.workspace}>

@@ -66,4 +66,14 @@ describe("WorkflowsPage", () => {
     });
     expect(api.validateAssurancePack).not.toHaveBeenCalled();
   });
+
+  it("selects a workflow pack from the library", () => {
+    render(<WorkflowsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /payroll_export/i }));
+
+    expect(screen.getByRole("heading", { name: "payroll_export" })).toBeInTheDocument();
+    expect(screen.getAllByText("workday_payroll").length).toBeGreaterThan(0);
+    expect((screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement).value).toContain('"workflow_key": "payroll_export"');
+  });
 });
