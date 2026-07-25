@@ -23743,6 +23743,51 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 24px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-head::before {
+  content: "" !important;
+  width: 13px !important;
+  height: 13px !important;
+  flex: 0 0 auto !important;
+  border: 1.5px solid currentColor !important;
+  border-radius: 999px !important;
+  opacity: 0.85 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card::after {
+  content: "" !important;
+  position: absolute !important;
+  right: 22px !important;
+  bottom: 28px !important;
+  width: 88px !important;
+  height: 28px !important;
+  background-repeat: no-repeat !important;
+  background-size: 88px 28px !important;
+  opacity: 0.95 !important;
+  pointer-events: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card:nth-child(1)::after,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card:nth-child(4)::after {
+  background-image: url("data:image/svg+xml,%3Csvg width='88' height='28' viewBox='0 0 88 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 22C18 20 31 18 44 16C55 14 63 9 86 5' stroke='%23047857' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card:nth-child(2)::after {
+  background-image: url("data:image/svg+xml,%3Csvg width='88' height='28' viewBox='0 0 88 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 23C15 17 25 14 39 14C49 14 55 5 65 11C72 15 78 12 86 13' stroke='%23a16207' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card:nth-child(3)::after {
+  background-image: url("data:image/svg+xml,%3Csvg width='88' height='28' viewBox='0 0 88 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 24C14 19 24 12 36 9C47 14 54 6 66 11C74 15 80 9 86 11' stroke='%23b91c1c' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card:nth-child(5)::after {
+  background-image: url("data:image/svg+xml,%3Csvg width='88' height='28' viewBox='0 0 88 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 24C13 17 23 14 34 15C45 10 52 12 62 13C72 7 80 8 86 10' stroke='%23818cf8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-panel {
   padding: 0 !important;
   overflow: hidden !important;
@@ -23844,6 +23889,71 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card {
   gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card-demo {
+  align-content: start !important;
+  gap: 12px !important;
+  padding: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-demo-head {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-demo-head h2 {
+  margin: 0 !important;
+  color: #0f172a !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-demo-head a {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  color: #64748b !important;
+  font-size: 11px !important;
+  text-decoration: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-selected-proof-list {
+  display: grid !important;
+  gap: 8px !important;
+  margin: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-selected-proof-list div {
+  display: grid !important;
+  grid-template-columns: 92px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-selected-proof-list dt {
+  color: #475569 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-selected-proof-list dd {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: #334155 !important;
+  font-size: 12px !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-selected-proof-list code {
+  font-size: 11px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card-demo > .dashboard-button {
+  width: fit-content !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta {
@@ -24071,11 +24181,19 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-demo-proof-path > div {
   display: grid !important;
-  grid-template-columns: 24px minmax(0, 1fr) auto !important;
+  grid-template-columns: 24px 10px minmax(0, 1fr) auto !important;
   gap: 10px !important;
   align-items: center !important;
   padding: 9px 0 !important;
   border-bottom: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-demo-proof-path > div::before {
+  content: "" !important;
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 999px !important;
+  background: #15803d !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-demo-proof-path > div:last-child {
@@ -24098,6 +24216,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: #334155 !important;
   font-size: 12px !important;
   font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .status-pill {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-readiness-strip .dashboard-metric-card strong {

@@ -378,6 +378,47 @@ export function FocusedProofPanel({
     }
   }
 
+  if (isDemoRow && row) {
+    return (
+      <aside className="ev-proof-panel" aria-label="Focused proof panel">
+        <section className="ev-focused-card ev-focused-card-demo">
+          <header className="ev-focused-demo-head">
+            <h2>Selected proof</h2>
+            <a href={row.href}>Permalink <ExternalLink size={13} aria-hidden="true" /></a>
+          </header>
+          <dl className="ev-selected-proof-list">
+            <div><dt>Proof</dt><dd>{row.title}</dd></div>
+            <div><dt>Workflow</dt><dd>{row.agentName}</dd></div>
+            <div><dt>Source</dt><dd>{row.systemRef ?? row.sourceLabel}</dd></div>
+            <div><dt>Verdict</dt><dd><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></dd></div>
+            <div><dt>Signed</dt><dd>{row.detail}</dd></div>
+            <div><dt>Bundle</dt><dd>bundle_7f3a9c4</dd></div>
+            <div><dt>Digest</dt><dd><code>{row.digest}</code></dd></div>
+          </dl>
+          <DashboardButton icon={<Download />} onClick={onExport} variant="primary">
+            Export proof JSON
+          </DashboardButton>
+        </section>
+
+        <section className="ev-proof-detail" aria-label="Selected proof detail">
+          <div className="ev-demo-proof-path">
+            <header>
+              <h3>Signed evidence path</h3>
+              <span>4 steps</span>
+            </header>
+            {["Event captured", "Digest computed", "Signed by connector", "Included in bundle"].map((step, index) => (
+              <div key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+                <small>{row.detail}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      </aside>
+    );
+  }
+
   return (
     <aside className="ev-proof-panel" aria-label="Focused proof panel">
       <section className="ev-focused-card">
