@@ -74,6 +74,6 @@ describe("WorkflowsPage", () => {
 
     expect(screen.getByRole("heading", { name: "vendor_payment" })).toBeInTheDocument();
     expect(screen.getAllByText("payment_ledger").length).toBeGreaterThan(0);
-    expect((screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement).value).toContain('"workflow_key": "vendor_payment"');
+    expect((screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement).value).toContain('"workflow_key":"vendor_payment"');
   });
 });

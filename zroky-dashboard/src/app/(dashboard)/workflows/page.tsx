@@ -191,7 +191,7 @@ type PackSummary = {
 };
 
 function prettyJson(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return JSON.stringify(value);
 }
 
 function parseDraft(value: string): AssurancePackJson {
@@ -578,8 +578,10 @@ export default function WorkflowsPage() {
         <textarea
           aria-label="Assurance Pack JSON"
           className={styles.editor}
+          rows={1}
           spellCheck={false}
           value={draft}
+          wrap="off"
           onChange={(event) => setDraft(event.target.value)}
         />
       </section>
