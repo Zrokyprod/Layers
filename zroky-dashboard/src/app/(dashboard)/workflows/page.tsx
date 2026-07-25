@@ -507,7 +507,7 @@ export default function WorkflowsPage() {
                   <code>{workflow.source}</code>
                   <span>{workflow.owner}</span>
                   <code>{String(workflow.pack.version ?? "-")}</code>
-                  <span className={styles.packAction} aria-hidden="true">...</span>
+                  <span className={styles.packAction}>Open</span>
                 </button>
               );
             })}
@@ -528,7 +528,7 @@ export default function WorkflowsPage() {
               ["Policy", selectedWorkflow.policy],
               ["SLA", selectedWorkflow.sla],
               ["Owner", selectedWorkflow.owner],
-              ["Versions", selectedWorkflow.versions.join(" -> ")],
+              ["Versions", selectedWorkflow.versions.join(" → ")],
             ].map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>
