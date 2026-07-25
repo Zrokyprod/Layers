@@ -23647,6 +23647,27 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   --ev-panel: #ffffff;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-page-title {
+  display: grid !important;
+  gap: 4px !important;
+  padding: 0 0 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-page-title h1 {
+  margin: 0 !important;
+  color: #09090b !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.15 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-page-title p {
+  margin: 0 !important;
+  color: #52525b !important;
+  font-size: 13px !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-button-primary {
   border-color: #09090b !important;
   background: #09090b !important;
@@ -23672,6 +23693,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-verdict-hero {
+  min-height: 134px !important;
   padding: 18px 20px !important;
   border-left-width: 0 !important;
 }
@@ -23685,7 +23707,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card {
-  min-height: 96px !important;
+  min-height: 104px !important;
   padding: 14px !important;
   border-width: 0 1px 0 0 !important;
   border-radius: 0 !important;
@@ -23715,6 +23737,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 25px !important;
   font-weight: 700 !important;
   letter-spacing: -0.03em !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card strong {
+  font-size: 24px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-panel {
@@ -23816,6 +23842,18 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   padding: 16px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card {
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta div {
+  padding: 10px !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list {
   margin: 16px 18px !important;
   border-color: var(--zk-border) !important;
@@ -23834,39 +23872,39 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table {
   width: 100% !important;
-  min-width: 760px !important;
+  min-width: 0 !important;
   border-collapse: collapse !important;
   table-layout: fixed !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(1),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(1) {
-  width: 22% !important;
+  width: 23% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(2),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(2) {
-  width: 22% !important;
+  width: 21% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(3),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(3) {
-  width: 20% !important;
+  width: 19% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(4),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(4) {
-  width: 14% !important;
+  width: 15% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(5),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(5) {
-  width: 14% !important;
+  width: 12% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(6),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(6) {
-  width: 8% !important;
+  width: 10% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table .ev-ledger-row {
@@ -24000,8 +24038,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table .dashboard-button {
-  width: 56px !important;
-  min-width: 56px !important;
+  width: 52px !important;
+  min-width: 52px !important;
   height: 34px !important;
   font-size: 12px !important;
 }

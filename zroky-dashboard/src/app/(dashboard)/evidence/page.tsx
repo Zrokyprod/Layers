@@ -242,6 +242,16 @@ function demoEvidenceVerdict(): EvidenceVerdict {
   };
 }
 
+function demoEvidenceMetrics(): EvidenceProofMetric[] {
+  return [
+    { detail: "matched + generated receipt", href: "/evidence?filter=matched", label: "Export-ready", tone: "success", value: "1,124" },
+    { detail: "not_verified, missing, or pending", href: "/evidence?filter=needs_verification", label: "Needs verification", tone: "warning", value: "12" },
+    { detail: "mismatched or failed proof", href: "/evidence?filter=exceptions", label: "Exceptions", tone: "danger", value: "3" },
+    { detail: "signed and exportable", href: "/evidence?filter=matched", label: "Signed bundles", tone: "success", value: "1,248" },
+    { detail: "source-of-truth read", href: "/evidence?filter=all", label: "Last proof read", tone: "neutral", value: "2m ago" },
+  ];
+}
+
 function buildVerdict({
   counts,
   error,
@@ -525,16 +535,23 @@ export default function EvidencePage() {
   }
 
   const verdict = useDemoData ? demoEvidenceVerdict() : buildVerdict({ counts, error, loading });
+  const proofMetrics = useDemoData ? demoEvidenceMetrics() : metricsForCounts(counts);
   const updatedAt = latestCheckedAt(rows);
   const isRefreshing = actionsQuery.isFetching || decisionsQuery.isFetching || outcomesQuery.isFetching;
 
   return (
     <div className="dashboard-page evidence-page evidence-ledger-page ev-page">
       {message ? <div className="alert-strip ev-alert-strip">{message}</div> : null}
+      {useDemoData ? (
+        <header className="ev-page-title">
+          <h1>Evidence</h1>
+          <p>Proof, verification and governance overview</p>
+        </header>
+      ) : null}
       <EvidenceVerdictHero
         {...verdict}
         isRefreshing={isRefreshing}
-        metrics={metricsForCounts(counts)}
+        metrics={proofMetrics}
         onMetricClick={applyFilterHref}
         onRefresh={() => void refreshEvidence()}
         updatedLabel={loading ? "Syncing" : updatedAt ? `Updated ${formatDateTime(updatedAt)}` : "No records"}

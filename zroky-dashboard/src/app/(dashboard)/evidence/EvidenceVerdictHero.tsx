@@ -56,7 +56,7 @@ export function EvidenceVerdictHero({
       <DashboardMetricStrip
         ariaLabel="Evidence proof summary"
         className="ev-proof-summary-strip"
-        columns={4}
+        columns={metrics.length}
         metrics={metrics.map((metric) => ({
           helper: metric.detail,
           href: metric.href,

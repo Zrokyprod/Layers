@@ -173,7 +173,7 @@ export function EvidenceLedger({
                     <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
                     <td>
                       <span className="ev-signed-cell">
-                        {formatDateTime(row.checkedAt)}
+                        {row.id.startsWith("demo:") ? row.detail : formatDateTime(row.checkedAt)}
                         <small>{row.exportable ? row.sourceLabel : "not linked / not exportable"}</small>
                       </span>
                     </td>

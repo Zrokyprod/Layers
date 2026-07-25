@@ -397,7 +397,7 @@ export function FocusedProofPanel({
             {isExporting ? "Exporting" : row?.exportKind === "receipt" ? "Export receipt JSON" : "Export proof JSON"}
           </DashboardButton>
         </div>
-        {verification ? (
+        {verification && !isDemoRow ? (
           <section className="ev-external-verify" aria-label="Independent verification material">
             <div>
               <ShieldCheck size={16} aria-hidden="true" />
