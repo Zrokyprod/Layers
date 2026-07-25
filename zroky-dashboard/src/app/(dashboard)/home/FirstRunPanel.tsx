@@ -80,7 +80,7 @@ function stepState(stepId: (typeof STEPS)[number]["id"], signals: FirstRunSignal
   return (signals.hasActiveAgent || signals.hasRunnerConnected) && signals.hasAssurancePack ? "current" : "locked";
 }
 
-function stepDetail(step: (typeof STEPS)[number], state: StepState, signals: FirstRunSignals): string {
+function stepDetail(step: (typeof STEPS)[number], state: StepState): string {
   if (state === "done") {
     return step.completeDetail;
   }
@@ -156,7 +156,7 @@ export function FirstRunPanel({ signals, readOnly = false }: { signals: FirstRun
                 </div>
                 <div className="mc-step-copy">
                   <strong>{step.label}</strong>
-                  <span>{stepDetail(step, state, signals)}</span>
+                  <span>{stepDetail(step, state)}</span>
                 </div>
                 <div className="mc-step-foot">
                   <span className="mc-step-hint">{stepHint(step.id, state)}</span>

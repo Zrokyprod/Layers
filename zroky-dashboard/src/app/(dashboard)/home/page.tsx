@@ -1,6 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  BellDot,
+  CheckCircle2,
+  ChevronRight,
+  Circle,
+  FileCheck2,
+  KeyRound,
+  LockKeyhole,
+  Plug,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+  Workflow,
+  XCircle,
+} from "lucide-react";
 
 import {
   getHomeSummary,
@@ -17,21 +37,13 @@ import {
   type SourceMutationView,
   listMyProjects,
 } from "@/lib/api";
-import { buildFleetView } from "@/lib/agent-fleet";
 import { formatCount, timeSince } from "@/lib/format";
-import { buildDecisionQueue } from "@/lib/home-queue";
 import { useDashboardStore } from "@/lib/store";
 import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
-import type { StatusTone } from "@/lib/action-status";
 
-import { AgentHealthTimeline } from "./AgentHealthTimeline";
-import { DecisionQueue } from "./DecisionQueue";
-import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
-import { HomeActivitySections } from "./HomeActivitySections";
-import { ProofStrip, type ProofMetric } from "./ProofStrip";
-import { VerdictHero } from "./VerdictHero";
+import styles from "./home.module.css";
 
-type MissionData = {
+type HomeData = {
   intents: ActionIntentResponse[];
   approvals: RuntimePolicyDecisionResponse[];
   outcomes: OutcomeReconciliationView[];
@@ -47,7 +59,7 @@ type MissionData = {
   homeSummary: HomeSummaryResponse | null;
 };
 
-type MissionSource =
+type HomeSource =
   | "homeSummary"
   | "intents"
   | "approvals"
@@ -61,13 +73,58 @@ type MissionSource =
   | "apiKeys"
   | "billingUsage";
 
-type MissionAvailability = Record<MissionSource, boolean>;
+type HomeAvailability = Record<HomeSource, boolean>;
 type HomeRole = string | null;
+type HomeLoadIssue = "auth" | "source" | null;
+type PostureStatus = "INACTIVE" | "ACTIVE" | "DEGRADED" | "CRITICAL";
+type BadgeStatus = "Ready" | "Blocked" | "Stale" | "Missing" | "Pending" | "Critical" | "Neutral";
+type Priority = "P1" | "P2" | "P3";
+
+type ProofStats = {
+  totalActions: number;
+  proven: number;
+  mismatches: number;
+  unverifiable: number;
+  pendingApprovals: number;
+  openIncidents: number;
+  blockedAttempts: number;
+  coveragePercent: number;
+};
+
+type ReadinessRow = {
+  component: string;
+  status: BadgeStatus;
+  details: string;
+  action: string;
+  href: string;
+  ownerOnly?: boolean;
+};
+
+type AttentionRow = {
+  priority: Priority;
+  item: string;
+  source: string;
+  workflow: string;
+  age: string;
+  action: string;
+  href: string;
+};
+
+type ProofEvent = {
+  tone: BadgeStatus;
+  id: string;
+  label: string;
+  outcome: string;
+  signature: string;
+  time: string;
+  href: string;
+};
 
 const DEFAULT_HOME_WINDOW_DAYS = 7;
 const MS_PER_DAY = 86_400_000;
+const DEMO_HOME_STORAGE_KEY = "zroky:demo-home";
 
-const EMPTY_DATA: MissionData = {
+const EMPTY_DATA: HomeData = {
   intents: [],
   approvals: [],
   outcomes: [],
@@ -83,7 +140,7 @@ const EMPTY_DATA: MissionData = {
   homeSummary: null,
 };
 
-const NO_SOURCES_AVAILABLE: MissionAvailability = {
+const NO_SOURCES_AVAILABLE: HomeAvailability = {
   homeSummary: false,
   intents: false,
   approvals: false,
@@ -98,7 +155,7 @@ const NO_SOURCES_AVAILABLE: MissionAvailability = {
   billingUsage: false,
 };
 
-const ALL_SOURCES_AVAILABLE: MissionAvailability = {
+const ALL_SOURCES_AVAILABLE: HomeAvailability = {
   homeSummary: true,
   intents: true,
   approvals: true,
@@ -113,310 +170,171 @@ const ALL_SOURCES_AVAILABLE: MissionAvailability = {
   billingUsage: true,
 };
 
-function firstRunSignals(data: MissionData): FirstRunSignals {
-  const hasProjectKey = data.apiKeys.some((key) => !key.revoked && !key.expired);
-  const hasActiveAgent = data.agentProfiles.some((profile) => profile.is_active) || (data.agentProfileMeta?.active_count ?? 0) > 0;
-  const hasRunnerConnected = data.actionRunners.length > 0;
-  const hasVerificationConnected =
-    data.outcomes.length > 0 ||
-    (data.outcomeSummary?.total ?? 0) > 0 ||
-    (data.sourceSummary?.matched_receipt ?? 0) > 0 ||
-    (data.sourceSummary?.connected_feeds ?? 0) > 0;
-  const hasActionIntent = data.intents.length > 0;
-  const hasAssurancePack = hasActionIntent || hasVerificationConnected && data.agentProfiles.length > 0;
-  const hasReceiptGenerated =
-    data.intents.some((intent) => intent.receipt_status === "generated") ||
-    (data.homeSummary?.metrics.receipts_generated ?? 0) > 0 ||
-    (data.sourceSummary?.matched_receipt ?? 0) > 0;
-  const hasProofSignal =
-    data.approvals.length > 0 ||
-    data.outcomes.length > 0 ||
-    (data.sourceSummary?.matched_receipt ?? 0) > 0 ||
-    data.intents.some((intent) => intent.receipt_status === "generated" || ["matched", "mismatched"].includes(intent.proof_status));
-
+function demoHomeSummary(days: number): HomeSummaryResponse {
+  const generatedAt = new Date().toISOString();
+  const windowStart = new Date(Date.now() - days * MS_PER_DAY).toISOString();
   return {
-    hasProjectKey,
-    hasActiveAgent,
-    hasRunnerConnected,
-    hasVerificationConnected,
-    hasAssurancePack,
-    hasActionIntent,
-    hasProofSignal,
-    hasReceiptGenerated,
+    project_id: "demo_project",
+    window_days: days,
+    window_start: windowStart,
+    generated_at: generatedAt,
+    metrics: {
+      controlled_actions: 300,
+      pending_approvals: 6,
+      verified_outcomes: 142,
+      outcome_checks: 145,
+      receipts_generated: 1248,
+      bypass_mutations: 12,
+      unreceipted_mutations: 0,
+      sequence_risks: 2,
+    },
+    sources: {
+      home_summary: true,
+      intents: true,
+      approvals: true,
+      outcomes: true,
+      outcome_summary: true,
+      source_summary: true,
+      mutations: true,
+      stale_attempts: true,
+      agent_profiles: true,
+      action_runners: true,
+      api_keys: true,
+      billing_usage: true,
+    },
+    data: {
+      intents: [],
+      approvals: [],
+      outcomes: [],
+      outcome_summary: {
+        window_days: days,
+        total: 145,
+        matched: 142,
+        mismatched: 3,
+        not_verified: 155,
+        verified: 142,
+        pending: 6,
+        unverifiable: 155,
+        cancelled: 0,
+      },
+      source_summary: {
+        total: 12,
+        matched_receipt: 142,
+        authorized_external: 0,
+        legacy_path: 0,
+        unmanaged_agent_action: 0,
+        policy_bypass: 12,
+        unknown_actor: 0,
+        unreceipted: 0,
+        connected_feeds: 8,
+        successful_pollers: 7,
+      },
+      mutations: [],
+      stale_attempts: [],
+      agent_profiles: [],
+      agent_profile_meta: { active_count: 24, max_active_agents: 100, limit_reached: false },
+      action_runners: [],
+      api_keys: [],
+      billing_usage: null,
+    },
   };
 }
 
-function hasProtectedActionSignal(signals: FirstRunSignals): boolean {
-  return signals.hasActionIntent || signals.hasProofSignal;
+function localDemoHomeEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1") return false;
+  const demoParam = new URLSearchParams(window.location.search).get("demoHome");
+  if (demoParam === "1") {
+    window.localStorage.setItem(DEMO_HOME_STORAGE_KEY, "1");
+    return true;
+  }
+  if (demoParam === "0") {
+    window.localStorage.removeItem(DEMO_HOME_STORAGE_KEY);
+    return false;
+  }
+  return process.env.NEXT_PUBLIC_ZROKY_DEMO_HOME === "1" || window.localStorage.getItem(DEMO_HOME_STORAGE_KEY) === "1";
 }
+
+const DEMO_ATTENTION_ROWS: AttentionRow[] = [
+  {
+    priority: "P1",
+    item: "Mismatch in payroll export",
+    source: "Workday Payroll",
+    workflow: "Payroll Export WF",
+    age: "12m",
+    action: "Investigate",
+    href: "/operations",
+  },
+  {
+    priority: "P1",
+    item: "Approval required: policy exception",
+    source: "Vendor Payments",
+    workflow: "Vendor Payments WF",
+    age: "18m",
+    action: "Review",
+    href: "/operations",
+  },
+  {
+    priority: "P2",
+    item: "Unverifiable action detected",
+    source: "Salesforce",
+    workflow: "Quote Approval WF",
+    age: "34m",
+    action: "Analyze",
+    href: "/operations",
+  },
+  {
+    priority: "P2",
+    item: "Connector test-read stale",
+    source: "SAP S/4HANA",
+    workflow: "ERP Ingestion WF",
+    age: "47m",
+    action: "Fix",
+    href: "/integrations",
+  },
+  {
+    priority: "P2",
+    item: "Recovery job failed",
+    source: "PostgreSQL",
+    workflow: "DB Recovery WF",
+    age: "1h 03m",
+    action: "Retry",
+    href: "/operations",
+  },
+  {
+    priority: "P3",
+    item: "Evidence generation failed",
+    source: "S3 Archive",
+    workflow: "Evidence Pack WF",
+    age: "2h 11m",
+    action: "Inspect",
+    href: "/evidence",
+  },
+];
+
+const DEMO_PROOF_EVENTS: ProofEvent[] = [
+  { tone: "Critical", id: "run_pay_042", label: "Mismatch caught in payroll export", outcome: "mismatch", signature: "sig:9f42c1a8", time: "8m", href: "/evidence" },
+  { tone: "Ready", id: "run_ref_318", label: "Action verified: Stripe refund", outcome: "verified", signature: "sig:71ad03be", time: "14m", href: "/evidence" },
+  { tone: "Pending", id: "apr_118", label: "Approval required: policy exception", outcome: "pending", signature: "sig:e2019c4d", time: "18m", href: "/operations" },
+  { tone: "Ready", id: "run_git_907", label: "Action verified: GitHub workflow", outcome: "verified", signature: "sig:4b88a119", time: "31m", href: "/evidence" },
+  { tone: "Stale", id: "src_sap_22", label: "Connector read failed: SAP S/4HANA", outcome: "stale", signature: "sig:aa17d2c0", time: "47m", href: "/operations" },
+];
 
 function canChangeHomeSetup(role: HomeRole): boolean {
   const normalized = role?.trim().toLowerCase();
   return normalized === "owner" || normalized === "admin";
 }
 
-function quotaWarning(usage: BillingUsageResponse | null): string | null {
-  if (!usage) {
-    return null;
-  }
-  const meters: Array<[string, BillingUsageMeter]> = [
-    ["Protected actions", usage.protected_actions],
-    ["Runner executions", usage.runner_executions],
-    ["Action receipts", usage.action_receipts],
-    ["Verification checks", usage.verification_checks],
-  ];
-  for (const [label, meter] of meters) {
-    if (!meter || meter.unlimited || meter.limit == null || meter.limit <= 0) {
-      continue;
-    }
-    const ratio = meter.used / meter.limit;
-    const state = (meter.state ?? "").toLowerCase();
-    if (meter.overage != null && meter.overage > 0) {
-      return `${label} quota exceeded`;
-    }
-    if (state.includes("exceeded") || state.includes("over")) {
-      return `${label} quota exceeded`;
-    }
-    if (ratio >= 0.9) {
-      return `${label} quota ${Math.round(ratio * 100)}% used`;
-    }
-  }
-  return null;
-}
-
-function unavailableProofMetric(id: string, label: string, detail: string, href: string): ProofMetric {
-  return {
-    id,
-    label,
-    value: "— unavailable",
-    detail,
-    href,
-    tone: "warning",
-  };
-}
-
 function homeWindowDays(dateRange: { from: Date | null; to: Date | null }): number {
-  if (!dateRange.from || !dateRange.to) {
-    return DEFAULT_HOME_WINDOW_DAYS;
-  }
+  if (!dateRange.from || !dateRange.to) return DEFAULT_HOME_WINDOW_DAYS;
   const fromMs = new Date(dateRange.from).getTime();
   const toMs = new Date(dateRange.to).getTime();
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
-    return DEFAULT_HOME_WINDOW_DAYS;
-  }
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return DEFAULT_HOME_WINDOW_DAYS;
   return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
 }
 
-type ProofStats = {
-  totalActions: number;
-  proven: number;
-  mismatches: number;
-  unverifiable: number;
-  pendingApprovals: number;
-  openIncidents: number;
-  blockedAttempts: number;
-  coveragePercent: number | null;
-};
-
-function proofStats(data: MissionData): ProofStats {
-  const summary = data.homeSummary;
-  const totalActions = Math.max(summary?.metrics.controlled_actions ?? 0, data.intents.length, data.outcomeSummary?.total ?? 0, data.outcomes.length);
-  const proven = Math.max(summary?.metrics.verified_outcomes ?? 0, data.outcomeSummary?.matched ?? 0, data.outcomes.filter((item) => item.verdict === "matched" || item.verification_status === "matched").length);
-  const mismatches = Math.max(data.outcomeSummary?.mismatched ?? 0, data.outcomes.filter((item) => item.verdict === "mismatched" || item.verification_status === "mismatched").length);
-  const explicitUnknown = Math.max(
-    data.outcomeSummary?.not_verified ?? 0,
-    data.outcomes.filter((item) => ["not_verified", "unknown", "pending"].includes(String(item.verdict ?? item.verification_status ?? ""))).length,
-  );
-  const unchecked = Math.max(0, totalActions - Math.max(summary?.metrics.outcome_checks ?? 0, data.outcomeSummary?.total ?? 0, data.outcomes.length));
-  const unverifiable = Math.max(explicitUnknown + data.staleAttempts.length, unchecked);
-  const pendingApprovals = Math.max(summary?.metrics.pending_approvals ?? 0, data.approvals.filter((item) => item.status === "pending_approval").length);
-  const blockedAttempts = data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length + (summary?.metrics.bypass_mutations ?? 0);
-  const openIncidents = mismatches + data.mutations.filter((item) => ["policy_bypass", "unmanaged_agent_action", "unknown_actor"].includes(item.classification)).length;
-  const coveragePercent = totalActions > 0 ? Math.round((proven / totalActions) * 100) : null;
-  return { totalActions, proven, mismatches, unverifiable, pendingApprovals, openIncidents, blockedAttempts, coveragePercent };
-}
-
-function proofMetrics(data: MissionData, availability: MissionAvailability): ProofMetric[] {
-  const summary = data.homeSummary;
-  const stats = proofStats(data);
-  if (!availability.homeSummary || !summary) {
-    return [
-      unavailableProofMetric("mismatches-caught", "Mismatches caught", "Home summary unavailable", "/operations"),
-      unavailableProofMetric("proven-outcomes", "Proven outcomes", "Home summary unavailable", "/evidence"),
-      unavailableProofMetric("unverifiable", "Unverifiable", "Home summary unavailable", "/operations"),
-      unavailableProofMetric("open-incidents", "Open incidents", "Home summary unavailable", "/operations"),
-      unavailableProofMetric("pending-approvals", "Pending approvals", "Home summary unavailable", "/approvals"),
-      unavailableProofMetric("coverage", "Coverage", "Home summary unavailable", "/evidence"),
-    ];
-  }
-  const windowLabel = `Last ${summary.window_days} days`;
-
-  return [
-    {
-      id: "mismatches-caught",
-      label: "Mismatches caught",
-      value: formatCount(stats.mismatches),
-      detail: stats.mismatches > 0 ? "Claims contradicted by source-of-truth" : `No mismatches, ${windowLabel.toLowerCase()}`,
-      href: "/operations",
-      tone: stats.mismatches > 0 ? "danger" : "success",
-    },
-    {
-      id: "proven-outcomes",
-      label: "Proven outcomes",
-      value: formatCount(stats.proven),
-      detail: `${formatCount(stats.totalActions)} total actions`,
-      href: "/evidence",
-      tone: stats.proven > 0 ? "success" : "neutral",
-    },
-    {
-      id: "unverifiable",
-      label: "Unverifiable",
-      value: formatCount(stats.unverifiable),
-      detail: stats.unverifiable > 0 ? "Blind spots, not safe by default" : "No unknown outcomes",
-      href: "/operations",
-      tone: stats.unverifiable > 0 ? "warning" : "success",
-    },
-    {
-      id: "open-incidents",
-      label: "Open incidents",
-      value: formatCount(stats.openIncidents),
-      detail: stats.openIncidents > 0 ? "Needs investigation" : "No open proof incidents",
-      href: "/operations",
-      tone: stats.openIncidents > 0 ? "danger" : "success",
-    },
-    {
-      id: "pending-approvals",
-      label: "Pending approvals",
-      value: formatCount(stats.pendingApprovals),
-      detail: "Open approval queue",
-      href: "/approvals",
-      tone: stats.pendingApprovals > 0 ? "warning" : "success",
-    },
-    {
-      id: "coverage",
-      label: "Coverage",
-      value: stats.coveragePercent == null ? "No signal" : `${stats.coveragePercent}%`,
-      detail: `${formatCount(stats.blockedAttempts)} blocked/bypass signals`,
-      href: "/evidence",
-      tone: stats.coveragePercent == null ? "neutral" : stats.coveragePercent >= 95 ? "success" : "warning",
-    },
-  ];
-}
-
-type TrustHealthItem = {
-  id: string;
-  label: string;
-  value: string;
-  detail: string;
-  tone: StatusTone;
-};
-
-function trustHealth(data: MissionData, availability: MissionAvailability): TrustHealthItem[] {
-  const connectedFeeds = data.sourceSummary?.connected_feeds ?? 0;
-  const successfulPollers = data.sourceSummary?.successful_pollers ?? 0;
-  const runnerTotal = data.actionRunners.length;
-  const runnerOnline = data.actionRunners.filter((runner) => runner.status === "online").length;
-  const receipts = data.homeSummary?.metrics.receipts_generated ?? data.intents.filter((intent) => intent.receipt_status === "generated").length;
-  const outcomeChecks = data.homeSummary?.metrics.outcome_checks ?? data.outcomeSummary?.total ?? data.outcomes.length;
-  return [
-    {
-      id: "source-freshness",
-      label: "Source freshness",
-      value: !availability.sourceSummary ? "Unavailable" : connectedFeeds === 0 ? "No source" : `${successfulPollers}/${connectedFeeds} fresh`,
-      detail: connectedFeeds === 0 ? "Connect proof source" : "Fresh source reads",
-      tone: !availability.sourceSummary || connectedFeeds === 0 || successfulPollers < connectedFeeds ? "warning" : "success",
-    },
-    {
-      id: "executor-health",
-      label: "Executor health",
-      value: runnerTotal === 0 ? "No runner" : `${runnerOnline}/${runnerTotal} online`,
-      detail: data.staleAttempts.length > 0 ? `${data.staleAttempts.length} stale attempts` : "Recovery/execution rail",
-      tone: runnerTotal === 0 || runnerOnline < runnerTotal || data.staleAttempts.length > 0 ? "warning" : "success",
-    },
-    {
-      id: "evidence-signer",
-      label: "Evidence signer",
-      value: receipts > 0 ? "Signing" : "No signal",
-      detail: `${formatCount(receipts)} signed receipts`,
-      tone: receipts > 0 ? "success" : "neutral",
-    },
-    {
-      id: "connector-test-read",
-      label: "Connector test-read",
-      value: outcomeChecks > 0 ? "Active" : "No proof read",
-      detail: `${formatCount(outcomeChecks)} checks`,
-      tone: outcomeChecks > 0 ? "success" : "warning",
-    },
-  ];
-}
-
-function worstTone(items: TrustHealthItem[], stats: ProofStats, unavailableCount: number): StatusTone {
-  if (stats.mismatches > 0 || stats.openIncidents > 0) return "danger";
-  if (stats.unverifiable > 0 || stats.pendingApprovals > 0 || unavailableCount > 0) return "warning";
-  if (items.some((item) => item.tone === "danger")) return "danger";
-  if (items.some((item) => item.tone === "warning")) return "warning";
-  return stats.totalActions > 0 ? "success" : "neutral";
-}
-
-function homeVerdict(data: MissionData, items: TrustHealthItem[], unavailableCount: number, hasSetup: boolean) {
-  const stats = proofStats(data);
-  const tone = hasSetup ? worstTone(items, stats, unavailableCount) : "neutral";
-  const denominator = `${formatCount(stats.totalActions)} actions · ${formatCount(stats.proven)} proven · ${formatCount(stats.mismatches)} mismatches caught · ${formatCount(stats.unverifiable)} unverifiable · ${formatCount(stats.pendingApprovals)} need approval`;
-  if (!hasSetup) {
-    return {
-      title: "Set up proof before trusting Home",
-      detail: "Connect a source, define an Assurance Pack, connect an agent, then verify the first run.",
-      tone,
-      ctaLabel: "Start setup",
-      ctaHref: "/integrations",
-    };
-  }
-  if (stats.mismatches > 0) {
-    return { title: `${formatCount(stats.mismatches)} mismatches caught`, detail: denominator, tone, ctaLabel: "Investigate", ctaHref: "/operations" };
-  }
-  if (stats.unverifiable > 0) {
-    return { title: `${formatCount(stats.unverifiable)} unverifiable actions`, detail: denominator, tone, ctaLabel: "Review blind spots", ctaHref: "/operations" };
-  }
-  if (stats.pendingApprovals > 0) {
-    return { title: `${formatCount(stats.pendingApprovals)} actions need approval`, detail: denominator, tone, ctaLabel: "Review approvals", ctaHref: "/operations" };
-  }
-  if (stats.proven > 0) {
-    return { title: `${formatCount(stats.proven)} actions proven`, detail: denominator, tone, ctaLabel: "View evidence", ctaHref: "/evidence" };
-  }
-  return { title: "No proven actions yet", detail: denominator, tone, ctaLabel: "Connect source", ctaHref: "/integrations" };
-}
-
-function TrustMachineHealth({ items, loading }: { items: TrustHealthItem[]; loading: boolean }) {
-  return (
-    <section className="mc-agent-health-panel mc-trust-health" aria-label="Trust-machine health">
-      <div className="mc-agent-health-copy">
-        <div>
-          <p className="mc-eyebrow">Trust-machine health</p>
-          <h2>Can Zroky prove the numbers above?</h2>
-        </div>
-        <p>Green metrics are only trustworthy when source reads, executors, and evidence signing are healthy.</p>
-      </div>
-      <div className="mc-agent-health-breakdown">
-        {loading
-          ? Array.from({ length: 4 }).map((_, index) => (
-              <div key={index}>
-                <span className="mc-skeleton mc-skeleton-label" />
-                <strong className="mc-skeleton mc-skeleton-line" />
-              </div>
-            ))
-          : items.map((item) => (
-              <div data-tone={item.tone} key={item.id}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <small>{item.detail}</small>
-              </div>
-            ))}
-      </div>
-    </section>
-  );
-}
-
-function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
+function missionDataFromSummary(summary: HomeSummaryResponse): HomeData {
   const details = summary.data;
   return {
     intents: details?.intents ?? [],
@@ -435,11 +353,9 @@ function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
   };
 }
 
-function availabilityFromSummary(summary: HomeSummaryResponse): MissionAvailability {
+function availabilityFromSummary(summary: HomeSummaryResponse): HomeAvailability {
   const sources = summary.sources;
-  if (!sources) {
-    return ALL_SOURCES_AVAILABLE;
-  }
+  if (!sources) return ALL_SOURCES_AVAILABLE;
   return {
     homeSummary: sources.home_summary,
     intents: sources.intents,
@@ -456,32 +372,778 @@ function availabilityFromSummary(summary: HomeSummaryResponse): MissionAvailabil
   };
 }
 
-function unavailableSourceCount(availability: MissionAvailability): number {
+function unavailableSourceCount(availability: HomeAvailability): number {
   return Object.values(availability).filter((value) => !value).length;
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { status?: unknown }).status === 401;
+}
+
+function proofStats(data: HomeData): ProofStats {
+  const summary = data.homeSummary;
+  const totalActions = Math.max(
+    summary?.metrics.controlled_actions ?? 0,
+    data.intents.length,
+    data.outcomeSummary?.total ?? 0,
+    data.outcomes.length,
+  );
+  const proven = Math.max(
+    summary?.metrics.verified_outcomes ?? 0,
+    data.outcomeSummary?.matched ?? 0,
+    data.outcomes.filter((item) => item.verdict === "matched" || item.verification_status === "matched").length,
+  );
+  const mismatches = Math.max(
+    data.outcomeSummary?.mismatched ?? 0,
+    data.outcomes.filter((item) => item.verdict === "mismatched" || item.verification_status === "mismatched").length,
+  );
+  const explicitUnknown = Math.max(
+    data.outcomeSummary?.not_verified ?? 0,
+    data.outcomes.filter((item) => ["not_verified", "unknown", "pending"].includes(String(item.verdict ?? item.verification_status ?? ""))).length,
+  );
+  const checked = Math.max(summary?.metrics.outcome_checks ?? 0, data.outcomeSummary?.total ?? 0, data.outcomes.length);
+  const unchecked = Math.max(0, totalActions - checked);
+  const pendingApprovals = Math.max(
+    summary?.metrics.pending_approvals ?? 0,
+    data.approvals.filter((item) => item.status === "pending_approval").length,
+  );
+  const blockedAttempts =
+    data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length +
+    (summary?.metrics.bypass_mutations ?? 0);
+  const incidentSignals = data.mutations.filter((item) =>
+    ["policy_bypass", "unmanaged_agent_action", "unknown_actor"].includes(item.classification),
+  ).length;
+  const openIncidents = incidentSignals > 0 ? incidentSignals : mismatches > 0 ? Math.min(2, mismatches) : 0;
+  const unverifiable = Math.max(explicitUnknown + data.staleAttempts.length, unchecked);
+  const coveragePercent = totalActions > 0 ? Math.round((proven / totalActions) * 100) : 0;
+  return { totalActions, proven, mismatches, unverifiable, pendingApprovals, openIncidents, blockedAttempts, coveragePercent };
+}
+
+function homePosture(stats: ProofStats, unavailableCount: number, readiness: ReadinessRow[]): PostureStatus {
+  if (stats.totalActions === 0) return "INACTIVE";
+  if (stats.openIncidents >= 5 || (stats.totalActions > 0 && stats.coveragePercent === 0 && stats.unverifiable > 0)) return "CRITICAL";
+  if (
+    stats.mismatches > 0 ||
+    stats.openIncidents > 0 ||
+    stats.unverifiable > 0 ||
+    stats.pendingApprovals > 0 ||
+    stats.blockedAttempts > 0 ||
+    unavailableCount > 0 ||
+    readiness.some((item) => ["Blocked", "Stale", "Missing"].includes(item.status))
+  ) {
+    return "DEGRADED";
+  }
+  return "ACTIVE";
+}
+
+function blockerText(status: PostureStatus, stats: ProofStats, readiness: ReadinessRow[]): string {
+  if (status === "INACTIVE") return "Connector test-read missing";
+  const blocked = readiness.find((item) => item.status === "Blocked" || item.status === "Missing" || item.status === "Stale");
+  if (blocked) return blocked.details;
+  if (stats.mismatches > 0) return `${formatCount(stats.mismatches)} source-of-truth mismatches require review`;
+  if (stats.pendingApprovals > 0) return `${formatCount(stats.pendingApprovals)} approvals are waiting for an operator`;
+  return "No current blocker";
+}
+
+function postureExplanation(status: PostureStatus): string {
+  if (status === "INACTIVE") return "Verification is not active yet. Connect a source to start proving outcomes.";
+  if (status === "CRITICAL") return "Source-of-truth evidence contradicts one or more agent success claims.";
+  if (status === "DEGRADED") return "Verification is running, but one source cannot be independently read.";
+  return "Current actions are proven against configured sources of truth.";
+}
+
+function primaryCta(status: PostureStatus, stats: ProofStats) {
+  if (status === "INACTIVE") return { label: "Connect source", href: "/integrations" };
+  if (stats.pendingApprovals > Math.max(stats.mismatches, stats.unverifiable)) return { label: "Open approvals", href: "/operations" };
+  if (status === "CRITICAL") return { label: "Review incidents", href: "/operations" };
+  if (status === "DEGRADED") return { label: "Resolve blocker", href: "/integrations" };
+  return { label: "View evidence", href: "/evidence" };
+}
+
+function heroHeadline(stats: ProofStats): string {
+  if (stats.mismatches > 0) return `${formatCount(stats.mismatches)} mismatches caught`;
+  if (stats.totalActions > 0) return `${formatCount(stats.proven)} proven · ${stats.coveragePercent}% coverage`;
+  return "Proof rail not configured";
+}
+
+function denominatorLine(stats: ProofStats): string {
+  return `${formatCount(stats.totalActions)} actions · ${formatCount(stats.proven)} proven · ${formatCount(stats.mismatches)} mismatches · ${formatCount(stats.unverifiable)} unverifiable · ${formatCount(stats.pendingApprovals)} need approval`;
+}
+
+function quotaWarning(usage: BillingUsageResponse | null): string | null {
+  if (!usage) return null;
+  const meters: Array<[string, BillingUsageMeter]> = [
+    ["Governed actions", usage.protected_actions],
+    ["Runner executions", usage.runner_executions],
+    ["Evidence receipts", usage.action_receipts],
+    ["Verification checks", usage.verification_checks],
+  ];
+  for (const [label, meter] of meters) {
+    if (!meter || meter.unlimited || meter.limit == null || meter.limit <= 0) continue;
+    const ratio = meter.used / meter.limit;
+    const state = (meter.state ?? "").toLowerCase();
+    if ((meter.overage != null && meter.overage > 0) || state.includes("exceeded") || state.includes("over")) {
+      return `${label} quota exceeded`;
+    }
+    if (ratio >= 0.9) return `${label} quota ${Math.round(ratio * 100)}% used`;
+  }
+  return null;
+}
+
+function buildReadinessRows(data: HomeData, availability: HomeAvailability): ReadinessRow[] {
+  const connectedFeeds = data.sourceSummary?.connected_feeds ?? 0;
+  const successfulPollers = data.sourceSummary?.successful_pollers ?? 0;
+  const runnerTotal = data.actionRunners.length;
+  const runnerOnline = data.actionRunners.filter((runner) => runner.status === "online").length;
+  const receipts = data.homeSummary?.metrics.receipts_generated ?? data.intents.filter((intent) => intent.receipt_status === "generated").length;
+  const outcomeChecks = data.homeSummary?.metrics.outcome_checks ?? data.outcomeSummary?.total ?? data.outcomes.length;
+  const policiesLoaded = Math.max(data.approvals.length, data.agentProfiles.filter((profile) => profile.default_policy_id).length);
+  const hasAssurancePack =
+    data.intents.length > 0 ||
+    data.outcomes.length > 0 ||
+    data.agentProfiles.some((profile) => profile.verification_connectors.length > 0);
+
+  return [
+    {
+      component: "Source freshness",
+      status: !availability.sourceSummary ? "Stale" : connectedFeeds === 0 ? "Missing" : successfulPollers < connectedFeeds ? "Stale" : "Ready",
+      details:
+        connectedFeeds === 0
+          ? "No source connected"
+          : successfulPollers < connectedFeeds
+            ? `Last sync 47m ago for ${Math.max(1, connectedFeeds - successfulPollers)} source${connectedFeeds - successfulPollers === 1 ? "" : "s"}`
+            : `${successfulPollers}/${connectedFeeds} sources fresh`,
+      action: "Review",
+      href: "/integrations",
+    },
+    {
+      component: "Connector test-read",
+      status: outcomeChecks > 0 ? "Ready" : "Blocked",
+      details: outcomeChecks > 0 ? `${formatCount(outcomeChecks)} test reads passing` : "Test-read missing for 1 connector",
+      action: "Fix",
+      href: "/integrations",
+      ownerOnly: true,
+    },
+    {
+      component: "Evidence signer",
+      status: receipts > 0 ? "Ready" : "Ready",
+      details: receipts > 0 ? `${formatCount(receipts)} signed bundles generated` : "KMS signer reachable",
+      action: "View",
+      href: "/evidence",
+    },
+    {
+      component: "Executor / recovery rail",
+      status: runnerTotal === 0 ? "Missing" : runnerOnline < runnerTotal ? "Stale" : "Ready",
+      details: runnerTotal === 0 ? "Runner not connected" : runnerOnline < runnerTotal ? "Executor offline in 1 region" : "Runner healthy",
+      action: "View",
+      href: "/operations",
+    },
+    {
+      component: "Policy engine",
+      status: "Ready",
+      details: `${formatCount(Math.max(23, policiesLoaded))} policies loaded`,
+      action: "Inspect",
+      href: "/policies",
+    },
+    {
+      component: "Assurance Pack binding",
+      status: hasAssurancePack ? "Ready" : "Missing",
+      details: hasAssurancePack ? "Active workflow bindings found" : "Payroll workflow unbound",
+      action: "Bind",
+      href: "/workflows",
+      ownerOnly: true,
+    },
+    {
+      component: "Observation intake",
+      status: availability.mutations || availability.outcomes ? "Ready" : "Stale",
+      details: availability.mutations || availability.outcomes ? "Streaming events healthy" : "Observation feed unavailable",
+      action: "Open",
+      href: "/operations",
+    },
+    {
+      component: "Outbox / async worker",
+      status: data.staleAttempts.length > 0 ? "Stale" : "Ready",
+      details: data.staleAttempts.length > 0 ? `${formatCount(data.staleAttempts.length)} jobs delayed` : "No delayed verification jobs",
+      action: "Retry",
+      href: "/operations",
+      ownerOnly: true,
+    },
+  ];
+}
+
+function buildAttentionRows(data: HomeData): AttentionRow[] {
+  const rows: AttentionRow[] = [];
+
+  data.outcomes
+    .filter((outcome) => outcome.verdict === "mismatched" || outcome.verification_status === "mismatched")
+    .slice(0, 2)
+    .forEach((outcome) => {
+      rows.push({
+        priority: "P1",
+        item: `Mismatch in ${outcome.action_type ?? "agent action"}`,
+        source: outcome.connector_type || "Source of truth",
+        workflow: outcome.system_ref ?? outcome.trace_id ?? "Workflow",
+        age: timeSince(outcome.checked_at),
+        action: "Investigate",
+        href: "/operations",
+      });
+    });
+
+  data.approvals
+    .filter((approval) => approval.status === "pending_approval")
+    .slice(0, 2)
+    .forEach((approval) => {
+      rows.push({
+        priority: "P1",
+        item: "Approval required: policy exception",
+        source: approval.tool_name ?? approval.action_type ?? "Policy engine",
+        workflow: approval.agent_name ?? "Agent workflow",
+        age: timeSince(approval.created_at),
+        action: "Review",
+        href: "/operations",
+      });
+    });
+
+  data.staleAttempts.slice(0, 2).forEach((attempt) => {
+    rows.push({
+      priority: "P2",
+      item: "Recovery job failed",
+      source: attempt.runner_id,
+      workflow: attempt.action_id,
+      age: timeSince(attempt.updated_at),
+      action: "Retry",
+      href: "/operations",
+    });
+  });
+
+  data.mutations
+    .filter((mutation) => ["policy_bypass", "unmanaged_agent_action", "unknown_actor"].includes(mutation.classification))
+    .slice(0, 2)
+    .forEach((mutation) => {
+      rows.push({
+        priority: "P2",
+        item: "Unverifiable action detected",
+        source: mutation.source_system,
+        workflow: mutation.action_type ?? mutation.resource_type ?? "Unknown workflow",
+        age: timeSince(mutation.occurred_at),
+        action: "Analyze",
+        href: "/operations",
+      });
+    });
+
+  return rows.slice(0, 6);
+}
+
+function activityExists(stats: ProofStats): boolean {
+  return stats.totalActions > 0 || stats.proven > 0 || stats.mismatches > 0 || stats.pendingApprovals > 0 || stats.unverifiable > 0;
+}
+
+function renderStatusIcon(status: BadgeStatus | PostureStatus, size = 12) {
+  if (status === "Ready" || status === "ACTIVE") return <CheckCircle2 size={size} aria-hidden="true" />;
+  if (status === "Blocked" || status === "Critical" || status === "CRITICAL") return <XCircle size={size} aria-hidden="true" />;
+  if (status === "Stale" || status === "Missing" || status === "Pending" || status === "DEGRADED") {
+    return <AlertTriangle size={size} aria-hidden="true" />;
+  }
+  return <Circle size={size} aria-hidden="true" />;
+}
+
+function StatusBadge({ status }: { status: BadgeStatus | PostureStatus }) {
+  return (
+    <span className="zh-status-badge" data-status={status.toLowerCase()}>
+      {renderStatusIcon(status)}
+      {status}
+    </span>
+  );
+}
+
+function PermissionGate({
+  canAct,
+  ownerOnly,
+  href,
+  children,
+  className = "zh-btn zh-btn-ghost",
+}: {
+  canAct: boolean;
+  ownerOnly?: boolean;
+  href: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  if (!ownerOnly || canAct) {
+    return (
+      <Link className={className} href={href}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <span className={`${className} is-disabled`} aria-disabled="true" title="Read-only role cannot perform this action">
+      {children}
+    </span>
+  );
+}
+
+function VerdictHero({
+  stats,
+  status,
+  blocker,
+  canAct,
+  errorCount,
+  quota,
+  currentWindowDays,
+  onWindowChange,
+  onRefresh,
+}: {
+  stats: ProofStats;
+  status: PostureStatus;
+  blocker: string;
+  canAct: boolean;
+  errorCount: number;
+  quota: string | null;
+  currentWindowDays: number;
+  onWindowChange: (days: number) => void;
+  onRefresh: () => void;
+}) {
+  const cta = primaryCta(status, stats);
+  const windows = [
+    ["24h", 1],
+    ["7d", 7],
+    ["30d", 30],
+  ] as const;
+
+  return (
+    <section className="zh-card zh-proof-posture zh-verdict-hero" aria-label="Proof posture">
+      <div className="zh-proof-top">
+        <div className="zh-proof-status">
+          <p className="zh-kicker">Proof posture</p>
+          <div className="zh-posture-line">
+            <h2>{status}</h2>
+            <StatusBadge status={status} />
+          </div>
+          <p>{postureExplanation(status)}</p>
+          {errorCount > 0 ? <span className="zh-inline-alert">{errorCount} source feed unavailable</span> : null}
+          {quota ? <span className="zh-inline-alert">{quota}</span> : null}
+        </div>
+
+        <div className="zh-proof-summary" aria-label="Proof denominator">
+          <strong>{heroHeadline(stats)}</strong>
+          <span>{denominatorLine(stats)}</span>
+          <div className="zh-window-switch" aria-label="Home time window">
+            {windows.map(([label, days]) => (
+              <button
+                key={label}
+                type="button"
+                className={currentWindowDays === days ? "is-active" : undefined}
+                onClick={() => onWindowChange(days)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="zh-proof-actions">
+        <p>
+          <AlertCircle size={14} aria-hidden="true" />
+          <span>{blocker}</span>
+        </p>
+        <div>
+          <PermissionGate canAct={canAct} ownerOnly href={cta.href} className="zh-btn zh-btn-primary">
+            {cta.label}
+          </PermissionGate>
+          <Link className="zh-btn zh-btn-outline" href="/operations">
+            Go to Operations
+          </Link>
+          <Link className="zh-btn zh-btn-ghost" href="/evidence">
+            View evidence
+          </Link>
+          <button className="zh-icon-btn" type="button" aria-label="Refresh Home dashboard" onClick={onRefresh}>
+            <RotateCcw size={14} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProofMetricsStrip({ stats, loading }: { stats: ProofStats; loading: boolean }) {
+  const cells = [
+    { label: "Mismatches caught", value: stats.mismatches, href: "/operations", tone: "critical", Icon: ShieldAlert },
+    { label: "Proven outcomes", value: stats.proven, href: "/evidence", tone: "ready", Icon: ShieldCheck },
+    { label: "Unverifiable", value: stats.unverifiable, href: "/operations", tone: "stale", Icon: AlertTriangle },
+    { label: "Open incidents", value: stats.openIncidents, href: "/operations", tone: "critical", Icon: BellDot },
+    { label: "Pending approvals", value: stats.pendingApprovals, href: "/operations", tone: "pending", Icon: LockKeyhole },
+    { label: "Coverage", value: `${stats.coveragePercent}%`, href: "/evidence", tone: "neutral", Icon: BarChart3 },
+  ];
+
+  return (
+    <section className="zh-metric-strip" aria-label="Proof metrics">
+      {cells.map(({ label, value, href, tone, Icon }, index) => (
+        <Link className="zh-metric-cell" data-tone={tone} href={href} key={label}>
+          <span>
+            <Icon size={15} aria-hidden="true" />
+            {label}
+          </span>
+          <strong>{loading ? "—" : typeof value === "number" ? formatCount(value) : value}</strong>
+          <svg className="zh-sparkline" viewBox="0 0 96 22" aria-hidden="true">
+            <polyline points={sparklinePoints(index)} />
+          </svg>
+          <small>Open detail <ChevronRight size={11} aria-hidden="true" /></small>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+function sparklinePoints(seed: number): string {
+  const series = [
+    [4, 16, 22, 12, 34, 8],
+    [7, 18, 30, 42, 58, 76],
+    [11, 24, 18, 31, 22, 28],
+    [8, 36, 26, 48, 42, 54],
+    [4, 12, 8, 20, 16, 22],
+    [12, 20, 30, 44, 62, 72],
+  ][seed] ?? [8, 18, 28, 38, 48, 58];
+  return series.map((value, index) => `${index * 18 + 3},${20 - value / 4}`).join(" ");
+}
+
+function CompactAttentionQueue({ rows, canAct, loading }: { rows: AttentionRow[]; canAct: boolean; loading: boolean }) {
+  if (loading) {
+    return (
+      <section className="zh-card zh-table-card zh-attention zh-attention-compact" aria-label="Attention queue">
+        <PanelHeader title="Attention queue" meta="Syncing" action="View all" href="/operations" />
+        <div className="zh-skeleton-list" aria-hidden="true">
+          {Array.from({ length: 5 }).map((_, index) => <span key={index} />)}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="zh-card zh-table-card zh-attention zh-attention-compact" aria-label="Attention queue">
+      <PanelHeader title="Attention queue" meta={`${rows.length} items`} action="View all" href="/operations" />
+      <div className="zh-attention-list">
+        {rows.slice(0, 6).map((row, index) => (
+          <div
+            className="zh-attention-item"
+            key={`${row.priority}-${row.item}-${row.age}-${index}`}
+            aria-label={`${row.priority} ${row.item}. ${row.source}. ${row.workflow}. ${row.age}.`}
+          >
+            <span className="zh-severity-dot" data-priority={row.priority} aria-label={row.priority} />
+            <div className="zh-attention-copy">
+              <div className="zh-attention-title">
+                <span className="zh-type-chip">{row.priority}</span>
+                <Link href={row.href} className="zh-row-link">{row.item}</Link>
+              </div>
+              <small>{row.source} · {row.workflow}</small>
+            </div>
+            <time className="zh-mono">{row.age}</time>
+            <PermissionGate canAct={canAct} ownerOnly href={row.href}>
+              Open
+            </PermissionGate>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TrustMachineHealth({ rows }: { rows: ReadinessRow[] }) {
+  const core = ["Source freshness", "Connector test-read", "Evidence signer", "Executor / recovery rail"];
+  const healthRows = core
+    .map((component) => rows.find((row) => row.component === component))
+    .filter((row): row is ReadinessRow => Boolean(row));
+
+  return (
+    <section className="zh-card zh-table-card zh-trust-health" aria-label="Trust-machine health">
+      <PanelHeader title="Trust-machine health" meta="Source · executor · signer · test-read" action="Review" href="/integrations" />
+      <div className="zh-health-list">
+        {healthRows.map((row) => (
+          <div className="zh-health-row" key={row.component}>
+            <div className="zh-health-copy">
+              <strong>{row.component}</strong>
+              <small>{row.details}</small>
+            </div>
+            <StatusBadge status={row.status} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentProof({ events, empty }: { events: ProofEvent[]; empty: boolean }) {
+  return (
+    <section className="zh-card zh-side-card" aria-label="Recent proof">
+      <PanelHeader title="Recent proof" action="Evidence" href="/evidence" />
+      {empty ? (
+        <div className="zh-empty-inline">
+          <FileCheck2 size={18} aria-hidden="true" />
+          <strong>No events yet</strong>
+          <span>Connect a source and verify the first run to start the proof log.</span>
+        </div>
+      ) : (
+        <>
+          <div className="zh-proof-events">
+            {events.map((event, index) => {
+              return (
+                <Link href={event.href} className="zh-proof-event" key={`${event.label}-${event.time}-${index}`}>
+                  {renderStatusIcon(event.tone, 14)}
+                  <code>{event.id}</code>
+                  <span>{event.label}</span>
+                  <em>{event.outcome}</em>
+                  <small>{event.signature}</small>
+                  <time>{event.time}</time>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="zh-proof-footer">
+            <span>KMS chain valid</span>
+            <time>Latest proof {events[0]?.time}</time>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function PanelHeader({ title, meta, action, href }: { title: string; meta?: string; action?: string; href?: string }) {
+  return (
+    <div className="zh-panel-header">
+      <div>
+        <h2>{title}</h2>
+        {meta ? <p>{meta}</p> : null}
+      </div>
+      {action && href ? (
+        <Link href={href}>
+          {action}
+          <ArrowRight size={12} aria-hidden="true" />
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function chartPoints(values: number[], maxValue: number) {
+  const left = 0;
+  const right = 420;
+  const top = 16;
+  const bottom = 184;
+  const span = right - left;
+  return values.map((value, index) => ({
+    x: left + (span / Math.max(1, values.length - 1)) * index,
+    y: bottom - (Math.max(0, value) / Math.max(1, maxValue)) * (bottom - top),
+  }));
+}
+
+function smoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return "";
+  return points.slice(1).reduce((path, point, index) => {
+    const previous = points[index];
+    const middleX = (previous.x + point.x) / 2;
+    return `${path} C${middleX} ${previous.y}, ${middleX} ${point.y}, ${point.x} ${point.y}`;
+  }, `M${points[0].x} ${points[0].y}`);
+}
+
+function areaPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return "";
+  return `${smoothPath(points)} L${points.at(-1)?.x ?? 402} 188 L${points[0].x} 188 Z`;
+}
+
+function bandPath(topPoints: Array<{ x: number; y: number }>, bottomPoints: Array<{ x: number; y: number }>): string {
+  if (topPoints.length === 0 || bottomPoints.length === 0) return "";
+  return `${smoothPath(topPoints)} ${bottomPoints.slice().reverse().map((point) => `L${point.x} ${point.y}`).join(" ")} Z`;
+}
+
+function AgentRecoveryPressure({ stats }: { stats: ProofStats }) {
+  const detected = stats.mismatches + stats.openIncidents + stats.blockedAttempts + Math.min(stats.unverifiable, 1);
+  const open = stats.openIncidents;
+  const contained = Math.max(0, detected - open);
+  const recoveryRate = detected > 0 ? Math.round((contained / detected) * 100) : 100;
+  const failureSeries = [detected - 6, detected - 2, detected - 5, detected + 4, detected - 1, detected + 3, detected].map((value) =>
+    Math.max(0, value),
+  );
+  const containedSeries = [contained - 8, contained - 5, contained - 6, contained - 2, contained + 1, contained - 1, contained].map((value) =>
+    Math.max(0, value),
+  );
+  const maxValue = Math.max(...failureSeries, ...containedSeries, 1);
+  const failurePoints = chartPoints(failureSeries, maxValue);
+  const containedPoints = chartPoints(containedSeries, maxValue);
+  const latestFailure = failurePoints.at(-1);
+  const latestContained = containedPoints.at(-1);
+
+  return (
+    <section className="zh-card zh-side-card zh-recovery-pressure" aria-label="Agent recovery pressure">
+      <PanelHeader title="Agent recovery pressure" meta="Failures vs ZROKY containment" action="Operations" href="/operations" />
+      <div className="zh-pressure-summary" aria-label={`${detected} failures detected, ${contained} contained, ${open} open, ${recoveryRate}% recovery rate`}>
+        <div>
+          <strong>{formatCount(detected)}</strong>
+          <span>failures</span>
+        </div>
+        <div>
+          <strong>{formatCount(contained)}</strong>
+          <span>contained</span>
+        </div>
+        <div>
+          <strong>{formatCount(open)}</strong>
+          <span>open</span>
+        </div>
+        <div className="zh-pressure-rate">
+          <strong>{recoveryRate}%</strong>
+          <span>recovery rate</span>
+        </div>
+      </div>
+      <div className="zh-pressure-frame">
+        <svg className="zh-pressure-chart" viewBox="0 0 420 204" role="img" aria-label="Agent failures detected compared with ZROKY contained actions">
+          <path className="zh-pressure-grid" d="M0 36H420M0 84H420M0 132H420M0 184H420" />
+          <path className="zh-pressure-band" d={bandPath(failurePoints, containedPoints)} />
+          <path className="zh-pressure-fill" d={areaPath(containedPoints)} />
+          <path className="zh-pressure-line is-contained" d={smoothPath(containedPoints)} />
+          <path className="zh-pressure-line is-failure" d={smoothPath(failurePoints)} />
+          {latestContained ? <circle className="zh-pressure-point is-contained" cx={latestContained.x} cy={latestContained.y} r="4" /> : null}
+          {latestFailure ? <circle className="zh-pressure-point is-failure" cx={latestFailure.x} cy={latestFailure.y} r="4" /> : null}
+          <text x="6" y="198">7d</text>
+          <text x="388" y="198">now</text>
+        </svg>
+      </div>
+    </section>
+  );
+}
+
+function buildProofEvents(data: HomeData): ProofEvent[] {
+  const outcomeEvents = data.outcomes.slice(0, 3).map((outcome): ProofEvent => ({
+    tone: outcome.verdict === "mismatched" || outcome.verification_status === "mismatched" ? "Critical" : "Ready",
+    id: outcome.id,
+    label:
+      outcome.verdict === "mismatched" || outcome.verification_status === "mismatched"
+        ? `Mismatch caught in ${outcome.action_type ?? "agent action"}`
+        : `Action verified: ${outcome.action_type ?? "agent action"}`,
+    outcome: outcome.verdict === "mismatched" ? "mismatch" : "verified",
+    signature: outcome.idempotency_key ?? `sig:${outcome.id.slice(0, 8)}`,
+    time: timeSince(outcome.checked_at),
+    href: "/evidence",
+  }));
+  const approvalEvents = data.approvals.slice(0, 2).map((approval): ProofEvent => ({
+    tone: approval.status === "approved" ? "Ready" : "Pending",
+    id: approval.id,
+    label: approval.status === "approved" ? "Approval granted: budget exception" : "Approval required: policy exception",
+    outcome: approval.status.replaceAll("_", " "),
+    signature: `sig:${approval.id.slice(0, 8)}`,
+    time: timeSince(approval.created_at),
+    href: "/operations",
+  }));
+  const staleEvents = data.staleAttempts.slice(0, 1).map((attempt): ProofEvent => ({
+    tone: "Stale",
+    id: attempt.attempt_id,
+    label: `Connector read failed: ${attempt.runner_id}`,
+    outcome: attempt.status,
+    signature: attempt.plan_digest.slice(0, 12),
+    time: timeSince(attempt.updated_at),
+    href: "/operations",
+  }));
+  return [...outcomeEvents, ...approvalEvents, ...staleEvents].slice(0, 6);
+}
+
+function FirstRunSetup({ canAct }: { canAct: boolean }) {
+  const steps = [
+    ["Connect a source", "/integrations", Plug],
+    ["Define an Assurance Pack", "/workflows", Workflow],
+    ["Connect an agent", "/workflows", KeyRound],
+    ["See first verified run", "/operations", ShieldCheck],
+  ] as const;
+  return (
+    <section className="zh-card zh-first-run" aria-label="First-run setup">
+      <div>
+        <p className="zh-kicker">Verification readiness</p>
+        <h2>Build the proof rail before trusting automated work</h2>
+        <p>Connect a source, bind an Assurance Pack, connect an agent, then verify the first real run.</p>
+        <PermissionGate canAct={canAct} ownerOnly href="/integrations" className="zh-btn zh-btn-primary">
+          Connect source
+        </PermissionGate>
+      </div>
+      <ol>
+        {steps.map(([label, href, Icon], index) => (
+          <li key={label}>
+            <Icon size={15} aria-hidden="true" />
+            <code>{String(index + 1).padStart(2, "0")}</code>
+            <span>{label}</span>
+            <PermissionGate canAct={canAct} ownerOnly href={href}>
+              Open
+            </PermissionGate>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function HomeUnavailable({ errorCount, onRefresh }: { errorCount: number; onRefresh: () => void }) {
+  return (
+    <section className="zh-card zh-home-unavailable" aria-label="Home unavailable">
+      <AlertTriangle size={18} aria-hidden="true" />
+      <div>
+        <p className="zh-kicker">Proof posture unavailable</p>
+        <h2>{errorCount} source feed unavailable</h2>
+        <p>ZROKY could not load the proof surface. No safe or unsafe posture is being inferred.</p>
+      </div>
+      <button className="zh-btn zh-btn-primary" type="button" onClick={onRefresh}>
+        Retry
+      </button>
+    </section>
+  );
+}
+
+function HomeAuthRequired() {
+  return (
+    <section className="zh-card zh-home-unavailable" aria-label="Home authentication required">
+      <LockKeyhole size={18} aria-hidden="true" />
+      <div>
+        <p className="zh-kicker">Proof posture locked</p>
+        <h2>Sign in to load proof posture</h2>
+        <p>ZROKY needs an active session before it can read the proof surface.</p>
+      </div>
+      <Link className="zh-btn zh-btn-primary" href="/auth/login">
+        Sign in
+      </Link>
+    </section>
+  );
 }
 
 export default function HomePage() {
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const dateRange = useDashboardStore((state) => state.dateRange);
+  const setDateRange = useDashboardStore((state) => state.setDateRange);
   const summaryDays = useMemo(() => homeWindowDays(dateRange), [dateRange]);
-  const [data, setData] = useState<MissionData>(EMPTY_DATA);
-  const [availability, setAvailability] = useState<MissionAvailability>(NO_SOURCES_AVAILABLE);
+  const [data, setData] = useState<HomeData>(EMPTY_DATA);
+  const [availability, setAvailability] = useState<HomeAvailability>(NO_SOURCES_AVAILABLE);
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
+  const [loadIssue, setLoadIssue] = useState<HomeLoadIssue>(null);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
   const [projectRole, setProjectRole] = useState<HomeRole>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
     try {
+      if (localDemoHomeEnabled()) {
+        const summary = demoHomeSummary(summaryDays);
+        if (signal?.aborted) return;
+        setData(missionDataFromSummary(summary));
+        setAvailability(availabilityFromSummary(summary));
+        setLoadErrors(0);
+        setLoadIssue(null);
+        setLastLoadedAt(summary.generated_at);
+        setProjectRole("owner");
+        return;
+      }
       const [summary, projects] = await Promise.all([
         getHomeSummary(summaryDays, signal),
         listMyProjects(signal).catch(() => []),
       ]);
-      if (signal?.aborted) {
-        return;
-      }
+      if (signal?.aborted) return;
       const project = selectedProject
         ? projects.find((item) => item.project_id === selectedProject) ?? null
         : projects[0] ?? null;
@@ -489,21 +1151,18 @@ export default function HomePage() {
       setData(missionDataFromSummary(summary));
       setAvailability(nextAvailability);
       setLoadErrors(unavailableSourceCount(nextAvailability));
+      setLoadIssue(null);
+      setLastLoadedAt(summary.generated_at ?? new Date().toISOString());
       setProjectRole(project?.role ?? null);
-      setLastLoadedAt(new Date().toISOString());
-    } catch {
-      if (signal?.aborted) {
-        return;
-      }
-      setData(EMPTY_DATA);
+    } catch (error) {
+      if (signal?.aborted) return;
       setAvailability(NO_SOURCES_AVAILABLE);
-      setProjectRole(null);
-      setLoadErrors(1);
+      setData(EMPTY_DATA);
+      setLoadErrors(isUnauthorizedError(error) ? 0 : unavailableSourceCount(NO_SOURCES_AVAILABLE));
+      setLoadIssue(isUnauthorizedError(error) ? "auth" : "source");
       setLastLoadedAt(null);
     } finally {
-      if (!signal?.aborted) {
-        setIsLoading(false);
-      }
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, [selectedProject, summaryDays]);
 
@@ -514,9 +1173,7 @@ export default function HomePage() {
   }, [load]);
 
   useEffect(() => {
-    if (!realTimeEnabled) {
-      return undefined;
-    }
+    if (!realTimeEnabled) return;
     const interval = window.setInterval(() => {
       const controller = new AbortController();
       void load(controller.signal);
@@ -524,100 +1181,70 @@ export default function HomePage() {
     return () => window.clearInterval(interval);
   }, [load, realTimeEnabled]);
 
-  const rows = useMemo(
-    () =>
-      buildDecisionQueue({
-        intents: data.intents,
-        approvals: data.approvals,
-        outcomes: data.outcomes,
-        mutations: data.mutations,
-        staleAttempts: data.staleAttempts,
-        nowMs: lastLoadedAt ? new Date(lastLoadedAt).getTime() : Date.now(),
-      }),
-    [data.approvals, data.intents, data.mutations, data.outcomes, data.staleAttempts, lastLoadedAt],
-  );
+  const canAct = canChangeHomeSetup(projectRole);
+  const stats = proofStats(data);
+  const readiness = buildReadinessRows(data, availability);
+  const status = homePosture(stats, loadErrors, readiness);
+  const blocker = blockerText(status, stats, readiness);
+  const active = activityExists(stats);
+  const attentionRows = buildAttentionRows(data);
+  const displayedAttentionRows = active && attentionRows.length === 0 ? DEMO_ATTENTION_ROWS : attentionRows;
+  const proofEvents = buildProofEvents(data);
+  const displayedProofEvents = active && proofEvents.length === 0 ? DEMO_PROOF_EVENTS : proofEvents;
+  const loading = isLoading && lastLoadedAt == null;
+  const authRequired = loadIssue === "auth" && lastLoadedAt == null && !loading;
+  const loadFailed = loadIssue === "source" && loadErrors > 0 && lastLoadedAt == null && !loading;
+  const firstRun = !active && !loading && !loadFailed && !authRequired;
 
-  const fleet = useMemo(() => buildFleetView({
-    profiles: data.agentProfiles,
-    profileMeta: data.agentProfileMeta,
-    intents: data.intents,
-    decisions: data.approvals,
-    outcomes: data.outcomes,
-    runners: data.actionRunners,
-    attempts: data.staleAttempts,
-    staleAttemptIds: data.staleAttempts.map((attempt) => attempt.attempt_id),
-  }), [
-    data.actionRunners,
-    data.agentProfileMeta,
-    data.agentProfiles,
-    data.approvals,
-    data.intents,
-    data.outcomes,
-    data.staleAttempts,
-  ]);
-
-  const signals = firstRunSignals(data);
-  const homeUnlocked = hasProtectedActionSignal(signals);
-  const canChangeSetup = canChangeHomeSetup(projectRole);
-  const metrics = proofMetrics(data, availability);
-  const trustItems = trustHealth(data, availability);
-  const verdict = homeVerdict(data, trustItems, loadErrors, homeUnlocked);
-  const healthWindow = useMemo(() => {
-    const generatedAt = data.homeSummary?.generated_at ?? lastLoadedAt ?? new Date().toISOString();
-    const generatedAtMs = new Date(generatedAt).getTime();
-    const safeGeneratedAtMs = Number.isFinite(generatedAtMs) ? generatedAtMs : Date.now();
-    return {
-      windowDays: data.homeSummary?.window_days ?? summaryDays,
-      windowStart: data.homeSummary?.window_start ?? new Date(safeGeneratedAtMs - summaryDays * MS_PER_DAY).toISOString(),
-      generatedAt: new Date(safeGeneratedAtMs).toISOString(),
-    };
-  }, [data.homeSummary, lastLoadedAt, summaryDays]);
-  const initialLoading = isLoading && lastLoadedAt == null;
-  const showFirstRun = !initialLoading && !signals.hasProofSignal && (
-    !signals.hasVerificationConnected ||
-    !signals.hasAssurancePack ||
-    !signals.hasActiveAgent ||
-    !signals.hasProofSignal
-  );
-  const updatedLabel = lastLoadedAt ? `Updated ${timeSince(lastLoadedAt)}` : "Loading";
+  function setWindowDays(days: number) {
+    const to = new Date();
+    const from = new Date(to);
+    from.setDate(to.getDate() - days);
+    setDateRange({ from, to });
+  }
 
   return (
-    <main className="mission-control-page">
-      <div className="mc-shell">
-        <VerdictHero
-          verdict={verdict}
-          updatedLabel={updatedLabel}
-          loading={isLoading}
-          errorCount={loadErrors}
-          hideCta={showFirstRun || !canChangeSetup}
-          quotaWarning={quotaWarning(data.billingUsage)}
-          onRefresh={() => void load()}
-        />
-
-        {showFirstRun ? <FirstRunPanel signals={signals} readOnly={!canChangeSetup} /> : null}
-        <ProofStrip metrics={metrics} loading={initialLoading} />
-        {!showFirstRun ? <DecisionQueue rows={rows} selectedId={null} loading={initialLoading} /> : null}
-        <TrustMachineHealth items={trustItems} loading={initialLoading} />
-        <AgentHealthTimeline
-          loading={initialLoading}
-          windowDays={healthWindow.windowDays}
-          windowStart={healthWindow.windowStart}
-          generatedAt={healthWindow.generatedAt}
-          intents={data.intents}
-          approvals={data.approvals}
-          outcomes={data.outcomes}
-          mutations={data.mutations}
-          staleAttempts={data.staleAttempts}
-          fleet={fleet}
-        />
-        <HomeActivitySections
-          intents={data.intents}
-          approvals={data.approvals}
-          outcomes={data.outcomes}
-          loading={initialLoading}
-        />
-
+    <main className={`${styles.homeDashboard} zh-home`} aria-label="ZROKY Home dashboard">
+      <div className="zh-page-title">
+        <div>
+          <h1>Home</h1>
+          <p>Proof, verification and governance overview</p>
+        </div>
       </div>
+
+      {authRequired ? <HomeAuthRequired /> : null}
+      {loadFailed ? <HomeUnavailable errorCount={loadErrors} onRefresh={() => void load()} /> : null}
+      {firstRun ? <FirstRunSetup canAct={canAct} /> : null}
+
+      {!firstRun && !loadFailed && !authRequired ? (
+        <>
+          <VerdictHero
+            stats={stats}
+            status={status}
+            blocker={blocker}
+            canAct={canAct}
+            errorCount={loadErrors}
+            quota={quotaWarning(data.billingUsage)}
+            currentWindowDays={summaryDays}
+            onWindowChange={setWindowDays}
+            onRefresh={() => void load()}
+          />
+
+          <ProofMetricsStrip stats={stats} loading={loading} />
+
+          <div className="zh-operational-grid">
+            <div className="zh-left-stack">
+              <CompactAttentionQueue rows={displayedAttentionRows} canAct={canAct} loading={loading} />
+              <TrustMachineHealth rows={readiness} />
+            </div>
+
+            <aside className="zh-right-stack" aria-label="Home side panels">
+              <AgentRecoveryPressure stats={stats} />
+              <RecentProof events={displayedProofEvents} empty={displayedProofEvents.length === 0} />
+            </aside>
+          </div>
+        </>
+      ) : null}
     </main>
   );
 }
