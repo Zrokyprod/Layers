@@ -78,6 +78,9 @@ lint_output.txt
 .vscode/
 .idea/
 .codex/
+
+# Generated Codex screenshots
+.codex-*.png
 .codex-logs/
 codex-logs/
 .agents/
