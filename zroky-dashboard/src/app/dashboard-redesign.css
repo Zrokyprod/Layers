@@ -9039,7 +9039,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-page .dashboard-workspace {
-  grid-template-columns: minmax(340px, 0.92fr) minmax(0, 1.08fr) !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-command-bar {
@@ -23825,6 +23825,135 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list span {
   border: 1px solid var(--zk-border) !important;
   background: #f4f4f5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table-wrap {
+  width: 100% !important;
+  overflow-x: auto !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table {
+  width: 100% !important;
+  min-width: 760px !important;
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th {
+  height: 38px !important;
+  padding: 0 14px !important;
+  border-bottom: 1px solid var(--zk-border) !important;
+  background: #fafafa !important;
+  color: #71717a !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td {
+  height: 52px !important;
+  padding: 0 14px !important;
+  border-bottom: 1px solid var(--zk-border) !important;
+  color: #334155 !important;
+  font-size: 12px !important;
+  vertical-align: middle !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table tr:hover td {
+  background: #fafafa !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table .ev-ledger-row[data-focused="true"] td:first-child {
+  box-shadow: inset 3px 0 0 #09090b !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-name {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-name > span:last-child {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-name strong {
+  overflow: hidden !important;
+  color: #0f172a !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-name small {
+  overflow: hidden !important;
+  color: #64748b !important;
+  font-size: 10.5px !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-digest,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-signed-cell {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-digest span,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-signed-cell small {
+  overflow: hidden !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-digest code {
+  overflow: hidden !important;
+  color: #334155 !important;
+  font-size: 10px !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-dot {
+  width: 8px !important;
+  height: 8px !important;
+  flex: 0 0 auto !important;
+  border-radius: 999px !important;
+  background: #94a3b8 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row[data-tone="success"] .ev-proof-dot {
+  background: #047857 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row[data-tone="warning"] .ev-proof-dot {
+  background: #a16207 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-row[data-tone="danger"] .ev-proof-dot {
+  background: #b91c1c !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table .dashboard-button {
+  width: 56px !important;
+  min-width: 56px !important;
+  height: 34px !important;
+  font-size: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-readiness-strip .dashboard-metric-card strong {

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Download, Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
@@ -130,58 +129,64 @@ export function EvidenceLedger({
       ) : filteredRows.length === 0 ? (
         <div className="ev-empty-state">No records match this filter or search.</div>
       ) : (
-        <div className="ev-ledger-list">
-          {filteredRows.map((row) => {
-            const selected = row.id === selectedRowId;
-            return (
-              <article
-                key={row.id}
-                className="ev-ledger-row"
-                data-focused={selected ? "true" : undefined}
-                data-kind={row.kind}
-                data-tone={row.tone}
-                aria-current={selected ? "true" : undefined}
-              >
-                <div className="ev-ledger-main">
-                  <div className="ev-ledger-titleline">
-                    <div>
-                      <span className="ev-row-kind">{rowKindLabel(row.kind)}</span>
-                      <h3>{row.title}</h3>
-                    </div>
-                    <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} />
-                  </div>
-                  <p>{row.agentName} / {row.actionType}</p>
-                  <dl className="ev-row-meta">
-                    {row.digest ? (
-                      <div>
-                        <dt>Digest</dt>
-                        <dd>
-                          <code>{row.digest}</code>
-                        </dd>
-                      </div>
-                    ) : null}
-                    <div>
-                      <dt>Checked</dt>
-                      <dd>{formatDateTime(row.checkedAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>Export</dt>
-                      <dd>{row.exportable ? row.sourceLabel : "not linked / not exportable"}</dd>
-                    </div>
-                  </dl>
-                  <small>{row.systemRef ?? row.detail}</small>
-                </div>
-                <div className="ev-ledger-actions">
-                  <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
-                    {row.exportable ? "View proof" : actionLabel(row)}
-                  </DashboardButton>
-                  {row.kind === "unlinked_outcome" ? (
-                    <Link className="ev-link" href="/outcomes">Open outcomes</Link>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
+        <div className="ev-ledger-table-wrap">
+          <table className="ev-ledger-table">
+            <thead>
+              <tr>
+                <th scope="col">Proof</th>
+                <th scope="col">Workflow</th>
+                <th scope="col">Source</th>
+                <th scope="col">Verdict</th>
+                <th scope="col">Signed</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((row) => {
+                const selected = row.id === selectedRowId;
+                return (
+                  <tr
+                    key={row.id}
+                    className="ev-ledger-row"
+                    data-focused={selected ? "true" : undefined}
+                    data-kind={row.kind}
+                    data-tone={row.tone}
+                    aria-current={selected ? "true" : undefined}
+                  >
+                    <td>
+                      <span className="ev-proof-name">
+                        <span className="ev-proof-dot" aria-hidden="true" />
+                        <span>
+                          <strong>{row.title}</strong>
+                          <small>{rowKindLabel(row.kind)}</small>
+                          {row.digest ? (
+                            <small className="ev-proof-digest">
+                              <span>Digest</span>
+                              <code>{row.digest}</code>
+                            </small>
+                          ) : null}
+                        </span>
+                      </span>
+                    </td>
+                    <td>{row.kind === "unlinked_outcome" ? row.actionType : row.agentName}</td>
+                    <td>{row.systemRef ?? row.sourceLabel}</td>
+                    <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
+                    <td>
+                      <span className="ev-signed-cell">
+                        {formatDateTime(row.checkedAt)}
+                        <small>{row.exportable ? row.sourceLabel : "not linked / not exportable"}</small>
+                      </span>
+                    </td>
+                    <td>
+                      <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
+                        {row.exportable ? "View" : actionLabel(row)}
+                      </DashboardButton>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </section>
