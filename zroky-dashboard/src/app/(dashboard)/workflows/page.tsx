@@ -117,6 +117,12 @@ function errorMessage(error: unknown): string {
   return "Request failed.";
 }
 
+function fieldValue(item: unknown, key: string, fallback = "—"): string {
+  if (!item || typeof item !== "object") return fallback;
+  const value = (item as Record<string, unknown>)[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
+}
+
 function statusTone(result: ResultState, draftError: string | null): WorkflowTone {
   if (draftError || result.type === "error") return "critical";
   if (result.type === "published" || result.type === "validated") return "ready";
@@ -161,6 +167,48 @@ export default function WorkflowsPage() {
   const tone = statusTone(result, parsedDraft.error);
   const summary = parsedDraft.summary;
   const validationLabel = parsedDraft.error ? "Invalid draft" : result.type === "published" ? "Published" : result.type === "validated" ? "Validated" : "Needs validation";
+  const sourceBindings = summary?.sourceBindings ?? [];
+  const expectedEffects = summary?.effects ?? [];
+  const recoveryPlaybooks = summary?.recoveryPlaybooks ?? [];
+  const workflowRows = [
+    {
+      label: "Expected outcome",
+      value: fieldValue(expectedEffects[0], "name", "No effect defined"),
+      detail: fieldValue(expectedEffects[0], "predicate", "Agent outcome cannot be verified without an expected effect."),
+      status: expectedEffects.length > 0 ? "Ready" : "Blocked",
+      tone: expectedEffects.length > 0 ? "ready" : "critical",
+    },
+    {
+      label: "Source-of-truth binding",
+      value: fieldValue(sourceBindings[0], "name", "No source binding"),
+      detail: sourceBindings.length > 0
+        ? `${fieldValue(sourceBindings[0], "connector")} · freshness ${fieldValue(sourceBindings[0], "freshness_seconds")}s`
+        : "Connectors must provide read-only proof access.",
+      status: sourceBindings.length > 0 ? "Ready" : "Blocked",
+      tone: sourceBindings.length > 0 ? "ready" : "critical",
+    },
+    {
+      label: "Policy guardrails",
+      value: "Bound at policy check",
+      detail: "Approval and deny rules are evaluated before execution.",
+      status: "Linked",
+      tone: "neutral",
+    },
+    {
+      label: "SLA / owner",
+      value: "Not defined in pack",
+      detail: "Add only when Operations needs real SLA breach math.",
+      status: "Missing",
+      tone: "warning",
+    },
+    {
+      label: "Recovery path",
+      value: fieldValue(recoveryPlaybooks[0], "name", "No recovery playbook"),
+      detail: recoveryPlaybooks.length > 0 ? fieldValue(recoveryPlaybooks[0], "trigger") : "Mismatches will require manual handling.",
+      status: recoveryPlaybooks.length > 0 ? "Ready" : "Missing",
+      tone: recoveryPlaybooks.length > 0 ? "ready" : "warning",
+    },
+  ] as const satisfies ReadonlyArray<{ detail: string; label: string; status: string; tone: WorkflowTone; value: string }>;
   const readinessRows = [
     {
       label: "Draft JSON",
@@ -260,15 +308,16 @@ export default function WorkflowsPage() {
             icon={<CheckCircle2 size={15} />}
             loading={busy === "validate"}
             onClick={runValidate}
-            variant="soft"
+            variant={result.type === "validated" || result.type === "published" ? "soft" : "primary"}
           >
             Validate
           </DashboardButton>
           <DashboardButton
+            disabled={Boolean(parsedDraft.error)}
             icon={<Rocket size={15} />}
             loading={busy === "publish"}
             onClick={runPublish}
-            variant="primary"
+            variant={result.type === "validated" || result.type === "published" ? "primary" : "soft"}
           >
             Publish
           </DashboardButton>
@@ -296,12 +345,12 @@ export default function WorkflowsPage() {
       </section>
 
       <div className={styles.workspace}>
-        <section className={cn(styles.card, styles.editorCard)} aria-labelledby="workflow-draft-title">
+        <section className={cn(styles.card, styles.contractCard)} aria-labelledby="workflow-contract-title">
           <div className={styles.panelHeader}>
             <div>
               <p className={styles.kicker}>Assurance Pack</p>
-              <h2 id="workflow-draft-title">Workflow contract source</h2>
-              <p>Edit the pack, validate it, then publish the immutable version agents must use.</p>
+              <h2 id="workflow-contract-title">Workflow contract</h2>
+              <p>What must be true before ZROKY trusts an agent action.</p>
             </div>
             <label className={styles.selectField}>
               <span>Environment</span>
@@ -312,13 +361,18 @@ export default function WorkflowsPage() {
               </select>
             </label>
           </div>
-          <textarea
-            aria-label="Assurance Pack JSON"
-            className={styles.editor}
-            spellCheck={false}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
+          <div className={styles.contractTable} role="list">
+            {workflowRows.map((row) => (
+              <div className={styles.contractRow} key={row.label} role="listitem">
+                <div>
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                  <small>{row.detail}</small>
+                </div>
+                <StatusBadge tone={row.tone}>{row.status}</StatusBadge>
+              </div>
+            ))}
+          </div>
         </section>
 
         <aside className={styles.sideStack} aria-label="Workflow readiness">
@@ -350,7 +404,7 @@ export default function WorkflowsPage() {
               </div>
               <StatusBadge tone={tone}>{result.type}</StatusBadge>
             </div>
-            <p className={styles.resultMessage}>{result.message}</p>
+            {result.type !== "idle" ? <p className={styles.resultMessage}>{result.message}</p> : null}
             <pre className={styles.resultPre} aria-label="Workflow API result">
               {result.type === "idle" || result.type === "error" ? result.message : prettyJson(result.data)}
             </pre>
@@ -372,6 +426,23 @@ export default function WorkflowsPage() {
           </section>
         </aside>
       </div>
+
+      <section className={cn(styles.card, styles.editorCard)} aria-labelledby="workflow-draft-title">
+        <div className={styles.panelHeader}>
+          <div>
+            <p className={styles.kicker}>Advanced</p>
+            <h2 id="workflow-draft-title">Pack JSON</h2>
+            <p>Edit only when changing the workflow contract source.</p>
+          </div>
+        </div>
+        <textarea
+          aria-label="Assurance Pack JSON"
+          className={styles.editor}
+          spellCheck={false}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      </section>
     </main>
   );
 }

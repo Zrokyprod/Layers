@@ -247,7 +247,62 @@
 }
 
 .editorCard {
-  min-height: 680px;
+  min-height: 360px;
+}
+
+.contractCard {
+  min-height: 420px;
+}
+
+.contractTable {
+  display: grid;
+}
+
+.contractRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 78px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.contractRow:first-child {
+  border-top: 0;
+}
+
+.contractRow div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.contractRow span {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.contractRow strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contractRow small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panelHeader {
@@ -294,7 +349,7 @@
 .editor {
   display: block;
   width: 100%;
-  min-height: 608px;
+  min-height: 300px;
   padding: 14px 16px;
   color: var(--text);
   background: linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px) 0 0 / 48px 100%, var(--surface);
