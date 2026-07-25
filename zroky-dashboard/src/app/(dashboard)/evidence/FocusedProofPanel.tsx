@@ -366,6 +366,7 @@ export function FocusedProofPanel({
   const canExport = Boolean(row?.exportable) && !isLoading && !isExporting;
   const canPrint = loaded && !isLoading;
   const verification = verificationSummary({ evidencePack, finalBundle, finalBundleVerification, receipt, row });
+  const isDemoRow = row?.id.startsWith("demo:");
 
   async function copyFingerprint() {
     if (!verification?.fingerprint) return;
@@ -460,6 +461,20 @@ export function FocusedProofPanel({
           <div className="ev-empty-state">
             <strong>Proof unavailable</strong>
             <span>{error.message || unavailableCopy(row)}</span>
+          </div>
+        ) : isDemoRow ? (
+          <div className="ev-demo-proof-path">
+            <header>
+              <h3>Signed evidence path</h3>
+              <span>4 steps</span>
+            </header>
+            {["Event captured", "Digest computed", "Signed by connector", "Included in bundle"].map((step, index) => (
+              <div key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+                <small>{row.detail}</small>
+              </div>
+            ))}
           </div>
         ) : receipt ? (
           <CompactReceiptProof receipt={receipt} />

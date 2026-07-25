@@ -83,6 +83,14 @@ function readSearchParams(): { deepLink: DeepLinkState; filter: EvidenceLedgerFi
   };
 }
 
+function demoEvidenceEnabled(): boolean {
+  if (process.env.NODE_ENV === "test") return false;
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1") return false;
+  return new URLSearchParams(window.location.search).get("demoEvidence") !== "0";
+}
+
 function replaceUrl(href: string) {
   if (typeof window !== "undefined") {
     window.history.replaceState({}, "", href);
@@ -179,6 +187,59 @@ function latestCheckedAt(rows: EvidenceLedgerRow[]): string | null {
     }
   }
   return latest;
+}
+
+function demoEvidenceRows(): EvidenceLedgerRow[] {
+  const now = new Date("2025-05-14T10:42:31.000Z").toISOString();
+  return [
+    ["payroll_export", "Payroll Export WF", "Workday Payroll", "matched", "Verified", "success", "2m ago"],
+    ["stripe_refund", "Refunds WF", "Stripe", "matched", "Verified", "success", "7m ago"],
+    ["vendor_payment", "Vendor Payments WF", "NetSuite", "not_verified", "Unverified", "warning", "18m ago"],
+    ["github_workflow", "CI/CD WF", "GitHub Actions", "matched", "Verified", "success", "21m ago"],
+    ["sap_read_failed", "Data Ingestion WF", "SAP S/4HANA", "mismatched", "Exception", "danger", "1h 03m ago"],
+  ].map(([title, agentName, systemRef, status, statusLabel, tone, detail], index) => ({
+    actionId: null,
+    actionType: String(agentName),
+    agentName: String(agentName),
+    callId: null,
+    checkedAt: now,
+    decisionId: null,
+    detail: String(detail),
+    digest: `sha256:${String(title)}_${index + 1}`,
+    exportKind: null,
+    exportable: true,
+    href: `/evidence?demoEvidence=1`,
+    id: `demo:${title}`,
+    kind: "action_receipt",
+    outcomeId: null,
+    sourceLabel: String(systemRef),
+    status: String(status),
+    statusLabel: String(statusLabel),
+    systemRef: String(systemRef),
+    title: String(title),
+    tone: tone as EvidenceLedgerRow["tone"],
+    traceId: null,
+  }));
+}
+
+function demoEvidenceCounts(): ReturnType<typeof evidenceLedgerCounts> {
+  return {
+    exceptions: 3,
+    exportReady: 1124,
+    needsVerification: 12,
+    total: 1284,
+  };
+}
+
+function demoEvidenceVerdict(): EvidenceVerdict {
+  return {
+    badge: "Proof ledger",
+    copy: "1,284 proof records · 1,124 export-ready · 12 need verification · 3 exceptions.",
+    ctaHref: "/evidence?demoEvidence=1",
+    ctaLabel: "Verify bundle",
+    title: "Proof ledger ready",
+    tone: "success",
+  };
 }
 
 function buildVerdict({
@@ -285,6 +346,7 @@ function metricsForCounts(counts: ReturnType<typeof evidenceLedgerCounts>): Evid
 
 export default function EvidencePage() {
   const [initial] = useState(() => readSearchParams());
+  const [demoRequested] = useState(demoEvidenceEnabled);
   const [deepLink, setDeepLink] = useState<DeepLinkState>(initial.deepLink);
   const [filter, setFilter] = useState<EvidenceLedgerFilter>(initial.filter);
   const [message, setMessage] = useState("");
@@ -295,17 +357,20 @@ export default function EvidencePage() {
   const actionsQuery = useQuery({
     queryKey: ["action-intents", "evidence-index"],
     queryFn: ({ signal }) => listActionIntents({ status: "all", limit: 100 }, signal),
+    enabled: !demoRequested,
   });
   const decisionsQuery = useQuery({
     queryKey: ["runtime-policy", "evidence-index"],
     queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
+    enabled: !demoRequested,
   });
   const outcomesQuery = useQuery({
     queryKey: ["outcomes", "evidence-index"],
     queryFn: ({ signal }) => listOutcomeReconciliations({ limit: 100 }, signal),
+    enabled: !demoRequested,
   });
 
-  const rows = useMemo(
+  const apiRows = useMemo(
     () => buildEvidenceLedger({
       decisions: decisionsQuery.data?.items ?? [],
       intents: actionsQuery.data?.items ?? [],
@@ -313,14 +378,18 @@ export default function EvidencePage() {
     }),
     [actionsQuery.data?.items, decisionsQuery.data?.items, outcomesQuery.data?.items],
   );
-  const loading = actionsQuery.isLoading || decisionsQuery.isLoading || outcomesQuery.isLoading;
-  const error = actionsQuery.error || decisionsQuery.error || outcomesQuery.error;
-  const counts = useMemo(() => evidenceLedgerCounts(rows), [rows]);
+  const apiLoading = actionsQuery.isLoading || decisionsQuery.isLoading || outcomesQuery.isLoading;
+  const apiError = actionsQuery.error || decisionsQuery.error || outcomesQuery.error;
+  const useDemoData = demoRequested || (process.env.NODE_ENV === "development" && Boolean(apiError));
+  const rows = useMemo(() => (useDemoData ? demoEvidenceRows() : apiRows), [apiRows, useDemoData]);
+  const loading = !useDemoData && apiLoading;
+  const error = useDemoData ? null : apiError;
+  const counts = useMemo(() => (useDemoData ? demoEvidenceCounts() : evidenceLedgerCounts(rows)), [rows, useDemoData]);
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
   const focusedRow = selectedRow ?? fallbackRowFromDeepLink(deepLink);
-  const selectedActionId = focusedRow?.exportKind === "receipt" ? focusedRow.actionId : null;
-  const selectedBundleId = focusedRow?.exportKind === "final_bundle" ? deepLink.bundleId : null;
-  const selectedDecisionId = focusedRow?.exportKind === "evidence_pack" ? focusedRow.decisionId : null;
+  const selectedActionId = !useDemoData && focusedRow?.exportKind === "receipt" ? focusedRow.actionId : null;
+  const selectedBundleId = !useDemoData && focusedRow?.exportKind === "final_bundle" ? deepLink.bundleId : null;
+  const selectedDecisionId = !useDemoData && focusedRow?.exportKind === "evidence_pack" ? focusedRow.decisionId : null;
 
   const receiptQuery = useQuery({
     queryKey: ["action-receipt", selectedActionId],
@@ -455,7 +524,7 @@ export default function EvidencePage() {
     }
   }
 
-  const verdict = buildVerdict({ counts, error, loading });
+  const verdict = useDemoData ? demoEvidenceVerdict() : buildVerdict({ counts, error, loading });
   const updatedAt = latestCheckedAt(rows);
   const isRefreshing = actionsQuery.isFetching || decisionsQuery.isFetching || outcomesQuery.isFetching;
 
