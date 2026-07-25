@@ -1,16 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, FileJson, Rocket, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, FileJson, GitBranch, Rocket, ShieldCheck, Workflow } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
-import {
-  DashboardMetricStrip,
-  DashboardVerdictHero,
-  DashboardWorkspace,
-  type DashboardMetric,
-} from "@/components/dashboard-scaffold";
-import { StatusPill } from "@/components/status-pill";
 import {
   publishAssurancePack,
   validateAssurancePack,
@@ -18,6 +11,9 @@ import {
   type AssurancePackResponse,
   type AssurancePackValidateResponse,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+import styles from "./workflows.module.css";
 
 const STARTER_PACK: AssurancePackJson = {
   schema_version: "zroky.workflow_assurance_pack.v1",
@@ -69,6 +65,18 @@ type ResultState =
   | { type: "published"; message: string; data: AssurancePackResponse }
   | { type: "error"; message: string };
 
+type WorkflowTone = "ready" | "warning" | "critical" | "neutral";
+
+type PackSummary = {
+  effects: unknown[];
+  intentFields: string[];
+  objectTypes: unknown[];
+  recoveryPlaybooks: unknown[];
+  sourceBindings: unknown[];
+  version: string;
+  workflowKey: string;
+};
+
 function prettyJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
@@ -81,11 +89,55 @@ function parseDraft(value: string): AssurancePackJson {
   return parsed as AssurancePackJson;
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function unknownArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function packSummary(pack: AssurancePackJson): PackSummary {
+  const intentSchema = pack.intent_schema && typeof pack.intent_schema === "object" ? pack.intent_schema as Record<string, unknown> : {};
+  return {
+    effects: unknownArray(pack.effects),
+    intentFields: stringArray(intentSchema.required),
+    objectTypes: unknownArray(pack.object_types),
+    recoveryPlaybooks: unknownArray(pack.recovery_playbooks),
+    sourceBindings: unknownArray(pack.source_bindings),
+    version: typeof pack.version === "string" ? pack.version : "unversioned",
+    workflowKey: typeof pack.workflow_key === "string" ? pack.workflow_key : "missing_workflow_key",
+  };
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
   return "Request failed.";
+}
+
+function statusTone(result: ResultState, draftError: string | null): WorkflowTone {
+  if (draftError || result.type === "error") return "critical";
+  if (result.type === "published" || result.type === "validated") return "ready";
+  return "warning";
+}
+
+function StatusBadge({ children, tone }: { children: string; tone: WorkflowTone }) {
+  return (
+    <span className={styles.statusBadge} data-tone={tone}>
+      {tone === "critical" ? <AlertTriangle size={12} aria-hidden="true" /> : <CheckCircle2 size={12} aria-hidden="true" />}
+      {children}
+    </span>
+  );
+}
+
+function Sparkline({ tone }: { tone: WorkflowTone }) {
+  return (
+    <svg className={styles.sparkline} viewBox="0 0 96 22" aria-hidden="true" data-tone={tone}>
+      <polyline points="3,16 20,13 37,15 54,8 72,10 93,5" />
+    </svg>
+  );
 }
 
 export default function WorkflowsPage() {
@@ -97,32 +149,50 @@ export default function WorkflowsPage() {
   });
   const [busy, setBusy] = useState<"validate" | "publish" | null>(null);
 
-  const metrics = useMemo<DashboardMetric[]>(
-    () => [
-      {
-        id: "draft",
-        label: "Draft",
-        value: "JSON",
-        helper: "Workflow Assurance Pack source of truth.",
-        tone: "setup",
-      },
-      {
-        id: "validate",
-        label: "Validate",
-        value: result.type === "validated" || result.type === "published" ? "Passed" : "Required",
-        helper: "Backend schema check before publish.",
-        tone: result.type === "error" ? "danger" : result.type === "idle" ? "warning" : "success",
-      },
-      {
-        id: "publish",
-        label: "Publish",
-        value: result.type === "published" ? result.data.status : environment,
-        helper: "Immutable pack stored by workflow key and version.",
-        tone: result.type === "published" ? "success" : "setup",
-      },
-    ],
-    [environment, result],
-  );
+  const parsedDraft = useMemo(() => {
+    try {
+      const pack = parseDraft(draft);
+      return { pack, summary: packSummary(pack), error: null as string | null };
+    } catch (error) {
+      return { pack: null, summary: null, error: errorMessage(error) };
+    }
+  }, [draft]);
+
+  const tone = statusTone(result, parsedDraft.error);
+  const summary = parsedDraft.summary;
+  const validationLabel = parsedDraft.error ? "Invalid draft" : result.type === "published" ? "Published" : result.type === "validated" ? "Validated" : "Needs validation";
+  const readinessRows = [
+    {
+      label: "Draft JSON",
+      detail: parsedDraft.error ?? "Parseable Assurance Pack object",
+      status: parsedDraft.error ? "Blocked" : "Ready",
+      tone: parsedDraft.error ? "critical" : "ready",
+    },
+    {
+      label: "Backend schema",
+      detail: result.type === "validated" || result.type === "published" ? `${summary?.workflowKey}@${summary?.version} accepted` : "Validate before publish",
+      status: result.type === "error" ? "Blocked" : result.type === "idle" ? "Pending" : "Ready",
+      tone: result.type === "error" ? "critical" : result.type === "idle" ? "warning" : "ready",
+    },
+    {
+      label: "Source bindings",
+      detail: `${summary?.sourceBindings.length ?? 0} source-of-truth read path${summary?.sourceBindings.length === 1 ? "" : "s"}`,
+      status: (summary?.sourceBindings.length ?? 0) > 0 ? "Ready" : "Missing",
+      tone: (summary?.sourceBindings.length ?? 0) > 0 ? "ready" : "warning",
+    },
+    {
+      label: "Expected effects",
+      detail: `${summary?.effects.length ?? 0} outcome rule${summary?.effects.length === 1 ? "" : "s"} defined`,
+      status: (summary?.effects.length ?? 0) > 0 ? "Ready" : "Missing",
+      tone: (summary?.effects.length ?? 0) > 0 ? "ready" : "warning",
+    },
+    {
+      label: "Recovery playbook",
+      detail: `${summary?.recoveryPlaybooks.length ?? 0} recovery path${summary?.recoveryPlaybooks.length === 1 ? "" : "s"}`,
+      status: (summary?.recoveryPlaybooks.length ?? 0) > 0 ? "Ready" : "Missing",
+      tone: (summary?.recoveryPlaybooks.length ?? 0) > 0 ? "ready" : "warning",
+    },
+  ] as const;
 
   async function runValidate() {
     setBusy("validate");
@@ -160,47 +230,80 @@ export default function WorkflowsPage() {
   }
 
   return (
-    <main className="policies-page workflows-page">
-      <DashboardVerdictHero
-        eyebrow="Workflow Builder"
-        title="Ship governed agent workflows from an Assurance Pack."
-        copy="Draft the workflow contract, validate it against the backend schema, then publish the immutable version agents will use at runtime."
-        tone={result.type === "error" ? "danger" : result.type === "published" ? "success" : "setup"}
-        icon={<ShieldCheck size={22} />}
-        pill={result.type === "published" ? "Published" : "Draft mode"}
-        actions={
-          <>
-            <DashboardButton
-              icon={<CheckCircle2 size={16} />}
-              loading={busy === "validate"}
-              onClick={runValidate}
-              variant="soft"
-            >
-              Validate
-            </DashboardButton>
-            <DashboardButton
-              icon={<Rocket size={16} />}
-              loading={busy === "publish"}
-              onClick={runPublish}
-              variant="primary"
-            >
-              Publish
-            </DashboardButton>
-          </>
-        }
-      />
+    <main className={styles.workflowsDashboard} aria-label="ZROKY Workflows dashboard">
+      <div className={styles.pageTitle}>
+        <div>
+          <h1>Workflows</h1>
+          <p>Assurance Packs, policy binding, and trusted workflow contracts</p>
+        </div>
+      </div>
 
-      <DashboardMetricStrip ariaLabel="Workflow builder status" columns={3} metrics={metrics} />
+      <section className={styles.hero} data-tone={tone} aria-label="Workflow posture">
+        <div className={styles.heroCopy}>
+          <p className={styles.kicker}>Control surface</p>
+          <div className={styles.heroTitleLine}>
+            <h2>{summary?.workflowKey ?? "Assurance Pack draft"}</h2>
+            <StatusBadge tone={tone}>{validationLabel}</StatusBadge>
+          </div>
+          <p>
+            Define what “correct” means before agents run. ZROKY uses this pack to govern intent,
+            verify source-of-truth outcomes, trigger recovery, and produce signed evidence.
+          </p>
+          <code className={styles.denominator}>
+            {summary
+              ? `${summary.workflowKey} · v${summary.version} · ${summary.effects.length} effects · ${summary.sourceBindings.length} sources · ${environment}`
+              : "Draft cannot be parsed yet"}
+          </code>
+        </div>
+        <div className={styles.heroActions}>
+          <DashboardButton
+            icon={<CheckCircle2 size={15} />}
+            loading={busy === "validate"}
+            onClick={runValidate}
+            variant="soft"
+          >
+            Validate
+          </DashboardButton>
+          <DashboardButton
+            icon={<Rocket size={15} />}
+            loading={busy === "publish"}
+            onClick={runPublish}
+            variant="primary"
+          >
+            Publish
+          </DashboardButton>
+        </div>
+      </section>
 
-      <DashboardWorkspace
-        left={
-          <section className="agent-setup-card" aria-labelledby="workflow-draft-title">
+      <section className={styles.metricStrip} aria-label="Workflow contract metrics">
+        {[
+          { label: "Expected effects", value: String(summary?.effects.length ?? 0), tone: "ready" as WorkflowTone, icon: ShieldCheck },
+          { label: "Source bindings", value: String(summary?.sourceBindings.length ?? 0), tone: "ready" as WorkflowTone, icon: Database },
+          { label: "Intent fields", value: String(summary?.intentFields.length ?? 0), tone: "neutral" as WorkflowTone, icon: FileJson },
+          { label: "Object types", value: String(summary?.objectTypes.length ?? 0), tone: "neutral" as WorkflowTone, icon: GitBranch },
+          { label: "Recovery paths", value: String(summary?.recoveryPlaybooks.length ?? 0), tone: "warning" as WorkflowTone, icon: Workflow },
+          { label: "Publish state", value: result.type === "published" ? "active" : "draft", tone, icon: Rocket },
+        ].map(({ label, value, tone: itemTone, icon: Icon }) => (
+          <article className={styles.metricCell} data-tone={itemTone} key={label}>
+            <span>
+              <Icon size={15} aria-hidden="true" />
+              {label}
+            </span>
+            <strong>{value}</strong>
+            <Sparkline tone={itemTone} />
+          </article>
+        ))}
+      </section>
+
+      <div className={styles.workspace}>
+        <section className={cn(styles.card, styles.editorCard)} aria-labelledby="workflow-draft-title">
+          <div className={styles.panelHeader}>
             <div>
-              <span className="dashboard-eyebrow">Pack draft</span>
-              <h2 id="workflow-draft-title">Workflow Assurance Pack JSON</h2>
-              <p>Edit the contract and validate before publish. Invalid JSON is blocked locally.</p>
+              <p className={styles.kicker}>Assurance Pack</p>
+              <h2 id="workflow-draft-title">Workflow contract source</h2>
+              <p>Edit the pack, validate it, then publish the immutable version agents must use.</p>
             </div>
-            <label className="agent-setup-field">
+            <label className={styles.selectField}>
               <span>Environment</span>
               <select value={environment} onChange={(event) => setEnvironment(event.target.value)}>
                 <option value="production">production</option>
@@ -208,44 +311,67 @@ export default function WorkflowsPage() {
                 <option value="development">development</option>
               </select>
             </label>
-            <label className="agent-setup-field">
-              <span>Assurance Pack</span>
-              <textarea
-                aria-label="Assurance Pack JSON"
-                spellCheck={false}
-                rows={28}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-            </label>
-          </section>
-        }
-        right={
-          <aside className="agent-setup-card" aria-labelledby="workflow-result-title">
-            <div>
-              <span className="dashboard-eyebrow">Result</span>
-              <h2 id="workflow-result-title">Validation and publish status</h2>
+          </div>
+          <textarea
+            aria-label="Assurance Pack JSON"
+            className={styles.editor}
+            spellCheck={false}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </section>
+
+        <aside className={styles.sideStack} aria-label="Workflow readiness">
+          <section className={styles.card}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.kicker}>Verification readiness</p>
+                <h2>Publish gate</h2>
+              </div>
             </div>
-            <StatusPill
-              value={result.type}
-              tone={result.type === "error" ? "danger" : result.type === "idle" ? "warning" : "success"}
-            />
-            <p>{result.message}</p>
-            <pre aria-label="Workflow API result">
+            <div className={styles.readinessList}>
+              {readinessRows.map((row) => (
+                <div className={styles.readinessRow} key={row.label}>
+                  <div>
+                    <strong>{row.label}</strong>
+                    <small>{row.detail}</small>
+                  </div>
+                  <StatusBadge tone={row.tone}>{row.status}</StatusBadge>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.kicker}>Result</p>
+                <h2>Backend response</h2>
+              </div>
+              <StatusBadge tone={tone}>{result.type}</StatusBadge>
+            </div>
+            <p className={styles.resultMessage}>{result.message}</p>
+            <pre className={styles.resultPre} aria-label="Workflow API result">
               {result.type === "idle" || result.type === "error" ? result.message : prettyJson(result.data)}
             </pre>
-            <div>
-              <span className="dashboard-eyebrow">Runtime contract</span>
-              <ul>
-                <li>Governance happens before execution.</li>
-                <li>Workflow key and version are immutable.</li>
-                <li>Published pack becomes the verification source for agents.</li>
-              </ul>
+          </section>
+
+          <section className={styles.card}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.kicker}>Runtime contract</p>
+                <h2>What this controls</h2>
+              </div>
             </div>
-            <FileJson size={20} aria-hidden="true" />
-          </aside>
-        }
-      />
+            <ul className={styles.contractList}>
+              <li>Governance happens before execution.</li>
+              <li>Source bindings define proof reads after execution.</li>
+              <li>Recovery playbooks handle mismatched or missing outcomes.</li>
+              <li>Published workflow key and version are immutable.</li>
+            </ul>
+          </section>
+        </aside>
+      </div>
     </main>
   );
 }
