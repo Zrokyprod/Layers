@@ -1545,6 +1545,23 @@ def test_manual_incident_resolution_requires_fresh_verified_graph(client: TestCl
     assert assign.status_code == 200
     assert assign.json()["incident"]["owner"] == "ops@example.com"
 
+    contained = client.post(f"/v1/incidents/{incident['id']}/contain", json={"reason": "Stopped downstream payroll export."})
+    assert contained.status_code == 200
+    assert contained.json()["status"] == "unresolved"
+    assert contained.json()["incident"]["lifecycle_status"] == "contained"
+
+    snoozed = client.post(
+        f"/v1/incidents/{incident['id']}/snooze",
+        json={
+            "reason": "Waiting for Workday read repair.",
+            "expires_at": (datetime.now(UTC) + timedelta(hours=2)).isoformat(),
+        },
+    )
+    assert snoozed.status_code == 200
+    assert snoozed.json()["status"] == "unresolved"
+    assert snoozed.json()["incident"]["lifecycle_status"] == "snoozed"
+    assert snoozed.json()["incident"]["snooze"]["expires_at"]
+
     blocked = client.post(
         f"/v1/incidents/{incident['id']}/resolve-manually",
         json={"verified_outcome_graph_id": failed_graph["id"], "note": "fixed"},

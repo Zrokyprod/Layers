@@ -14,7 +14,12 @@ from app.core.limiter import limiter
 from app.db.models import FinalDomainOutboxJob, FinalOutcomeGraph, FinalOutcomeIncident, FinalRecoveryPlan
 from app.db.session import get_db_session
 from app.services.action_kernel import canonical_json, sha256_digest
-from app.services.audit_logs import AUDIT_ACTION_RECOVERY_EXECUTE_REQUESTED, add_audit_log
+from app.services.audit_logs import (
+    AUDIT_ACTION_INCIDENT_CONTAINED,
+    AUDIT_ACTION_INCIDENT_SNOOZED,
+    AUDIT_ACTION_RECOVERY_EXECUTE_REQUESTED,
+    add_audit_log,
+)
 
 
 router = APIRouter(prefix="/v1/incidents")
@@ -34,6 +39,15 @@ class IncidentResponse(BaseModel):
 
 class IncidentAssignRequest(BaseModel):
     owner: str = Field(min_length=1, max_length=255)
+
+
+class IncidentContainRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class IncidentSnoozeRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+    expires_at: datetime
 
 
 class IncidentManualResolveRequest(BaseModel):
@@ -142,6 +156,82 @@ def assign_incident(
     incident["assigned_by"] = context.subject
     incident["assigned_at"] = datetime.now(UTC).isoformat()
     row.incident_json = json.dumps(incident, sort_keys=True, separators=(",", ":"))
+    db.commit()
+    db.refresh(row)
+    return incident_response(row)
+
+
+@router.post("/{incident_id}/contain", response_model=IncidentResponse)
+@limiter.limit("60/minute")
+def contain_incident(
+    request: Request,
+    incident_id: str,
+    body: IncidentContainRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> IncidentResponse:
+    _require_admin(context)
+    row = _load_incident(db, project_id=context.tenant_id, incident_id=incident_id)
+    if row.status == "resolved":
+        raise HTTPException(status_code=409, detail="Resolved incident cannot be contained.")
+    now = datetime.now(UTC)
+    incident = json.loads(row.incident_json)
+    incident["lifecycle_status"] = "contained"
+    incident["containment"] = {
+        "reason": body.reason,
+        "contained_by": context.subject,
+        "contained_at": now.isoformat(),
+    }
+    row.status = "unresolved"
+    row.incident_json = json.dumps(incident, sort_keys=True, separators=(",", ":"))
+    add_audit_log(
+        db,
+        tenant_id=context.tenant_id,
+        diagnosis_id=row.id,
+        action=AUDIT_ACTION_INCIDENT_CONTAINED,
+        actor_subject=context.subject,
+        metadata={"incident_id": row.id, "reason": body.reason},
+    )
+    db.commit()
+    db.refresh(row)
+    return incident_response(row)
+
+
+@router.post("/{incident_id}/snooze", response_model=IncidentResponse)
+@limiter.limit("60/minute")
+def snooze_incident(
+    request: Request,
+    incident_id: str,
+    body: IncidentSnoozeRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> IncidentResponse:
+    _require_admin(context)
+    row = _load_incident(db, project_id=context.tenant_id, incident_id=incident_id)
+    if row.status == "resolved":
+        raise HTTPException(status_code=409, detail="Resolved incident cannot be snoozed.")
+    expires_at = body.expires_at if body.expires_at.tzinfo else body.expires_at.replace(tzinfo=UTC)
+    now = datetime.now(UTC)
+    if expires_at <= now:
+        raise HTTPException(status_code=422, detail="expires_at must be in the future.")
+    incident = json.loads(row.incident_json)
+    incident["lifecycle_status"] = "snoozed"
+    incident["snooze"] = {
+        "reason": body.reason,
+        "expires_at": expires_at.isoformat(),
+        "snoozed_by": context.subject,
+        "snoozed_at": now.isoformat(),
+    }
+    row.status = "unresolved"
+    row.incident_json = json.dumps(incident, sort_keys=True, separators=(",", ":"))
+    add_audit_log(
+        db,
+        tenant_id=context.tenant_id,
+        diagnosis_id=row.id,
+        action=AUDIT_ACTION_INCIDENT_SNOOZED,
+        actor_subject=context.subject,
+        metadata={"expires_at": expires_at.isoformat(), "incident_id": row.id, "reason": body.reason},
+    )
     db.commit()
     db.refresh(row)
     return incident_response(row)

@@ -104,6 +104,7 @@ type RequestOptions = {
   method?: Method;
   query?: Record<string, string | number | undefined | null>;
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   timeoutMs?: number;
   projectIdOverride?: string | null;
@@ -317,6 +318,14 @@ export interface FinalIncidentResponse {
   incident: Record<string, unknown>;
   created_at: string;
   resolved_at: string | null;
+}
+
+export interface FinalIncidentRecoveryExecutionResponse {
+  incident: FinalIncidentResponse;
+  recovery_plan_id: string;
+  execution_status: string;
+  outbox_job_id: string;
+  idempotency_key: string;
 }
 
 export interface FinalApprovalRequirementResponse {
@@ -1078,6 +1087,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (options.body != null) {
       headers["content-type"] = "application/json";
     }
+    Object.assign(headers, options.headers);
     if (typeof window !== "undefined") {
       const selectedProject =
         options.projectIdOverride === undefined
@@ -1199,8 +1209,78 @@ export function listFinalIncidents(signal?: AbortSignal): Promise<FinalIncidentR
   return request<FinalIncidentResponse[]>("/v1/incidents", { signal });
 }
 
+export function assignFinalIncident(incidentId: string, owner: string): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/assign`, {
+    method: "POST",
+    body: { owner },
+  });
+}
+
+export function containFinalIncident(incidentId: string, reason: string): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/contain`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+export function snoozeFinalIncident(incidentId: string, reason: string, expiresAt: string): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/snooze`, {
+    method: "POST",
+    body: { reason, expires_at: expiresAt },
+  });
+}
+
+export function executeFinalIncidentRecovery(
+  incidentId: string,
+  executorRef: string,
+  idempotencyKey: string,
+  plan: Record<string, unknown> = {},
+): Promise<FinalIncidentRecoveryExecutionResponse> {
+  return request<FinalIncidentRecoveryExecutionResponse>(
+    `/v1/incidents/${encodeURIComponent(incidentId)}/execute-recovery`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: { executor_ref: executorRef, plan },
+    },
+  );
+}
+
+export function resolveFinalIncidentManually(
+  incidentId: string,
+  verifiedOutcomeGraphId: string,
+  note = "",
+): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/resolve-manually`, {
+    method: "POST",
+    body: { verified_outcome_graph_id: verifiedOutcomeGraphId, note },
+  });
+}
+
 export function listFinalApprovalRequirements(signal?: AbortSignal): Promise<FinalApprovalRequirementListResponse> {
   return request<FinalApprovalRequirementListResponse>("/v1/policy/approval-requirements", { signal });
+}
+
+export function approveFinalApprovalRequirement(
+  approvalId: string,
+  bindingDigest: string,
+  reason = "Approved from Operations.",
+): Promise<FinalApprovalRequirementResponse> {
+  return request<FinalApprovalRequirementResponse>(`/v1/approvals/${encodeURIComponent(approvalId)}/approve`, {
+    method: "POST",
+    body: { binding_digest: bindingDigest, reason },
+  });
+}
+
+export function denyFinalApprovalRequirement(
+  approvalId: string,
+  bindingDigest: string,
+  reason = "Denied from Operations.",
+): Promise<FinalApprovalRequirementResponse> {
+  return request<FinalApprovalRequirementResponse>(`/v1/approvals/${encodeURIComponent(approvalId)}/deny`, {
+    method: "POST",
+    body: { binding_digest: bindingDigest, reason },
+  });
 }
 
 export function forgotPassword(email: string): Promise<{ message: string }> {
