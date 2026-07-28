@@ -41,8 +41,10 @@ _NON_SECRET_TOKEN_KEYS = {
 _PASSTHROUGH_KEYS = {
     "approval_scope_hash",
     "event_digest",
+    "event_id",
     "evidence_hash",
     "intent_digest",
+    "late_signal_event_id",
     "plan_digest",
     "prompt_fingerprint",
     "receipt_digest",

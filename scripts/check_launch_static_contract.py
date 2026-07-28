@@ -113,16 +113,17 @@ SCAN_ROOTS = [
 
 EXPECTED_DASHBOARD_ROUTE_DIRS = [
     "account",
-    "actions",
-    "agents",
     "approvals",
     "evidence",
     "home",
+    "incidents",
     "integrations",
+    "operations",
     "outcomes",
     "policies",
     "projects",
     "settings",
+    "workflows",
 ]
 
 REQUIRED_OPENAPI_SURFACES = {

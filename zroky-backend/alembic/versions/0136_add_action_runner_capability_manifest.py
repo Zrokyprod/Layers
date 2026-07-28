@@ -1,7 +1,7 @@
 """add action runner capability manifest
 
-Revision ID: 0128_add_action_runner_capability_manifest
-Revises: 0127_create_final_connector_capability_drafts
+Revision ID: 0136_add_action_runner_capability_manifest
+Revises: 0135_create_final_connector_capability_drafts
 Create Date: 2026-07-21
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0128_add_action_runner_capability_manifest"
-down_revision = "0127_create_final_connector_capability_drafts"
+revision = "0136_add_action_runner_capability_manifest"
+down_revision = "0135_create_final_connector_capability_drafts"
 branch_labels = None
 depends_on = None
 

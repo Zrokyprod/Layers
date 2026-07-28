@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from app.services._action_post_execution_connectors import *  # noqa: F403
 from app.services._action_post_execution_core import *  # noqa: F403
+from app.services.connector_credentials import RemoteCredentialResolutionRequired
+from app.services.private_runner_verification import enqueue_private_runner_verification
+from app.services.verification_execution_controls import (
+    ControlledConnector,
+    VerificationExecutionControls,
+)
 
 
 def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
@@ -51,15 +57,24 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
             trace = _as_dict(context.get("trace"))
             claimed = _as_dict(context.get("claimed"))
             metadata = _base_metadata(intent=intent, attempt=attempt, job=job, connector_type=connector_type)
+            controlled_connector = ControlledConnector(
+                connector=connector,
+                controls=VerificationExecutionControls(
+                    project_id=intent.project_id,
+                    connector_type=connector_type,
+                    token=job.id,
+                ),
+            )
             try:
                 outcome = reconcile_outcome(
                     db,
                     project_id=intent.project_id,
                     claimed=claimed,
-                    connector=connector,
+                    connector=controlled_connector,
                     call_id=_text(trace.get("call_id")),
                     trace_id=_text(trace.get("trace_id")),
                     runtime_policy_decision_id=intent.runtime_policy_decision_id,
+                    action_intent_id=intent.id,
                     action_type=intent.action_type,
                     system_ref=_text(context.get("system_ref"), _as_dict(context.get("verification")).get("system_ref"))
                     or f"{connector_type}:{intent.id}",
@@ -69,6 +84,23 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                     idempotency_key=f"action-post-exec:{intent.id}:{attempt.id}:verify",
                     metadata=metadata,
                 )
+            except RemoteCredentialResolutionRequired:
+                runner_job = enqueue_private_runner_verification(
+                    db,
+                    intent=intent,
+                    attempt=attempt,
+                    context=context,
+                    connector_type=connector_type,
+                )
+                if runner_job is not None:
+                    return {
+                        "status": "pending_private_runner",
+                        "verification_job_id": runner_job.id,
+                        "runner_id": runner_job.runner_id,
+                        "connector_type": runner_job.connector_type,
+                    }
+                connector = None
+                missing_reason = "private_runner_unavailable"
             except Exception as exc:  # noqa: BLE001
                 db.rollback()
                 intent = db.execute(
@@ -297,6 +329,13 @@ def process_next_action_post_execution_job(
 ) -> ProcessedPostExecutionJob | None:
     job = _claim_next_job(db, worker_id=worker_id, lease_seconds=lease_seconds)
     if job is None:
+        return None
+    started = start_claimed_action_post_execution_job(
+        db,
+        job_id=job.id,
+        worker_id=worker_id,
+    )
+    if started is None:
         return None
     return process_action_post_execution_job(db, job_id=job.id)
 

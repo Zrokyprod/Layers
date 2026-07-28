@@ -173,6 +173,10 @@ class FinalOutcomeGraph(Base):
     graph_digest: Mapped[str] = mapped_column(String(80), nullable=False)
     graph_json: Mapped[str] = mapped_column(Text, nullable=False)
     verification_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'pending'"))
+    classification: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    reason_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    next_check_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
 
@@ -181,7 +185,13 @@ class FinalOutcomeGraph(Base):
             "verification_status IN ('pending','verified','failed','inconclusive')",
             name="ck_final_outcome_graphs_verification_status",
         ),
+        CheckConstraint(
+            "classification IN ('verified','wrong','missing','stale','duplicate','conflicted','forbidden','unknown','pending')",
+            name="ck_final_outcome_graphs_classification",
+        ),
         Index("ix_final_outcome_graphs_scope_status", "project_id", "environment", "verification_status", "created_at"),
+        Index("ix_final_outcome_graphs_scope_class_created", "project_id", "environment", "classification", "created_at"),
+        Index("ix_final_outcome_graphs_project_class_next", "project_id", "classification", "next_check_at"),
     )
 
 

@@ -38,7 +38,7 @@ def test_final_domain_migration_forces_project_rls() -> None:
         Path(__file__).resolve().parents[1]
         / "alembic"
         / "versions"
-        / "0123_create_final_domain_tables.py"
+        / "0131_create_final_domain_tables.py"
     ).read_text(encoding="utf-8")
 
     for table_name in FINAL_DOMAIN_TABLES:
@@ -67,7 +67,7 @@ def test_final_domain_outbox_supports_required_jobs() -> None:
         Path(__file__).resolve().parents[1]
         / "alembic"
         / "versions"
-        / "0124_create_final_domain_outbox_jobs.py"
+        / "0132_create_final_domain_outbox_jobs.py"
     ).read_text(encoding="utf-8")
     for job_type in ("verify_outcome", "plan_recovery", "execute_recovery", "generate_evidence"):
         assert job_type in migration
@@ -85,7 +85,7 @@ def test_final_approval_requirements_are_digest_bound_and_rls_scoped() -> None:
         Path(__file__).resolve().parents[1]
         / "alembic"
         / "versions"
-        / "0125_create_final_approval_requirements.py"
+        / "0133_create_final_approval_requirements.py"
     ).read_text(encoding="utf-8")
     assert "final_approval_requirements" in migration
     assert "binding_digest" in migration
@@ -103,7 +103,7 @@ def test_final_agent_runs_are_external_declarations_and_rls_scoped() -> None:
         Path(__file__).resolve().parents[1]
         / "alembic"
         / "versions"
-        / "0126_create_final_agent_runs.py"
+        / "0134_create_final_agent_runs.py"
     ).read_text(encoding="utf-8")
     assert "final_agent_runs" in migration
     assert "execution" not in migration.lower()
@@ -121,7 +121,7 @@ def test_final_capability_drafts_are_not_recovery_trusted() -> None:
         Path(__file__).resolve().parents[1]
         / "alembic"
         / "versions"
-        / "0127_create_final_connector_capability_drafts.py"
+        / "0135_create_final_connector_capability_drafts.py"
     ).read_text(encoding="utf-8")
     assert "trusted_for_recovery = false" in migration
     assert 'ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY' in migration

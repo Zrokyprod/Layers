@@ -9,6 +9,7 @@ from app.db.session import get_db_session
 from app.schemas.ingest import IngestBatchRequest, IngestBatchResponse
 from app.services.cost_buckets import enrich_payload_with_cost_buckets
 from app.services.redis_client import get_redis_client
+from app.worker.tasks import process_diagnosis
 
 router = APIRouter(prefix="/v1")
 
@@ -23,6 +24,7 @@ def _sync_ingest_processor_compat_hooks() -> None:
     _ingest_processor.get_redis_client = get_redis_client
     _ingest_processor._check_redis_idempotency = _check_redis_idempotency
     _ingest_processor._set_redis_idempotency = _set_redis_idempotency
+    _ingest_processor.process_diagnosis = process_diagnosis
 
 
 def process_ingest_batch_for_tenant(*args, **kwargs) -> IngestBatchResponse:

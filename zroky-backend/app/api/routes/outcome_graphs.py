@@ -1,25 +1,30 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import FinalAgentRun, FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalWorkflowIntent
 from app.db.models import FinalOutcomeIncident
 from app.db.session import get_db_session
 from app.domain.incident import build_incident_from_outcome_graph
 from app.domain.outcome_graph import build_outcome_graph_snapshot
+from app.services.final_outcome_graphs import (
+    FINAL_OUTCOME_CLASSIFICATIONS,
+    apply_outcome_graph_ledger_state,
+    graph_digest,
+)
 
 
-router = APIRouter(prefix="/v1/runs")
+router = APIRouter()
 
 
 class OutcomeGraphBuildRequest(BaseModel):
@@ -34,12 +39,22 @@ class OutcomeGraphResponse(BaseModel):
     graph_digest: str
     graph: dict[str, Any]
     verification_status: str
+    classification: str | None = None
+    reason_code: str | None = None
+    last_checked_at: datetime | None = None
+    next_check_at: datetime | None = None
     verified_at: datetime | None
     created_at: datetime
 
 
-def _digest(payload: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+class OutcomeGraphListResponse(BaseModel):
+    items: list[OutcomeGraphResponse]
+
+
+class OutcomeGraphCoverageSummaryResponse(BaseModel):
+    counts: dict[str, int]
+    total: int
+    coverage_percent: float
 
 
 def _response(row: FinalOutcomeGraph) -> OutcomeGraphResponse:
@@ -51,12 +66,59 @@ def _response(row: FinalOutcomeGraph) -> OutcomeGraphResponse:
         graph_digest=row.graph_digest,
         graph=json.loads(row.graph_json),
         verification_status=row.verification_status,
+        classification=row.classification,
+        reason_code=row.reason_code,
+        last_checked_at=row.last_checked_at,
+        next_check_at=row.next_check_at,
         verified_at=row.verified_at,
         created_at=row.created_at,
     )
 
 
-@router.post("/{run_id}/outcome-graph", response_model=OutcomeGraphResponse, status_code=status.HTTP_201_CREATED)
+@router.get("/v1/outcome-graphs", response_model=OutcomeGraphListResponse)
+@limiter.limit("120/minute")
+def list_outcome_graphs(
+    request: Request,
+    classification: str | None = None,
+    limit: int = 50,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeGraphListResponse:
+    if classification is not None and classification not in FINAL_OUTCOME_CLASSIFICATIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid classification.")
+    query = select(FinalOutcomeGraph).where(FinalOutcomeGraph.project_id == context.tenant_id)
+    if classification is not None:
+        query = query.where(FinalOutcomeGraph.classification == classification)
+    rows = db.execute(
+        query.order_by(FinalOutcomeGraph.created_at.desc()).limit(max(1, min(int(limit), 100)))
+    ).scalars()
+    return OutcomeGraphListResponse(items=[_response(row) for row in rows])
+
+
+@router.get("/v1/outcome-graphs/coverage-summary", response_model=OutcomeGraphCoverageSummaryResponse)
+@limiter.limit("120/minute")
+def outcome_graph_coverage_summary(
+    request: Request,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeGraphCoverageSummaryResponse:
+    counts = {classification: 0 for classification in sorted(FINAL_OUTCOME_CLASSIFICATIONS)}
+    rows = db.execute(
+        select(FinalOutcomeGraph.classification, func.count())
+        .where(FinalOutcomeGraph.project_id == context.tenant_id)
+        .group_by(FinalOutcomeGraph.classification)
+    ).all()
+    for classification, count in rows:
+        key = classification or "unknown"
+        if key in counts:
+            counts[key] = int(count)
+    total = sum(counts.values())
+    verified = counts["verified"]
+    coverage = round((verified / total) * 100, 2) if total else 0.0
+    return OutcomeGraphCoverageSummaryResponse(counts=counts, total=total, coverage_percent=coverage)
+
+
+@router.post("/v1/runs/{run_id}/outcome-graph", response_model=OutcomeGraphResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("60/minute")
 def build_run_outcome_graph(
     request: Request,
@@ -111,19 +173,22 @@ def build_run_outcome_graph(
         observations=observation_payloads,
     )
     graph.update({"run_id": run.id, "intent_id": intent.id, "assurance_pack_id": pack.id})
-    digest = _digest(graph)
-    verification_status = "verified" if graph["classification"] == "verified" else "failed"
+    digest = graph_digest(graph)
     row = FinalOutcomeGraph(
         project_id=context.tenant_id,
         environment=run.environment,
         intent_id=intent.id,
         graph_digest=digest,
         graph_json=json.dumps(graph, sort_keys=True, separators=(",", ":")),
-        verification_status=verification_status,
+    )
+    apply_outcome_graph_ledger_state(
+        row,
+        graph,
+        verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
     )
     db.add(row)
     db.flush()
-    if verification_status != "verified":
+    if row.verification_status != "verified":
         incident = build_incident_from_outcome_graph(row.id, graph)
         db.add(
             FinalOutcomeIncident(

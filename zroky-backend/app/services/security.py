@@ -100,6 +100,7 @@ def issue_access_token(
     subject: str,
     expire_hours: int,
     secret: str,
+    token_revocation_generation: int | None = None,
 ) -> str:
     return _issue_session_token(
         user_id=user_id,
@@ -108,6 +109,7 @@ def issue_access_token(
         expire_hours=expire_hours,
         secret=secret,
         token_use="access",
+        token_revocation_generation=token_revocation_generation,
     )
 
 
@@ -118,6 +120,7 @@ def issue_refresh_token(
     subject: str,
     expire_hours: int,
     secret: str,
+    token_revocation_generation: int | None = None,
 ) -> str:
     return _issue_session_token(
         user_id=user_id,
@@ -126,6 +129,7 @@ def issue_refresh_token(
         expire_hours=expire_hours,
         secret=secret,
         token_use="refresh",
+        token_revocation_generation=token_revocation_generation,
     )
 
 
@@ -137,6 +141,7 @@ def _issue_session_token(
     expire_hours: int,
     secret: str,
     token_use: str,
+    token_revocation_generation: int | None,
 ) -> str:
     now = datetime.now(UTC)
     claims: dict[str, Any] = {
@@ -149,6 +154,8 @@ def _issue_session_token(
     }
     if email:
         claims["email"] = email
+    if token_revocation_generation is not None:
+        claims["rev"] = int(token_revocation_generation)
     return jwt.encode(claims, secret, algorithm="HS256")
 
 

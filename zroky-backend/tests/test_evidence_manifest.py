@@ -127,7 +127,7 @@ def test_evidence_manifest_uses_exact_server_side_scope_not_client_caps(client: 
         session.commit()
 
     response = client.get(
-        "/v1/evidence/manifest?dashboard_origin=https://app.zroky.com",
+        "/v1/evidence/manifest?dashboard_origin=https://zroky.com",
         headers={"x-project-id": project_id},
     )
 
@@ -136,7 +136,7 @@ def test_evidence_manifest_uses_exact_server_side_scope_not_client_caps(client: 
     assert payload["scope"]["total_records"] == 125
     assert payload["scope"]["exportable_records"] == 125
     assert len(payload["records"]) == 125
-    assert payload["records"][0]["href"].startswith("https://app.zroky.com/evidence?action_id=")
+    assert payload["records"][0]["href"].startswith("https://zroky.com/evidence?action_id=")
     assert all(record["action_id"].startswith("act_") for record in payload["records"])
 
 

@@ -1,7 +1,7 @@
 """create final domain outbox jobs
 
-Revision ID: 0124_create_final_domain_outbox_jobs
-Revises: 0123_create_final_domain_tables
+Revision ID: 0132_create_final_domain_outbox_jobs
+Revises: 0131_create_final_domain_tables
 Create Date: 2026-07-21
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0124_create_final_domain_outbox_jobs"
-down_revision = "0123_create_final_domain_tables"
+revision = "0132_create_final_domain_outbox_jobs"
+down_revision = "0131_create_final_domain_tables"
 branch_labels = None
 depends_on = None
 
@@ -74,6 +74,8 @@ def downgrade() -> None:
 
 
 def _enable_project_rls(table_name: str) -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     policy_name = f"{table_name}_project_isolation"
     op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
     op.execute(f"ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY")
@@ -88,6 +90,8 @@ def _enable_project_rls(table_name: str) -> None:
 
 
 def _disable_project_rls(table_name: str) -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     policy_name = f"{table_name}_project_isolation"
     op.execute(f"DROP POLICY IF EXISTS {policy_name} ON {table_name}")
     op.execute(f"ALTER TABLE {table_name} NO FORCE ROW LEVEL SECURITY")

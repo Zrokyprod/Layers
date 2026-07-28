@@ -291,6 +291,40 @@ app.include_router(api_router)
 # Compatibility alias for blueprint-style routes (for example /api/v1/*).
 app.include_router(api_router, prefix="/api")
 
+from app.api.routes._internal.analytics_impl import router as _legacy_analytics_router
+from app.api.routes.contracts import router as _legacy_contracts_router
+from app.api.routes.diagnosis import router as _legacy_diagnosis_router
+from app.api.routes.diagnoses import router as _legacy_diagnoses_router
+from app.api.routes.digest import router as _legacy_digest_router
+from app.api.routes.goldens import router as _legacy_goldens_router
+from app.api.routes.intel import router as _legacy_intel_router
+from app.api.routes.issues import router as _legacy_issues_router
+from app.api.routes.judge_calibration_routes import router as _legacy_judge_calibration_router
+from app.api.routes.live import router as _legacy_live_router
+from app.api.routes.provider_drift import router as _legacy_provider_drift_router
+from app.api.routes.regression_ci import router as _legacy_regression_ci_router
+from app.api.routes.replay_dispatch import router as _legacy_replay_dispatch_router
+from app.api.routes.replay_runs import router as _legacy_replay_runs_router
+
+for _legacy_router in (
+    _legacy_analytics_router,
+    _legacy_contracts_router,
+    _legacy_diagnosis_router,
+    _legacy_diagnoses_router,
+    _legacy_digest_router,
+    _legacy_goldens_router,
+    _legacy_intel_router,
+    _legacy_issues_router,
+    _legacy_judge_calibration_router,
+    _legacy_live_router,
+    _legacy_provider_drift_router,
+    _legacy_regression_ci_router,
+    _legacy_replay_dispatch_router,
+    _legacy_replay_runs_router,
+):
+    app.include_router(_legacy_router)
+    app.include_router(_legacy_router, prefix="/api")
+
 
 @app.get("/")
 def root() -> dict:

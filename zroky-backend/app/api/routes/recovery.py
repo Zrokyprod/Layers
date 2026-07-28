@@ -26,6 +26,7 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.domain.outcome_graph import build_outcome_graph_snapshot
+from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state
 from app.services.action_kernel import canonical_json, sha256_digest
 
 
@@ -459,15 +460,18 @@ def reconstruct_unknown_recovery_result(
         }
     )
     graph_digest = sha256_digest(canonical_json(graph))
-    verification_status = "verified" if graph["classification"] == "verified" else "failed"
     reconstructed_graph = FinalOutcomeGraph(
         project_id=context.tenant_id,
         environment=prior_graph.environment,
         intent_id=intent.id,
         graph_digest=graph_digest,
         graph_json=canonical_json(graph),
-        verification_status=verification_status,
-        verified_at=now if verification_status == "verified" else None,
+    )
+    apply_outcome_graph_ledger_state(
+        reconstructed_graph,
+        graph,
+        now=now,
+        verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
     )
     db.add(reconstructed_graph)
     db.flush()
@@ -483,7 +487,7 @@ def reconstruct_unknown_recovery_result(
     prior_result["reconstruction"] = incident_doc["recovery_reconstruction"]
     job.result_json = canonical_json(prior_result)
     job.completed_at = now
-    if verification_status == "verified":
+    if reconstructed_graph.verification_status == "verified":
         plan.execution_status = "succeeded"
         job.status = "succeeded"
         incident.status = "resolved"

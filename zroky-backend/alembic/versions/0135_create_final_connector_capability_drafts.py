@@ -1,7 +1,7 @@
 """create final connector capability drafts
 
-Revision ID: 0127_create_final_connector_capability_drafts
-Revises: 0126_create_final_agent_runs
+Revision ID: 0135_create_final_connector_capability_drafts
+Revises: 0134_create_final_agent_runs
 Create Date: 2026-07-21
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0127_create_final_connector_capability_drafts"
-down_revision = "0126_create_final_agent_runs"
+revision = "0135_create_final_connector_capability_drafts"
+down_revision = "0134_create_final_agent_runs"
 branch_labels = None
 depends_on = None
 
@@ -52,6 +52,8 @@ def downgrade() -> None:
 
 
 def _enable_project_rls(table_name: str) -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     policy_name = f"{table_name}_project_isolation"
     op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
     op.execute(f"ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY")
@@ -66,6 +68,8 @@ def _enable_project_rls(table_name: str) -> None:
 
 
 def _disable_project_rls(table_name: str) -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     policy_name = f"{table_name}_project_isolation"
     op.execute(f"DROP POLICY IF EXISTS {policy_name} ON {table_name}")
     op.execute(f"ALTER TABLE {table_name} NO FORCE ROW LEVEL SECURITY")

@@ -15,7 +15,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 from uuid import uuid4
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import OutcomeReconciliationCheck
@@ -127,6 +127,14 @@ class ReconciliationSummary:
     cancelled: int = 0
 
 
+@dataclass(frozen=True)
+class PendingProofSweepResult:
+    expired: int
+    due_for_reverify: int
+    expired_check_ids: list[str]
+    due_check_ids: list[str]
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -155,6 +163,22 @@ def _bounded(value: str | None, *, max_length: int) -> str | None:
 
 def _as_dict(value: Mapping[str, Any] | dict[str, Any] | None) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _proof_status_for_new_check(verdict: str, metadata_payload: Mapping[str, Any]) -> str:
+    if verdict == VERDICT_MATCHED:
+        return VERDICT_MATCHED
+    if verdict == VERDICT_MISMATCHED:
+        return VERDICT_MISMATCHED
+    connector = _as_dict(metadata_payload.get("connector"))
+    status_code = connector.get("http_status")
+    try:
+        status_code_int = int(status_code)
+    except (TypeError, ValueError):
+        status_code_int = None
+    if connector.get("retryable") is True or (status_code_int is not None and status_code_int >= 500):
+        return VERIFICATION_PENDING
+    return VERIFICATION_UNVERIFIABLE
 
 
 def _flatten(record: Mapping[str, Any], *, prefix: str = "") -> dict[str, Any]:
@@ -307,6 +331,7 @@ def reconcile_outcome(
     call_id: str | None = None,
     trace_id: str | None = None,
     runtime_policy_decision_id: str | None = None,
+    action_intent_id: str | None = None,
     action_type: str | None = None,
     system_ref: str | None = None,
     amount_usd: float | None = None,
@@ -324,6 +349,18 @@ def reconcile_outcome(
             )
         ).scalar_one_or_none()
         if existing is not None:
+            if action_intent_id and existing.action_intent_id is None:
+                existing.action_intent_id = _bounded(action_intent_id, max_length=36)
+                db.add(existing)
+                db.commit()
+                db.refresh(existing)
+            from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+            create_or_get_mismatch_response(
+                db,
+                check=existing,
+                action_intent_id=action_intent_id,
+            )
             return existing
 
     reserve_usage_meter(db, project_id, METER_VERIFICATION_CHECKS)
@@ -339,6 +376,8 @@ def reconcile_outcome(
         metadata_payload.setdefault("connector", _as_dict(source.metadata))
     if match_fields:
         metadata_payload.setdefault("match_fields", match_fields)
+    current_time = checked_at or _now()
+    proof_status = _proof_status_for_new_check(comparison.verdict, metadata_payload)
 
     row = OutcomeReconciliationCheck(
         id=str(uuid4()),
@@ -346,12 +385,16 @@ def reconcile_outcome(
         call_id=_bounded(call_id, max_length=64),
         trace_id=_bounded(trace_id, max_length=128),
         runtime_policy_decision_id=_bounded(runtime_policy_decision_id, max_length=36),
+        action_intent_id=_bounded(action_intent_id, max_length=36),
         action_type=_bounded(action_type, max_length=64),
         connector_type=_bounded(connector.connector_type, max_length=64)
         or "api_record",
         system_ref=_bounded(system_ref, max_length=255),
         verdict=comparison.verdict,
         reason=_bounded(comparison.reason, max_length=255),
+        proof_status=proof_status,
+        proof_reason_code=_bounded(comparison.reason, max_length=64),
+        proof_observed_at=current_time if proof_status in {VERDICT_MATCHED, VERDICT_MISMATCHED} else None,
         amount_usd=amount_usd,
         currency=_bounded(currency, max_length=3),
         claimed_json=_json_dumps(_as_dict(claimed)),
@@ -359,11 +402,18 @@ def reconcile_outcome(
         comparison_json=_json_dumps(comparison.to_json()),
         idempotency_key=_bounded(idempotency_key, max_length=255),
         metadata_json=_json_dumps(metadata_payload) if metadata_payload else None,
-        checked_at=checked_at or _now(),
+        checked_at=current_time,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+    create_or_get_mismatch_response(
+        db,
+        check=row,
+        action_intent_id=action_intent_id,
+    )
     return row
 
 
@@ -484,6 +534,16 @@ def verification_status_for_check(row: OutcomeReconciliationCheck) -> str:
     return VERIFICATION_UNVERIFIABLE
 
 
+def intent_proof_status_for_check(row: OutcomeReconciliationCheck) -> str:
+    if row.verdict == VERDICT_MATCHED:
+        return VERDICT_MATCHED
+    if row.verdict == VERDICT_MISMATCHED:
+        return VERDICT_MISMATCHED
+    if (row.proof_status or "").lower() == VERIFICATION_PENDING:
+        return VERIFICATION_PENDING
+    return VERDICT_NOT_VERIFIED
+
+
 REVERIFY_CONNECTORS = {
     "customer_record_api",
     "generic_rest_api",
@@ -503,6 +563,97 @@ REVERIFY_CONNECTORS = {
 def reverify_connector_for_check(row: OutcomeReconciliationCheck) -> str | None:
     connector_type = (row.connector_type or "").strip().lower()
     return connector_type if connector_type in REVERIFY_CONNECTORS else None
+
+
+def list_pending_reconciliations_due(
+    db: Session,
+    *,
+    project_id: str | None = None,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> list[OutcomeReconciliationCheck]:
+    current = now or _now()
+    query = select(OutcomeReconciliationCheck).where(
+        OutcomeReconciliationCheck.proof_status == VERIFICATION_PENDING,
+        OutcomeReconciliationCheck.proof_next_check_at.is_not(None),
+        OutcomeReconciliationCheck.proof_next_check_at <= current,
+        OutcomeReconciliationCheck.connector_type.in_(REVERIFY_CONNECTORS),
+        or_(
+            OutcomeReconciliationCheck.proof_deadline_at.is_(None),
+            OutcomeReconciliationCheck.proof_deadline_at >= current,
+        ),
+    )
+    if project_id:
+        query = query.where(OutcomeReconciliationCheck.project_id == project_id)
+    return list(
+        db.execute(
+            query.order_by(
+                OutcomeReconciliationCheck.proof_next_check_at,
+                OutcomeReconciliationCheck.id,
+            ).limit(max(1, min(limit, 1000)))
+        ).scalars()
+    )
+
+
+def sweep_pending_reconciliation_checks(
+    db: Session,
+    *,
+    project_id: str | None = None,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> PendingProofSweepResult:
+    current = now or _now()
+    expired_query = select(OutcomeReconciliationCheck).where(
+        OutcomeReconciliationCheck.proof_status == VERIFICATION_PENDING,
+        OutcomeReconciliationCheck.proof_deadline_at.is_not(None),
+        OutcomeReconciliationCheck.proof_deadline_at < current,
+    )
+    if project_id:
+        expired_query = expired_query.where(OutcomeReconciliationCheck.project_id == project_id)
+    expired_rows = list(
+        db.execute(
+            expired_query.order_by(
+                OutcomeReconciliationCheck.proof_deadline_at,
+                OutcomeReconciliationCheck.id,
+            ).limit(max(1, min(limit, 1000)))
+        ).scalars()
+    )
+
+    expired_ids: list[str] = []
+    for row in expired_rows:
+        reason = _bounded(row.proof_reason_code or row.reason or "no_sor_trace", max_length=64) or "no_sor_trace"
+        if reason in {"sor_unreachable", "no_connector", "runner_offline"}:
+            row.proof_status = VERIFICATION_UNVERIFIABLE
+            row.verdict = VERDICT_NOT_VERIFIED
+        else:
+            row.proof_status = VERIFICATION_MISMATCHED
+            row.verdict = VERDICT_MISMATCHED
+        row.reason = _bounded(reason, max_length=255)
+        row.proof_reason_code = reason
+        row.proof_next_check_at = None
+        row.checked_at = current
+        db.add(row)
+        expired_ids.append(row.id)
+        if row.verdict == VERDICT_MISMATCHED:
+            from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+            create_or_get_mismatch_response(db, check=row, action_intent_id=row.action_intent_id)
+
+    if expired_ids:
+        db.commit()
+
+    due_rows = list_pending_reconciliations_due(
+        db,
+        project_id=project_id,
+        now=current,
+        limit=limit,
+    )
+    return PendingProofSweepResult(
+        expired=len(expired_ids),
+        due_for_reverify=len(due_rows),
+        expired_check_ids=expired_ids,
+        due_check_ids=[row.id for row in due_rows],
+    )
 
 
 def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:

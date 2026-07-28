@@ -529,8 +529,8 @@ def test_stripe_refund_test_loop_verifies_real_sor_and_catches_false_success(cli
     assert run_bad.status_code == 201, run_bad.text
     graph_bad = client.post(f"/v1/runs/{run_bad.json()['id']}/outcome-graph", json={"assurance_pack_id": pack["id"]})
     assert graph_bad.status_code == 201, graph_bad.text
-    assert graph_bad.json()["verification_status"] == "failed"
-    assert graph_bad.json()["graph"]["classification"] == "missing"
+    assert graph_bad.json()["verification_status"] == "pending"
+    assert graph_bad.json()["classification"] == "pending"
     incidents = client.get("/v1/incidents")
     assert incidents.status_code == 200
     assert any(item["outcome_graph_id"] == graph_bad.json()["id"] and item["status"] == "open" for item in incidents.json())

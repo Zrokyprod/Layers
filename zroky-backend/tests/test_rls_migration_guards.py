@@ -30,11 +30,12 @@ def test_fix_embeddings_rls_is_forced_and_write_scoped() -> None:
 def test_applied_mcp_revision_remains_traversable_and_dropped_forward() -> None:
     migration_root = Path(__file__).resolve().parents[1] / "alembic" / "versions"
     tombstone = (migration_root / "0122_mcp_interception.py").read_text(encoding="utf-8")
-    final_domain = (migration_root / "0123_create_final_domain_tables.py").read_text(encoding="utf-8")
-    drop_mcp = (migration_root / "0129_drop_mcp_interception_tables.py").read_text(encoding="utf-8")
+    final_domain = (migration_root / "0131_create_final_domain_tables.py").read_text(encoding="utf-8")
+    drop_mcp = (migration_root / "0137_drop_mcp_interception_tables.py").read_text(encoding="utf-8")
 
     assert 'revision = "0122_mcp_interception"' in tombstone
     assert 'down_revision = "0121_add_user_totp_mfa"' in tombstone
-    assert 'down_revision = "0122_mcp_interception"' in final_domain
-    assert "DROP TABLE IF EXISTS mcp_interception_events CASCADE" in drop_mcp
-    assert "DROP TABLE IF EXISTS mcp_tool_bindings CASCADE" in drop_mcp
+    assert 'down_revision = "0130_mcp_project_upstreams"' in final_domain
+    assert 'suffix = " CASCADE" if op.get_bind().dialect.name == "postgresql" else ""' in drop_mcp
+    assert "DROP TABLE IF EXISTS mcp_interception_events{suffix}" in drop_mcp
+    assert "DROP TABLE IF EXISTS mcp_tool_bindings{suffix}" in drop_mcp

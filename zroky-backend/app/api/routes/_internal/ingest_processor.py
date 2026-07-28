@@ -30,6 +30,7 @@ from app.services.privacy import mask_error_message, mask_payload
 from app.services.redis_client import get_redis_client
 from app.services.release_identity import resolve_release_identity
 from app.services.trace_graph import upsert_trace_graph_for_call
+from app.worker.tasks import process_diagnosis
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def _find_job_for_call(*, db: Session, tenant_id: str, call: Call) -> DiagnosisJ
 
 
 def _enqueue_diagnosis_job(job: DiagnosisJob) -> None:
-    raise RuntimeError("diagnosis worker removed from final production cutover")
+    process_diagnosis.delay(job.tenant_id, job.diagnosis_id, None if job.call_id else _safe_json_object(job.payload_json))
 
 
 def _retry_enqueue_for_existing_call(*, db: Session, tenant_id: str, call: Call) -> str:

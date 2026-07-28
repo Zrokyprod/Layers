@@ -29,6 +29,7 @@ _REQUEST_TIMEOUT_S = 30.0
 _FINAL_STATUSES = {"succeeded", "failed", "ambiguous", "cancelled"}
 RUNNER_CAPABILITY_VERSION = "zroky-python-runner/0.1.0"
 DEFAULT_EXECUTABLE_ADAPTERS = ("generic_rest", "stripe_refund")
+DEFAULT_VERIFICATION_ADAPTERS = ("stripe_refund",)
 _SECRET_KEY_MARKERS = (
     "authorization",
     "bearer",
@@ -82,6 +83,7 @@ def default_runner_metadata(runner_instance_id: str | None = None) -> dict[str, 
         "sdk": "zroky-python",
         "capability_version": RUNNER_CAPABILITY_VERSION,
         "executable_adapters": list(DEFAULT_EXECUTABLE_ADAPTERS),
+        "verification_adapters": list(DEFAULT_VERIFICATION_ADAPTERS),
     }
     return {key: value for key, value in metadata.items() if value not in (None, "")}
 
@@ -389,6 +391,22 @@ class ProtectedActionRunner:
             raise ZrokyRunnerError("Runner claim returned invalid response shape.")
         return data
 
+    def claim_verification_once(self) -> dict[str, Any] | None:
+        """Claim one read-only SOR verification job assigned to this runner."""
+        url = f"{self.api_base}/v1/action-runners/{self.runner_id}/verification-jobs/claim"
+        with httpx.Client(timeout=self.timeout_seconds, transport=self.transport) as client:
+            response = client.post(url, headers=_api_headers(self.api_key, self.project), json={})
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 300:
+            raise ZrokyRunnerError(
+                f"Verification claim failed with HTTP {response.status_code}: {response.text[:300]}"
+            )
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ZrokyRunnerError("Verification claim returned invalid response shape.")
+        return data
+
     def heartbeat(
         self,
         *,
@@ -446,6 +464,32 @@ class ProtectedActionRunner:
             )
             return {"claimed": True, "status": "failed", "attempt": failed, "error": str(exc)}
 
+    def run_verification_once(self) -> dict[str, Any]:
+        job = self.claim_verification_once()
+        if job is None:
+            return {"claimed": False, "status": "idle"}
+        try:
+            record = self._verify_job(job)
+            finished = self.finish_verification_job(
+                job=job,
+                actual_record=record,
+                record_found=True,
+            )
+            return {"claimed": True, "status": "succeeded", "verification_job": finished}
+        except Exception as exc:  # noqa: BLE001
+            failed = self.finish_verification_job(
+                job=job,
+                actual_record={},
+                record_found=False,
+                error_message=str(exc),
+            )
+            return {
+                "claimed": True,
+                "status": "failed",
+                "verification_job": failed,
+                "error": str(exc),
+            }
+
     def run_daemon(
         self,
         *,
@@ -458,6 +502,7 @@ class ProtectedActionRunner:
         max_iterations: int | None = None,
         stop_event: threading.Event | None = None,
         send_offline_heartbeat: bool = True,
+        enable_verification: bool = True,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
     ) -> dict[str, Any]:
@@ -523,6 +568,8 @@ class ProtectedActionRunner:
                 stats["iterations"] += 1
                 try:
                     result = self.run_once(runner_metadata=base_metadata)
+                    if enable_verification and result.get("claimed") is not True:
+                        result = self.run_verification_once()
                 except Exception as exc:  # noqa: BLE001
                     stats["claim_errors"] += 1
                     stats["last_error"] = str(exc)
@@ -597,6 +644,42 @@ class ProtectedActionRunner:
             raise ZrokyRunnerError("Runner finish returned invalid response shape.")
         return data
 
+    def finish_verification_job(
+        self,
+        *,
+        job: Mapping[str, Any],
+        actual_record: Mapping[str, Any],
+        record_found: bool,
+        error_message: str | None = None,
+    ) -> dict[str, Any]:
+        job_id = str(job.get("verification_job_id") or "")
+        if not job_id:
+            raise ZrokyRunnerError("verification job response missing verification_job_id.")
+        url = (
+            f"{self.api_base}/v1/action-runners/{self.runner_id}"
+            f"/verification-jobs/{job_id}/finish"
+        )
+        payload = {
+            "actual_record": _redact(dict(actual_record)),
+            "record_found": bool(record_found),
+            "error_message": error_message,
+        }
+        with httpx.Client(timeout=self.timeout_seconds, transport=self.transport) as client:
+            response = client.post(
+                url,
+                headers=_api_headers(self.api_key, self.project),
+                json={key: value for key, value in payload.items() if value is not None},
+            )
+        if response.status_code >= 300:
+            raise ZrokyRunnerError(
+                "Verification finish failed with HTTP "
+                f"{response.status_code}: {response.text[:300]}"
+            )
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ZrokyRunnerError("Verification finish returned invalid response shape.")
+        return data
+
     def _execute_attempt(self, attempt: Mapping[str, Any]) -> dict[str, Any]:
         wrapper = attempt.get("execution_plan")
         if not isinstance(wrapper, Mapping):
@@ -628,3 +711,41 @@ class ProtectedActionRunner:
         if not isinstance(result, dict):
             raise ZrokyRunnerError(f"Runner adapter {adapter_name} returned invalid result.")
         return _redact(result)
+
+    def _verify_job(self, job: Mapping[str, Any]) -> dict[str, Any]:
+        plan = job.get("verification_plan")
+        if not isinstance(plan, Mapping):
+            raise ZrokyRunnerError("verification job missing verification_plan.")
+        if plan.get("adapter") != "stripe_refund" or plan.get("operation") != "refund.read":
+            raise ZrokyRunnerError("runner does not support this verification operation.")
+        credential_ref = str(plan.get("credential_ref") or "").strip()
+        target = plan.get("target") if isinstance(plan.get("target"), Mapping) else {}
+        refund_id = str(target.get("refund_id") or "").strip()
+        if not credential_ref or not refund_id:
+            raise ZrokyRunnerError(
+                "stripe refund verification requires credential_ref and refund_id."
+            )
+        credential = self.credential_resolver.resolve(credential_ref)
+        token = credential.get("secret_key") or credential.get("token")
+        if not token:
+            raise ZrokyRunnerError("stripe_refund credential requires secret_key or token.")
+        with httpx.Client(timeout=self.timeout_seconds, transport=self.transport) as client:
+            response = client.get(
+                f"https://api.stripe.com/v1/refunds/{refund_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if response.status_code >= 300:
+            raise ZrokyRunnerError(
+                "stripe_refund verification failed with HTTP "
+                f"{response.status_code}: {response.text[:300]}"
+            )
+        payload = response.json()
+        if not isinstance(payload, Mapping):
+            raise ZrokyRunnerError("stripe_refund verification returned invalid response shape.")
+        return {
+            "refund_id": payload.get("id"),
+            "status": payload.get("status"),
+            "amount_minor": payload.get("amount"),
+            "currency": payload.get("currency"),
+            "created_at": payload.get("created"),
+        }
