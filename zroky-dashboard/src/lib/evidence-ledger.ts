@@ -1,5 +1,8 @@
 import type {
   ActionIntentResponse,
+  OutcomeGraphClassification,
+  OutcomeGraphReasonCode,
+  OutcomeGraphRow,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
 } from "@/lib/api";
@@ -9,7 +12,26 @@ import { humanize } from "@/lib/format";
 
 export type EvidenceLedgerRowKind = "action_receipt" | "orphan_decision" | "unlinked_outcome" | "final_bundle";
 
-export type EvidenceLedgerFilter = "all" | "matched" | "needs_verification" | "exceptions";
+export type EvidenceLedgerFilter =
+  | "all"
+  | "proven"
+  | "caught"
+  | "pending"
+  | "needs_attention"
+  | "matched"
+  | "needs_verification"
+  | "exceptions";
+
+export type OutcomeGraphEffectRow = {
+  effectKey: string;
+  expected: Record<string, unknown>;
+  actual: Record<string, unknown>;
+  observed: boolean;
+  matched: boolean;
+  stale: boolean;
+  conflicted: boolean;
+  observationDigest: string | null;
+};
 
 export type EvidenceLedgerRow = {
   id: string;
@@ -33,6 +55,14 @@ export type EvidenceLedgerRow = {
   exportable: boolean;
   exportKind: "receipt" | "evidence_pack" | "final_bundle" | null;
   detail: string;
+  classification?: OutcomeGraphClassification | null;
+  reasonCode?: OutcomeGraphReasonCode | null;
+  graph?: Record<string, unknown> | null;
+  environment?: string | null;
+  intentId?: string | null;
+  nextCheckAt?: string | null;
+  createdAt?: string | null;
+  effects?: OutcomeGraphEffectRow[];
 };
 
 export type EvidenceLedgerCounts = {
@@ -61,6 +91,10 @@ function recordFrom(value: unknown): Record<string, unknown> {
 
 function stringFrom(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function boolFrom(value: unknown): boolean {
+  return value === true;
 }
 
 function latestByDate<T>(items: T[], dateOf: (item: T) => string | null | undefined): T | null {
@@ -131,6 +165,82 @@ function rowStatus(value: string): Pick<EvidenceLedgerRow, "status" | "statusLab
     statusLabel: statusLabel(value),
     tone: statusTone(value),
   };
+}
+
+function classificationTone(classification: OutcomeGraphClassification | null): StatusTone {
+  if (classification === "verified") return "success";
+  if (classification === "wrong" || classification === "missing" || classification === "forbidden" || classification === "duplicate") return "danger";
+  if (classification === "pending") return "warning";
+  if (classification === "stale" || classification === "conflicted" || classification === "unknown") return "warning";
+  return "neutral";
+}
+
+function classificationLabel(classification: OutcomeGraphClassification | null): string {
+  return classification ? humanize(classification) : "Unknown";
+}
+
+function workflowKey(graph: Record<string, unknown>): string {
+  return stringFrom(graph.workflow_key) ?? "Unknown workflow";
+}
+
+function effectRows(graph: Record<string, unknown>): OutcomeGraphEffectRow[] {
+  const expected = Array.isArray(graph.expected_effects) ? graph.expected_effects.map(recordFrom) : [];
+  const actual = Array.isArray(graph.actual_effects) ? graph.actual_effects.map(recordFrom) : [];
+  const expectedByKey = new Map(expected.map((effect, index) => [stringFrom(effect.effect_key) ?? `effect_${index + 1}`, effect]));
+  const keys = new Set<string>([...expectedByKey.keys()]);
+  actual.forEach((effect, index) => keys.add(stringFrom(effect.effect_key) ?? `observed_${index + 1}`));
+
+  return [...keys].map((key) => {
+    const actualEffect = actual.find((effect) => (stringFrom(effect.effect_key) ?? key) === key) ?? {};
+    return {
+      effectKey: key,
+      expected: expectedByKey.get(key) ?? {},
+      actual: actualEffect,
+      observed: boolFrom(actualEffect.observed),
+      matched: boolFrom(actualEffect.matched),
+      stale: boolFrom(actualEffect.stale),
+      conflicted: boolFrom(actualEffect.conflicted),
+      observationDigest: stringFrom(actualEffect.observation_digest),
+    };
+  });
+}
+
+export function buildOutcomeGraphLedgerRows(graphs: OutcomeGraphRow[]): EvidenceLedgerRow[] {
+  return graphs.map((graphRow) => {
+    const classification = graphRow.classification ?? "unknown";
+    const workflow = workflowKey(graphRow.graph);
+    return {
+      actionId: null,
+      actionType: graphRow.environment,
+      agentName: workflow,
+      callId: null,
+      checkedAt: graphRow.last_checked_at ?? graphRow.created_at,
+      createdAt: graphRow.created_at,
+      decisionId: null,
+      detail: graphRow.reason_code ?? graphRow.verification_status,
+      digest: graphRow.graph_digest,
+      effects: effectRows(graphRow.graph),
+      environment: graphRow.environment,
+      exportKind: null,
+      exportable: true,
+      graph: graphRow.graph,
+      href: `/evidence?graph_id=${encodeURIComponent(graphRow.id)}`,
+      id: graphRow.id,
+      intentId: graphRow.intent_id,
+      kind: "final_bundle",
+      nextCheckAt: graphRow.next_check_at,
+      outcomeId: graphRow.id,
+      reasonCode: graphRow.reason_code,
+      sourceLabel: "Outcome graph",
+      status: classification,
+      statusLabel: classificationLabel(classification),
+      systemRef: graphRow.intent_id,
+      title: workflow,
+      tone: classificationTone(classification),
+      traceId: null,
+      classification,
+    };
+  });
 }
 
 function isNeedsVerification(row: EvidenceLedgerRow): boolean {
@@ -349,6 +459,10 @@ function matchesEvidenceSearch(row: EvidenceLedgerRow, search: string): boolean 
     row.systemRef,
     row.title,
     row.traceId,
+    row.classification,
+    row.reasonCode,
+    row.intentId,
+    row.environment,
   ]
     .filter(Boolean)
     .join(" ")
@@ -364,6 +478,18 @@ export function filterEvidenceLedger(
   const filtered = (() => {
     if (filter === "all") {
       return rows;
+    }
+    if (filter === "proven") {
+      return rows.filter((row) => row.classification === "verified" || row.status === "matched");
+    }
+    if (filter === "caught") {
+      return rows.filter((row) => ["wrong", "missing", "forbidden", "duplicate"].includes(String(row.classification ?? row.status)));
+    }
+    if (filter === "pending") {
+      return rows.filter((row) => row.classification === "pending" || row.status === "pending");
+    }
+    if (filter === "needs_attention") {
+      return rows.filter((row) => ["stale", "conflicted", "unknown"].includes(String(row.classification ?? row.status)));
     }
     if (filter === "matched") {
       return rows.filter((row) => row.status === "matched");

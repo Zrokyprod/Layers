@@ -1,75 +1,51 @@
+import Link from "next/link";
 import { Download, Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
 import type { EvidenceLedgerFilter, EvidenceLedgerRow } from "@/lib/evidence-ledger";
 import { filterEvidenceLedger } from "@/lib/evidence-ledger";
-import { formatDateTime } from "@/lib/format";
+import { timeSince } from "@/lib/format";
 
 const filters: Array<{ label: string; value: EvidenceLedgerFilter }> = [
   { label: "All", value: "all" },
-  { label: "Matched", value: "matched" },
-  { label: "Needs verification", value: "needs_verification" },
-  { label: "Exceptions", value: "exceptions" },
+  { label: "Proven", value: "proven" },
+  { label: "Caught", value: "caught" },
+  { label: "Pending", value: "pending" },
+  { label: "Needs attention", value: "needs_attention" },
 ];
 
 type EvidenceLedgerProps = {
   filter: EvidenceLedgerFilter;
-  hasMore: boolean;
   isError: boolean;
   isExporting: boolean;
   isLoading: boolean;
-  isLoadingMore: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
   onExportManifest: () => void;
-  onLoadMore: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
   rows: EvidenceLedgerRow[];
   search: string;
   selectedRowId: string | null;
-  totalMatching: number;
 };
 
-function rowKindLabel(row: EvidenceLedgerRow): string {
-  if (row.kind === "action_receipt") {
-    if (row.sourceLabel === "Blocked action audit") return "Blocked action audit";
-    return row.exportable ? "Action receipt" : "Protected action record";
-  }
-  if (row.kind === "orphan_decision") return "Guard-only evidence";
-  return "Unlinked outcome";
-}
-
-function exportLabel(row: EvidenceLedgerRow): string {
-  if (row.exportable) return row.sourceLabel;
-  if (row.kind === "unlinked_outcome") return "not linked / not exportable";
-  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "not required";
-  return "receipt not available";
-}
-
-function actionLabel(row: EvidenceLedgerRow): string {
-  if (row.exportable) return row.exportKind === "receipt" ? "Open receipt" : "Open proof";
-  if (row.kind === "unlinked_outcome") return "Review mismatch";
-  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "View details";
-  return "Review";
+function shortId(value: string | null | undefined): string {
+  if (!value) return "-";
+  return value.length > 14 ? `${value.slice(0, 10)}...` : value;
 }
 
 export function EvidenceLedger({
   filter,
-  hasMore,
   isError,
   isExporting,
   isLoading,
-  isLoadingMore,
   onFilterChange,
   onExportManifest,
-  onLoadMore,
   onSearchChange,
   onSelectRow,
   rows,
   search,
   selectedRowId,
-  totalMatching,
 }: EvidenceLedgerProps) {
   const filteredRows = filterEvidenceLedger(rows, filter, search);
   const exportableCount = filteredRows.filter((row) => row.exportable).length;
@@ -80,9 +56,9 @@ export function EvidenceLedger({
         <div>
           <span className="ev-eyebrow">Evidence ledger</span>
           <h2>Proof records</h2>
-          <p>Select a proof record to verify, export, or print.</p>
+          <p>Select an outcome graph to inspect source-of-record proof.</p>
         </div>
-        <strong>{filteredRows.length} of {totalMatching} shown</strong>
+        <strong>{filteredRows.length} shown</strong>
       </header>
 
       <div className="ev-ledger-toolbar">
@@ -106,7 +82,7 @@ export function EvidenceLedger({
           onClick={onExportManifest}
           variant="soft"
         >
-          {isExporting ? "Exporting" : "Export manifest"}
+          {isExporting ? "Exporting" : "Export view"}
         </DashboardButton>
       </div>
 
@@ -116,12 +92,12 @@ export function EvidenceLedger({
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search proof records..."
+            placeholder="Search outcome graphs..."
           />
         </label>
         <div className="ev-manifest-scope" aria-label="Manifest scope">
           <strong>{exportableCount}</strong>
-          <span>exportable in view</span>
+          <span>graphs in view</span>
         </div>
       </div>
 
@@ -135,14 +111,15 @@ export function EvidenceLedger({
         <div className="ev-empty-state">Evidence could not load. Verify backend connectivity and project access.</div>
       ) : rows.length === 0 ? (
         <div className="ev-empty-state">
-          <strong>No proof yet.</strong>
-          <span>Run a protected action to generate the first signed receipt.</span>
+          <strong>Declare your first intent.</strong>
+          <span>Outcome graphs appear here once an agent run is verified against your systems of record.</span>
           <div className="ev-empty-contract" aria-label="Evidence export contract">
-            <span>Runtime decision</span>
-            <span>Approval audit</span>
-            <span>Outcome proof</span>
-            <span>Evidence hash</span>
+            <span>Declare intent</span>
+            <span>Bind Assurance Pack</span>
+            <span>Read source</span>
+            <span>Store graph</span>
           </div>
+          <a href="/docs">Read setup docs</a>
         </div>
       ) : filteredRows.length === 0 ? (
         <div className="ev-empty-state">No records match this filter or search.</div>
@@ -151,12 +128,11 @@ export function EvidenceLedger({
           <table className="ev-ledger-table">
             <thead>
               <tr>
-                <th scope="col">Proof</th>
+                <th scope="col">Created</th>
                 <th scope="col">Workflow</th>
-                <th scope="col">Source</th>
-                <th scope="col">Verdict</th>
-                <th scope="col">Signed</th>
-                <th scope="col">Action</th>
+                <th scope="col">Classification</th>
+                <th scope="col">Reason</th>
+                <th scope="col">Intent</th>
               </tr>
             </thead>
             <tbody>
@@ -170,48 +146,36 @@ export function EvidenceLedger({
                     data-kind={row.kind}
                     data-tone={row.tone}
                     aria-current={selected ? "true" : undefined}
+                    onClick={() => onSelectRow(row)}
                   >
+                    <td>
+                      <span className="ev-signed-cell">
+                        {timeSince(row.createdAt ?? row.checkedAt)}
+                        <small>{row.environment ?? "environment"}</small>
+                      </span>
+                    </td>
                     <td>
                       <span className="ev-proof-name">
                         <span className="ev-proof-dot" aria-hidden="true" />
-                        <span>
-                          <strong>{row.title}</strong>
-                          <small>{rowKindLabel(row)}</small>
-                          {row.digest ? (
-                            <small className="ev-proof-digest">
-                              <span>Digest</span>
-                              <code>{row.digest}</code>
-                            </small>
-                          ) : null}
-                        </span>
+                        <strong>{row.title}</strong>
                       </span>
                     </td>
-                    <td>{row.kind === "unlinked_outcome" ? row.actionType : row.agentName}</td>
-                    <td>{row.systemRef ?? row.sourceLabel}</td>
                     <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
                     <td>
-                      <span className="ev-signed-cell">
-                        {row.id.startsWith("demo:") ? row.detail : formatDateTime(row.checkedAt)}
-                        <small>{exportLabel(row)}</small>
-                      </span>
+                      {(row.classification === "pending" || row.classification === "unknown") && row.reasonCode ? (
+                        <code>{row.reasonCode}</code>
+                      ) : "-"}
                     </td>
                     <td>
-                      <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
-                        {actionLabel(row)}
-                      </DashboardButton>
+                      <Link href={`/operations?intent_id=${encodeURIComponent(row.intentId ?? "")}`} onClick={(event) => event.stopPropagation()}>
+                        <code>{shortId(row.intentId)}</code>
+                      </Link>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          {hasMore ? (
-            <div className="ev-ledger-load-more">
-              <DashboardButton disabled={isLoadingMore} onClick={onLoadMore} variant="soft">
-                {isLoadingMore ? "Loading" : "Load more proof records"}
-              </DashboardButton>
-            </div>
-          ) : null}
         </div>
       )}
     </section>
