@@ -9,6 +9,8 @@ import {
   Copy,
   Database,
   PlugZap,
+  Power,
+  PowerOff,
   Save,
   Search,
   ShieldCheck,
@@ -3434,6 +3436,38 @@ function ConnectorInspector({
   }
 
   const status = connectorInspectorStatus(row);
+  const setupProfile = connectorSetupProfile(row.id);
+  const accessStatus = row.connected ? "Saved" : setupProfile.oneClick ? "Authorization required" : "Credential required";
+  const accessScope =
+    row.id === "mcp_upstream"
+      ? "Policy-gated execution"
+      : row.kind === "support"
+        ? "Workflow delivery"
+        : "Read-only proof";
+  const needsOneClickAuthorization =
+    setupProfile.oneClick && (!row.connected || (row.id === "jira_issue" && !jiraStatus?.has_oauth_refresh_token));
+
+  const startOneClickConnect = async () => {
+    setConnecting(true);
+    setConnectionError(null);
+    try {
+      if (row.id === "github") {
+        externalNavigator.assign("/api/zroky/v1/settings/github/connect/start");
+        return;
+      }
+      if (row.id === "slack") {
+        externalNavigator.assign("/api/zroky/v1/settings/slack/connect/start");
+        return;
+      }
+      if (row.id === "zoho_crm" || row.id === "jira_issue") {
+        setSetupOpen(true);
+        return;
+      }
+      if (row.href) externalNavigator.assign(row.href);
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   return (
     <section className="panel connector-inspector-panel" aria-label="Selected connector">
@@ -3737,7 +3771,14 @@ export default function IntegrationsPage() {
   }, [loadOverview]);
 
   const inventory = useMemo(
-    () => buildConnectorInventory({ ...overview, partialFailure, visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS }),
+    () =>
+      buildConnectorInventory({
+        ...overview,
+        customer: null,
+        ledger: null,
+        partialFailure,
+        visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS,
+      }),
     [overview, partialFailure],
   );
   const visibleInventory = inventory;

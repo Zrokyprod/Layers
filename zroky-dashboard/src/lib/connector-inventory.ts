@@ -617,6 +617,7 @@ function mcpRow(status: McpUpstreamBindingResponse | null | undefined): Connecto
     supportedActionTypes: status?.allowed_tools ?? [],
     metadata: {
       connectorType: "mcp_upstream",
+      manifestId: null,
       maskedEndpoint: status?.endpoint_url ?? null,
       credentialSaved: status?.credential_configured ?? null,
       supportAccount: null,

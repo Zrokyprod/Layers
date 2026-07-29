@@ -26,6 +26,7 @@ import {
   useRotateProjectApiKey,
 } from "@/lib/hooks";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
+import { useDashboardStore } from "@/lib/store";
 
 const defaultKeyName = "Production verified-action key";
 const keyExpiryWarningDays = 14;
@@ -56,6 +57,11 @@ function daysUntilExpiry(expiresAt: string | null): number | null {
   const expires = new Date(expiresAt).getTime();
   if (!Number.isFinite(expires)) return null;
   return Math.ceil((expires - Date.now()) / millisecondsPerDay);
+}
+
+function keyAccessLabel(scopes: string[] | null | undefined): string {
+  if (!scopes?.length || scopes.includes("project:member")) return "Full runtime access";
+  return scopes.join(", ");
 }
 
 function expiryWarningLabel(key: ApiKeyResponse): string | null {

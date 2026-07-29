@@ -328,6 +328,54 @@ function finalBundleVerification(
   };
 }
 
+function ledgerResponse({
+  decisions = [runtimeDecision()],
+  intents = [actionIntent()],
+  outcomes = [outcome()],
+}: {
+  decisions?: RuntimePolicyDecisionResponse[];
+  intents?: ActionIntentResponse[];
+  outcomes?: OutcomeReconciliationView[];
+} = {}) {
+  const rows = buildEvidenceLedger({ decisions, intents, outcomes });
+  const counts = evidenceLedgerCounts(rows);
+  return {
+    counts: {
+      exceptions: counts.exceptions,
+      export_ready: counts.exportReady,
+      needs_verification: counts.needsVerification,
+      total: counts.total,
+    },
+    has_more: false,
+    items: rows.map((row) => ({
+      action_id: row.actionId,
+      action_type: row.actionType,
+      agent_name: row.agentName,
+      call_id: row.callId,
+      checked_at: row.checkedAt,
+      decision_id: row.decisionId,
+      detail: row.detail,
+      digest: row.digest,
+      export_kind: row.exportKind,
+      exportable: row.exportable,
+      href: row.href,
+      id: row.id,
+      kind: row.kind,
+      outcome_id: row.outcomeId,
+      source_label: row.sourceLabel,
+      status: row.status,
+      system_ref: row.systemRef,
+      title: row.title,
+      trace_id: row.traceId,
+    })),
+    limit: 100,
+    offset: 0,
+    total_in_scope: rows.length,
+    total_matching: rows.length,
+    window_days: 7,
+  };
+}
+
 function renderEvidencePage() {
   const client = new QueryClient({
     defaultOptions: {

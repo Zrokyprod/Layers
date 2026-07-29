@@ -6,9 +6,7 @@ import zroky
 def test_python_public_surface_excludes_old_capture_and_fingerprint_exports() -> None:
     for old_name in (
         "capture_handoff",
-        "capture_memory",
         "capture_policy_decision",
-        "capture_retrieval",
         "capture_tool_call",
         "generate_prompt_fingerprint",
     ):
@@ -24,5 +22,7 @@ def test_python_public_surface_keeps_final_policy_action_and_outcome_entrypoints
         "await_action_proof",
         "verify_outcome",
         "outcome",
+        "capture_memory",
+        "capture_retrieval",
     ):
         assert hasattr(zroky, final_name), f"{final_name} must remain public"

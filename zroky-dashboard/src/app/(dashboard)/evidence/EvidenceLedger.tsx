@@ -22,6 +22,7 @@ type EvidenceLedgerProps = {
   isLoadingMore: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
   onExportManifest: () => void;
+  onLoadMore: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
   rows: EvidenceLedgerRow[];
@@ -33,7 +34,7 @@ type EvidenceLedgerProps = {
 function rowKindLabel(row: EvidenceLedgerRow): string {
   if (row.kind === "action_receipt") {
     if (row.sourceLabel === "Blocked action audit") return "Blocked action audit";
-    return row.exportable ? "Signed receipt" : "Protected action record";
+    return row.exportable ? "Action receipt" : "Protected action record";
   }
   if (row.kind === "orphan_decision") return "Guard-only evidence";
   return "Unlinked outcome";
@@ -62,6 +63,7 @@ export function EvidenceLedger({
   isLoadingMore,
   onFilterChange,
   onExportManifest,
+  onLoadMore,
   onSearchChange,
   onSelectRow,
   rows,
@@ -174,7 +176,7 @@ export function EvidenceLedger({
                         <span className="ev-proof-dot" aria-hidden="true" />
                         <span>
                           <strong>{row.title}</strong>
-                          <small>{rowKindLabel(row.kind)}</small>
+                          <small>{rowKindLabel(row)}</small>
                           {row.digest ? (
                             <small className="ev-proof-digest">
                               <span>Digest</span>
@@ -190,12 +192,12 @@ export function EvidenceLedger({
                     <td>
                       <span className="ev-signed-cell">
                         {row.id.startsWith("demo:") ? row.detail : formatDateTime(row.checkedAt)}
-                        <small>{row.exportable ? row.sourceLabel : "not linked / not exportable"}</small>
+                        <small>{exportLabel(row)}</small>
                       </span>
                     </td>
                     <td>
                       <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
-                        {row.exportable ? "View" : actionLabel(row)}
+                        {actionLabel(row)}
                       </DashboardButton>
                     </td>
                   </tr>
@@ -203,6 +205,13 @@ export function EvidenceLedger({
               })}
             </tbody>
           </table>
+          {hasMore ? (
+            <div className="ev-ledger-load-more">
+              <DashboardButton disabled={isLoadingMore} onClick={onLoadMore} variant="soft">
+                {isLoadingMore ? "Loading" : "Load more proof records"}
+              </DashboardButton>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

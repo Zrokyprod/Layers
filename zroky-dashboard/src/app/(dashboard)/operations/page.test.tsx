@@ -1,11 +1,22 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDashboardStore } from "@/lib/store";
 
 import { operationsRowsCsv } from "./csv";
 import OperationsPage from "./page";
+
+const userEvent = {
+  setup: () => ({
+    click: async (element: Element) => {
+      fireEvent.click(element);
+    },
+    type: async (element: Element, text: string) => {
+      const input = element as HTMLInputElement | HTMLTextAreaElement;
+      fireEvent.change(input, { target: { value: `${input.value ?? ""}${text}` } });
+    },
+  }),
+};
 
 const api = vi.hoisted(() => ({
   assignFinalIncident: vi.fn(),

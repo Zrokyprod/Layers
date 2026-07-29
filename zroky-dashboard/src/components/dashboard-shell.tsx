@@ -13,6 +13,7 @@ import {
   FolderOpen,
   Gauge,
   Inbox,
+  KeyRound,
   LockKeyhole,
   LogOut,
   Menu,
@@ -67,7 +68,7 @@ const SETTINGS_CHILD_LINKS = [
   { href: "/settings/workspace", label: "Workspace", Icon: FolderOpen },
 ];
 
-type ShellMenu = "account";
+type ShellMenu = "account" | "workspace";
 
 function demoDashboardRequested(): boolean {
   if (typeof window === "undefined") return false;
@@ -241,6 +242,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const appShellRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
+  const [projectSearch, setProjectSearch] = useState("");
   const [compactShell, setCompactShell] = useState(false);
   const [, setCompactSidebarOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(false);

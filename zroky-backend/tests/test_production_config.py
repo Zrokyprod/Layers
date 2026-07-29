@@ -44,7 +44,8 @@ def _hardened_production_settings(**overrides: object) -> Settings:
     return Settings(**values)
 
 
-def test_production_config_rejects_insecure_defaults() -> None:
+def test_production_config_rejects_insecure_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PROVIDER_KEY_VAULT_KEK", raising=False)
     settings = Settings(
         APP_ENV="production",
         ALLOW_PROJECT_HEADER_CONTEXT=True,

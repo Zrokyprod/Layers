@@ -751,16 +751,6 @@ def verification_status_for_check(row: OutcomeReconciliationCheck) -> str:
     return VERIFICATION_UNVERIFIABLE
 
 
-def intent_proof_status_for_check(row: OutcomeReconciliationCheck) -> str:
-    if row.verdict == VERDICT_MATCHED:
-        return VERDICT_MATCHED
-    if row.verdict == VERDICT_MISMATCHED:
-        return VERDICT_MISMATCHED
-    if (row.proof_status or "").lower() == VERIFICATION_PENDING:
-        return VERIFICATION_PENDING
-    return VERDICT_NOT_VERIFIED
-
-
 REVERIFY_CONNECTORS = {
     "customer_record_api",
     "generic_rest_api",

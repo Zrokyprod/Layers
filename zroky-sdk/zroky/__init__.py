@@ -32,6 +32,7 @@ from zroky._call import (  # noqa: F401
     trace,
     trace_run,
 )
+from zroky._capture import capture_memory, capture_retrieval  # noqa: F401
 
 # Re-export errors so callers can do: from zroky import ZrokyPreflightError
 from zroky._errors import (  # noqa: F401

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
@@ -11,17 +11,12 @@ import {
   getFinalEvidenceBundle,
   getRuntimePolicyEvidencePack,
   verifyFinalEvidenceBundle,
-  listActionIntents,
-  listOutcomeReconciliations,
-  listRuntimePolicyApprovals,
   type ActionReceiptResponse,
   type RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
 import { statusLabel, statusTone } from "@/lib/action-status";
 import { dashboardWindowDays } from "@/lib/dashboard-window";
 import {
-  buildEvidenceLedger,
-  evidenceLedgerCounts,
   resolveEvidenceLedgerDeepLink,
   type EvidenceLedgerCounts,
   type EvidenceLedgerFilter,
@@ -231,7 +226,7 @@ function demoEvidenceRows(): EvidenceLedgerRow[] {
   }));
 }
 
-function demoEvidenceCounts(): ReturnType<typeof evidenceLedgerCounts> {
+function demoEvidenceCounts(): EvidenceLedgerCounts {
   return {
     exceptions: 3,
     exportReady: 1124,
@@ -377,37 +372,60 @@ export default function EvidencePage() {
   const windowDays = useMemo(() => dashboardWindowDays(dateRange), [dateRange]);
   const deferredSearch = useDeferredValue(search.trim());
 
-  const actionsQuery = useQuery({
-    queryKey: ["action-intents", "evidence-index"],
-    queryFn: ({ signal }) => listActionIntents({ status: "all", limit: 100 }, signal),
+  const ledgerQuery = useInfiniteQuery({
+    queryKey: ["evidence", "ledger", selectedProject, windowDays, filter, deferredSearch],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => getEvidenceLedger({
+      days: windowDays,
+      filter,
+      limit: 100,
+      offset: pageParam,
+      search: deferredSearch,
+    }, signal),
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
     enabled: !demoRequested,
-  });
-  const decisionsQuery = useQuery({
-    queryKey: ["runtime-policy", "evidence-index"],
-    queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
-    enabled: !demoRequested,
-  });
-  const outcomesQuery = useQuery({
-    queryKey: ["outcomes", "evidence-index"],
-    queryFn: ({ signal }) => listOutcomeReconciliations({ limit: 100 }, signal),
-    enabled: !demoRequested,
+    placeholderData: (previousData) => previousData,
+    staleTime: 15_000,
   });
 
-  const apiRows = useMemo(
-    () => buildEvidenceLedger({
-      decisions: decisionsQuery.data?.items ?? [],
-      intents: actionsQuery.data?.items ?? [],
-      outcomes: outcomesQuery.data?.items ?? [],
-    }),
-    [actionsQuery.data?.items, decisionsQuery.data?.items, outcomesQuery.data?.items],
-  );
-  const apiLoading = actionsQuery.isLoading || decisionsQuery.isLoading || outcomesQuery.isLoading;
-  const apiError = actionsQuery.error || decisionsQuery.error || outcomesQuery.error;
-  const useDemoData = demoRequested || (process.env.NODE_ENV === "development" && Boolean(apiError));
+  const apiRows = useMemo<EvidenceLedgerRow[]>(() => (
+    ledgerQuery.data?.pages.flatMap((page) => page.items.map((item) => ({
+      actionId: item.action_id,
+      actionType: item.action_type,
+      agentName: item.agent_name,
+      callId: item.call_id,
+      checkedAt: item.checked_at,
+      decisionId: item.decision_id,
+      detail: item.detail,
+      digest: item.digest,
+      exportKind: item.export_kind,
+      exportable: item.exportable,
+      href: item.href,
+      id: item.id,
+      kind: item.kind,
+      outcomeId: item.outcome_id,
+      sourceLabel: item.source_label,
+      status: item.status,
+      statusLabel: statusLabel(item.status),
+      systemRef: item.system_ref,
+      title: item.title,
+      tone: statusTone(item.status),
+      traceId: item.trace_id,
+    }))) ?? []
+  ), [ledgerQuery.data?.pages]);
+  const firstLedgerPage = ledgerQuery.data?.pages[0];
+  const useDemoData = demoRequested || (process.env.NODE_ENV === "development" && Boolean(ledgerQuery.error));
   const rows = useMemo(() => (useDemoData ? demoEvidenceRows() : apiRows), [apiRows, useDemoData]);
-  const loading = !useDemoData && apiLoading;
-  const error = useDemoData ? null : apiError;
-  const counts = useMemo(() => (useDemoData ? demoEvidenceCounts() : evidenceLedgerCounts(rows)), [rows, useDemoData]);
+  const loading = !useDemoData && ledgerQuery.isLoading;
+  const error = useDemoData ? null : ledgerQuery.error;
+  const counts: EvidenceLedgerCounts = useDemoData
+    ? demoEvidenceCounts()
+    : firstLedgerPage ? {
+      exceptions: firstLedgerPage.counts.exceptions,
+      exportReady: firstLedgerPage.counts.export_ready,
+      needsVerification: firstLedgerPage.counts.needs_verification,
+      total: firstLedgerPage.counts.total,
+    } : { exceptions: 0, exportReady: 0, needsVerification: 0, total: 0 };
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
   const focusedRow = selectedRow ?? fallbackRowFromDeepLink(deepLink);
   const selectedActionId = !useDemoData && focusedRow?.exportKind === "receipt" ? focusedRow.actionId : null;
@@ -581,8 +599,10 @@ export default function EvidencePage() {
             isError={Boolean(error)}
             isExporting={exporting}
             isLoading={loading}
+            isLoadingMore={ledgerQuery.isFetchingNextPage}
             onFilterChange={setFilter}
             onExportManifest={() => void exportAuditManifest()}
+            onLoadMore={() => void ledgerQuery.fetchNextPage()}
             onSearchChange={setSearch}
             onSelectRow={selectRow}
             rows={rows}

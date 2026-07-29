@@ -28,6 +28,7 @@ import {
   type SavedConnectorReconciliationConnector,
   type SavedConnectorReconciliationPayload,
 } from "@/lib/api";
+import { dashboardWindowDays } from "@/lib/dashboard-window";
 import { compactJson, field, formatCount, formatDateTime, timeSince } from "@/lib/format";
 import {
   buildClaimedActualDiff,
@@ -65,7 +66,8 @@ type ReverifyNotice = {
 
 function initialCheckId(): string | null {
   if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get("check_id");
+  const params = new URLSearchParams(window.location.search);
+  return params.get("check_id") ?? params.get("outcome_id");
 }
 
 function matchFieldsFor(check: OutcomeReconciliationView): string[] | null {
@@ -547,25 +549,35 @@ function OutcomeInspector({
 
 function BypassStrip({
   bypassCount,
+  coverageAvailable,
   ledger,
 }: {
   bypassCount: number;
+  coverageAvailable: boolean;
   ledger: OutcomeLedger;
 }) {
   const hasBypass = bypassCount > 0;
+  const tone = hasBypass ? "danger" : coverageAvailable ? "success" : "warning";
   const previewRows = ledger.bypassRows.slice(0, 3);
 
   return (
-    <section className="outcomes-bypass-strip" data-tone={hasBypass ? "danger" : "success"} aria-label="Bypass check">
+    <section className="outcomes-bypass-strip" data-tone={tone} aria-label="Bypass check">
       <div className="outcomes-bypass-copy">
-        <StatusPill value={hasBypass ? "policy_bypass" : "clear"} />
         <div>
           <span className="dashboard-eyebrow">Receipt coverage</span>
-          <h2>{hasBypass ? `${formatCount(bypassCount)} unreceipted system change${bypassCount === 1 ? "" : "s"}` : "No bypass risk detected"}</h2>
+          <h2>
+            {hasBypass
+              ? `${formatCount(bypassCount)} unreceipted system change${bypassCount === 1 ? "" : "s"}`
+              : coverageAvailable
+                ? "No bypass risk detected"
+                : "Mutation coverage unavailable"}
+          </h2>
           <p>
             {hasBypass
               ? "These source-system changes do not have a Zroky receipt yet. Review them before trusting the agent path."
-              : "Every observed protected mutation is linked to a receipt or an authorized path."}
+              : coverageAvailable
+                ? "Every observed protected mutation is linked to a receipt or an authorized path."
+                : "No source-system mutation feed has reported data yet, so bypass risk cannot be ruled out."}
           </p>
         </div>
       </div>
@@ -579,9 +591,14 @@ function BypassStrip({
               <small>{timeSince(row.occurredAt)}</small>
             </article>
           ))}
-          <DashboardButtonLink href="/operations?filter=bypassed" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
+          <DashboardButtonLink href="/actions?filter=bypassed" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
             Investigate in Actions
           </DashboardButtonLink>
+        </div>
+      ) : coverageAvailable ? (
+        <div className="outcomes-bypass-clear">
+          <span>All observed protected mutations are receipted or authorized.</span>
+          <StatusPill value="clear" />
         </div>
       ) : (
         <div className="outcomes-bypass-clear">
@@ -646,6 +663,9 @@ export default function OutcomesPage() {
     () => ledger.rows.find((row) => row.id === selectedId) ?? ledger.rows[0] ?? null,
     [ledger.rows, selectedId],
   );
+  const selectedMismatchCase = selectedRow
+    ? mismatchCasesByCheckId.get(selectedRow.id) ?? null
+    : null;
 
   useEffect(() => {
     if (ledger.rows.length === 0) {
@@ -807,6 +827,7 @@ export default function OutcomesPage() {
 
       <BypassStrip
         bypassCount={bypassCount}
+        coverageAvailable={mutationCoverageAvailable}
         ledger={{ ...ledger, counts: { ...ledger.counts, bypass: bypassCount } }}
       />
 

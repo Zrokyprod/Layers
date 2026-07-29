@@ -158,9 +158,9 @@ function verificationSummary({
       algorithm: "sha256",
       digest: row.digest,
       fingerprint: row.digest,
-      label: row.sourceLabel,
-      status: "Digest available",
-      tone: row.tone,
+      label: "Action intent",
+      status: "Intent fingerprint only",
+      tone: "warning",
     };
   }
   return null;
@@ -462,7 +462,10 @@ export function FocusedProofPanel({
           </DashboardButton>
         </div>
         {verification && !isDemoRow ? (
-          <section className="ev-external-verify" aria-label="Independent verification material">
+          <section
+            className="ev-external-verify"
+            aria-label={receipt || evidencePack || finalBundle ? "Independent verification material" : "Recorded intent fingerprint"}
+          >
             <div>
               <ShieldCheck size={16} aria-hidden="true" />
               <span>
@@ -497,7 +500,7 @@ export function FocusedProofPanel({
             </div>
             <div>
               <dt>Export</dt>
-              <dd>{row.exportable ? row.exportKind : "not exportable"}</dd>
+              <dd>{exportLabel(row)}</dd>
             </div>
             <div>
               <dt>Checked</dt>
