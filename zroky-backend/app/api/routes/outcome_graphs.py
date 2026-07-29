@@ -192,7 +192,6 @@ def _evidence_summary(row: FinalOutcomeGraph) -> dict[str, Any]:
 @limiter.limit("120/minute")
 def get_attestation_public_key(
     request: Request,
-    context: TenantContext = Depends(require_tenant_context),
 ) -> AttestationPublicKeyResponse:
     try:
         return AttestationPublicKeyResponse(**_public_key_payload())
