@@ -14,9 +14,17 @@ from sqlalchemy.pool import StaticPool
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import AuditLog, FinalDomainOutboxJob, FinalEvidenceBundle
+from app.db.models import (
+    AuditLog,
+    FinalDomainOutboxJob,
+    FinalEvidenceBundle,
+    FinalOutcomeGraph,
+    FinalOutcomeIncident,
+    FinalRecoveryPlan,
+)
 from app.db.session import get_db_session
 from app.main import app
+from app.services.final_outcome_graphs import recheck_due_outcome_graphs
 
 
 @pytest.fixture()
@@ -117,19 +125,35 @@ def test_final_intent_read_rejects_cross_tenant_project_context(client: TestClie
 
 def test_recovery_dispatch_claim_rejects_cross_tenant_worker_context(client: TestClient) -> None:
     executor_ref = "customer-recovery-executor://ops/tenant-negative"
+    plan_json = json.dumps(
+        {"schema_version": "zroky.recovery_plan.v1", "plan": {"step": "tenant_negative"}},
+        sort_keys=True,
+    )
     with client._session_factory() as session:
-        session.add(
-            FinalDomainOutboxJob(
-                id="outbox_tenant_negative_alpha",
-                project_id="proj_alpha",
-                environment="production",
-                job_type="execute_recovery",
-                aggregate_type="recovery_plan",
-                aggregate_id="recovery_plan_alpha",
-                idempotency_key="tenant-negative-recovery-alpha",
-                status="pending",
-                payload_json=json.dumps({"executor_ref": executor_ref}),
-            )
+        session.add_all(
+            [
+                FinalRecoveryPlan(
+                    id="recovery_plan_alpha",
+                    project_id="proj_alpha",
+                    environment="production",
+                    incident_id="incident_alpha",
+                    plan_digest=hashlib.sha256(plan_json.encode("utf-8")).hexdigest(),
+                    plan_json=plan_json,
+                    approval_status="approved",
+                    execution_status="dispatched",
+                ),
+                FinalDomainOutboxJob(
+                    id="outbox_tenant_negative_alpha",
+                    project_id="proj_alpha",
+                    environment="production",
+                    job_type="execute_recovery",
+                    aggregate_type="recovery_plan",
+                    aggregate_id="recovery_plan_alpha",
+                    idempotency_key="tenant-negative-recovery-alpha",
+                    status="pending",
+                    payload_json=json.dumps({"executor_ref": executor_ref}),
+                ),
+            ]
         )
         session.commit()
 
@@ -1319,13 +1343,92 @@ def test_incident_recovery_execution_queues_customer_executor(client: TestClient
     assert dispatch["nonce"]
     assert dispatch["fencing_token"].startswith(f"{body['outbox_job_id']}:1")
     assert dispatch["signed_payload"]["nonce"] == dispatch["nonce"]
+    assert dispatch["recovery_plan"]["plan"]["step"] == "retry_refund"
     assert dispatch["signature"]
+
+    bad_heartbeat = client.post(
+        "/v1/recovery/dispatch/heartbeat",
+        json={
+            "outbox_job_id": body["outbox_job_id"],
+            "fencing_token": f"{body['outbox_job_id']}:999",
+            "lease_seconds": 300,
+        },
+    )
+    assert bad_heartbeat.status_code == 409
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        row = session.get(FinalDomainOutboxJob, body["outbox_job_id"])
+        assert row.status == "claimed"
+
+    heartbeat = client.post(
+        "/v1/recovery/dispatch/heartbeat",
+        json={
+            "outbox_job_id": body["outbox_job_id"],
+            "fencing_token": dispatch["fencing_token"],
+            "lease_seconds": 300,
+        },
+    )
+    assert heartbeat.status_code == 200, heartbeat.text
+    assert heartbeat.json()["status"] == "running"
 
     replay_claim = client.post(
         "/v1/recovery/dispatch/claim",
         json={"executor_ref": "customer-recovery-executor://ops/refund", "lease_seconds": 300},
     )
     assert replay_claim.status_code == 404
+
+    class ExpiredLeaseDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz or UTC) + timedelta(hours=1)
+
+    import app.api.routes.recovery as recovery_routes
+
+    monkeypatch.setattr(recovery_routes, "datetime", ExpiredLeaseDateTime)
+    reclaimed = client.post(
+        "/v1/recovery/dispatch/claim",
+        json={"executor_ref": "customer-recovery-executor://ops/refund", "lease_seconds": 300},
+    )
+    assert reclaimed.status_code == 200, reclaimed.text
+    new_dispatch = reclaimed.json()
+    assert new_dispatch["fencing_token"].startswith(f"{body['outbox_job_id']}:2")
+
+    zombie_complete = client.post(
+        "/v1/recovery/dispatch/complete",
+        json={
+            "outbox_job_id": body["outbox_job_id"],
+            "fencing_token": dispatch["fencing_token"],
+            "overall": "succeeded",
+            "step_results": [{"step_key": "retry_refund", "status": "succeeded"}],
+        },
+    )
+    assert zombie_complete.status_code == 409
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        row = session.get(FinalDomainOutboxJob, body["outbox_job_id"])
+        plan = session.get(FinalRecoveryPlan, body["recovery_plan_id"])
+        assert row.status == "claimed"
+        assert plan.execution_status == "dispatched"
+
+    completed = client.post(
+        "/v1/recovery/dispatch/complete",
+        json={
+            "outbox_job_id": body["outbox_job_id"],
+            "fencing_token": new_dispatch["fencing_token"],
+            "overall": "succeeded",
+            "step_results": [{"step_key": "retry_refund", "status": "succeeded", "detail": {"provider_ref": "rf_recover"}}],
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["job_status"] == "completed"
+    assert completed.json()["execution_status"] == "succeeded"
+    assert completed.json()["incident_status"] == "recovering"
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        graph = session.get(FinalOutcomeGraph, incident["outcome_graph_id"])
+        still_recovering = session.get(FinalOutcomeIncident, incident["id"])
+        assert graph.classification == "pending"
+        assert graph.next_check_at is not None
+        assert still_recovering.status == "recovering"
+        actions = [row.action for row in session.query(AuditLog).filter_by(tenant_id="proj_test", diagnosis_id=incident["id"]).all()]
+        assert "recovery_dispatch_completed" in actions
 
     client.post(
         "/v1/observations",
@@ -1340,25 +1443,18 @@ def test_incident_recovery_execution_queues_customer_executor(client: TestClient
         },
     )
 
-    class ExpiredLeaseDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime.now(tz or UTC) + timedelta(hours=1)
-
-    import app.api.routes.recovery as recovery_routes
-
-    monkeypatch.setattr(recovery_routes, "datetime", ExpiredLeaseDateTime)
-    reconstructed = client.post(
-        "/v1/recovery/dispatch/reconstruct-unknown",
-        json={"outbox_job_id": body["outbox_job_id"]},
-    )
-    assert reconstructed.status_code == 200, reconstructed.text
-    reconstruction = reconstructed.json()
-    assert reconstruction["outbox_job_id"] == body["outbox_job_id"]
-    assert reconstruction["recovery_plan_id"] == body["recovery_plan_id"]
-    assert reconstruction["reconstruction_status"] == "verified"
-    assert reconstruction["recovery_execution_status"] == "succeeded"
-    assert reconstruction["incident_status"] == "resolved"
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        result = recheck_due_outcome_graphs(
+            session,
+            now=datetime.now(UTC) + timedelta(hours=2),
+            verification_window_seconds=300,
+        )
+        graph = session.get(FinalOutcomeGraph, incident["outcome_graph_id"])
+        resolved = session.get(FinalOutcomeIncident, incident["id"])
+        assert result["updated"] == 1
+        assert graph.classification == "verified"
+        assert resolved.status == "resolved"
+        assert resolved.resolved_at is not None
 
 
 def test_recovery_plan_compiler_excludes_already_satisfied_effects(client: TestClient) -> None:

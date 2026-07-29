@@ -5,7 +5,7 @@ import hmac
 import json
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -26,8 +26,9 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.domain.outcome_graph import build_outcome_graph_snapshot
-from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state
 from app.services.action_kernel import canonical_json, sha256_digest
+from app.services.audit_logs import AUDIT_ACTION_RECOVERY_DISPATCH_COMPLETED, add_audit_log
+from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state
 
 
 router = APIRouter(prefix="/v1/recovery")
@@ -75,8 +76,42 @@ class RecoveryDispatchClaimResponse(BaseModel):
     nonce: str
     fencing_token: str
     lease_expires_at: datetime
+    recovery_plan: dict[str, Any]
     signed_payload: dict[str, Any]
     signature: str
+
+
+class RecoveryDispatchHeartbeatRequest(BaseModel):
+    outbox_job_id: str
+    fencing_token: str
+    lease_seconds: int = Field(default=300, ge=30, le=3600)
+
+
+class RecoveryDispatchHeartbeatResponse(BaseModel):
+    outbox_job_id: str
+    status: str
+    lease_expires_at: datetime
+
+
+class RecoveryStepResult(BaseModel):
+    step_key: str
+    status: Literal["succeeded", "failed", "skipped"]
+    detail: dict[str, Any] | str | None = None
+
+
+class RecoveryDispatchCompleteRequest(BaseModel):
+    outbox_job_id: str
+    fencing_token: str
+    overall: Literal["succeeded", "failed", "ambiguous"]
+    step_results: list[RecoveryStepResult] = Field(default_factory=list)
+
+
+class RecoveryDispatchCompleteResponse(BaseModel):
+    outbox_job_id: str
+    recovery_plan_id: str
+    job_status: str
+    execution_status: str
+    incident_status: str | None = None
 
 
 class RecoveryResultReconstructRequest(BaseModel):
@@ -166,6 +201,53 @@ def _dispatch_secret() -> str:
 
 def _sign_dispatch(payload: dict[str, Any]) -> str:
     return hmac.new(_dispatch_secret().encode("utf-8"), canonical_json(payload).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _load_recovery_dispatch(
+    db: Session,
+    *,
+    project_id: str,
+    outbox_job_id: str,
+    fencing_token: str,
+    now: datetime,
+) -> tuple[FinalDomainOutboxJob, FinalRecoveryPlan]:
+    job = db.execute(
+        select(FinalDomainOutboxJob)
+        .where(
+            FinalDomainOutboxJob.id == outbox_job_id,
+            FinalDomainOutboxJob.project_id == project_id,
+            FinalDomainOutboxJob.job_type == "execute_recovery",
+            FinalDomainOutboxJob.aggregate_type == "recovery_plan",
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Recovery dispatch not found.")
+    if job.status not in {"claimed", "running"}:
+        raise HTTPException(status_code=409, detail="Recovery dispatch is not active.")
+    expected_token = f"{job.id}:{job.attempt_count}"
+    if not hmac.compare_digest(fencing_token, expected_token):
+        raise HTTPException(status_code=409, detail="Stale recovery dispatch fencing token.")
+    lease_expires_at = _as_utc(job.lease_expires_at)
+    if lease_expires_at is None or lease_expires_at <= now:
+        raise HTTPException(status_code=409, detail="Recovery dispatch lease expired.")
+    plan = db.execute(
+        select(FinalRecoveryPlan).where(
+            FinalRecoveryPlan.id == job.aggregate_id,
+            FinalRecoveryPlan.project_id == project_id,
+        )
+    ).scalar_one_or_none()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Recovery plan not found.")
+    return job, plan
 
 
 def _observation_payloads(db: Session, *, project_id: str, environment: str, intent_id: str) -> list[dict[str, Any]]:
@@ -318,6 +400,7 @@ def claim_recovery_dispatch(
                 or_(
                     FinalDomainOutboxJob.status == "pending",
                     (FinalDomainOutboxJob.status == "claimed") & (FinalDomainOutboxJob.lease_expires_at <= now),
+                    (FinalDomainOutboxJob.status == "running") & (FinalDomainOutboxJob.lease_expires_at <= now),
                 ),
             )
             .order_by(FinalDomainOutboxJob.available_at.asc(), FinalDomainOutboxJob.created_at.asc())
@@ -333,6 +416,14 @@ def claim_recovery_dispatch(
             break
     if row is None:
         raise HTTPException(status_code=404, detail="No recovery dispatch is available for this executor.")
+    plan = db.execute(
+        select(FinalRecoveryPlan).where(
+            FinalRecoveryPlan.id == row.aggregate_id,
+            FinalRecoveryPlan.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Recovery plan not found.")
 
     row.status = "claimed"
     row.claimed_by = executor_ref[:128]
@@ -350,6 +441,7 @@ def claim_recovery_dispatch(
         "nonce": nonce,
         "fencing_token": fencing_token,
         "lease_expires_at": row.lease_expires_at.isoformat(),
+        "plan_digest": plan.plan_digest,
     }
     signature = _sign_dispatch(signed_payload)
     row.result_json = canonical_json({"dispatch": signed_payload, "signature": signature})
@@ -363,8 +455,121 @@ def claim_recovery_dispatch(
         nonce=nonce,
         fencing_token=fencing_token,
         lease_expires_at=row.lease_expires_at,
+        recovery_plan=json.loads(plan.plan_json),
         signed_payload=signed_payload,
         signature=signature,
+    )
+
+
+@router.post("/dispatch/heartbeat", response_model=RecoveryDispatchHeartbeatResponse)
+@limiter.limit("120/minute")
+def heartbeat_recovery_dispatch(
+    request: Request,
+    body: RecoveryDispatchHeartbeatRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RecoveryDispatchHeartbeatResponse:
+    now = datetime.now(UTC)
+    job, _plan = _load_recovery_dispatch(
+        db,
+        project_id=context.tenant_id,
+        outbox_job_id=body.outbox_job_id,
+        fencing_token=body.fencing_token,
+        now=now,
+    )
+    job.status = "running"
+    job.lease_expires_at = now + timedelta(seconds=body.lease_seconds)
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return RecoveryDispatchHeartbeatResponse(
+        outbox_job_id=job.id,
+        status=job.status,
+        lease_expires_at=job.lease_expires_at,
+    )
+
+
+@router.post("/dispatch/complete", response_model=RecoveryDispatchCompleteResponse)
+@limiter.limit("120/minute")
+def complete_recovery_dispatch(
+    request: Request,
+    body: RecoveryDispatchCompleteRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RecoveryDispatchCompleteResponse:
+    now = datetime.now(UTC)
+    job, plan = _load_recovery_dispatch(
+        db,
+        project_id=context.tenant_id,
+        outbox_job_id=body.outbox_job_id,
+        fencing_token=body.fencing_token,
+        now=now,
+    )
+    incident = db.execute(
+        select(FinalOutcomeIncident).where(
+            FinalOutcomeIncident.id == plan.incident_id,
+            FinalOutcomeIncident.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found.")
+
+    completion = {
+        "completed_at": now.isoformat(),
+        "overall": body.overall,
+        "step_results": [item.model_dump(mode="json") for item in body.step_results],
+    }
+    result = json.loads(job.result_json or "{}")
+    result["completion"] = completion
+    job.result_json = canonical_json(result)
+    job.error_message = None
+    job.completed_at = now
+    job.status = "failed" if body.overall == "failed" else "completed"
+    plan.execution_status = body.overall
+
+    if body.overall == "succeeded":
+        graph = db.execute(
+            select(FinalOutcomeGraph)
+            .where(
+                FinalOutcomeGraph.id == incident.outcome_graph_id,
+                FinalOutcomeGraph.project_id == context.tenant_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if graph is None:
+            raise HTTPException(status_code=404, detail="Outcome graph not found.")
+        graph.classification = "pending"
+        graph.reason_code = None
+        graph.verification_status = "pending"
+        graph.next_check_at = now
+        graph.last_checked_at = now
+        graph.verified_at = None
+        db.add(graph)
+
+    add_audit_log(
+        db,
+        tenant_id=context.tenant_id,
+        diagnosis_id=incident.id,
+        action=AUDIT_ACTION_RECOVERY_DISPATCH_COMPLETED,
+        actor_subject=job.claimed_by,
+        metadata={
+            "incident_id": incident.id,
+            "recovery_plan_id": plan.id,
+            "outbox_job_id": job.id,
+            "overall": body.overall,
+        },
+    )
+    db.add_all([job, plan, incident])
+    db.commit()
+    db.refresh(job)
+    db.refresh(plan)
+    db.refresh(incident)
+    return RecoveryDispatchCompleteResponse(
+        outbox_job_id=job.id,
+        recovery_plan_id=plan.id,
+        job_status=job.status,
+        execution_status=plan.execution_status,
+        incident_status=incident.status,
     )
 
 
@@ -389,9 +594,6 @@ def reconstruct_unknown_recovery_result(
     ).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Recovery dispatch not found.")
-    if job.status not in {"claimed", "running"} or job.lease_expires_at is None or job.lease_expires_at > now:
-        raise HTTPException(status_code=409, detail="Recovery dispatch is not result-unknown yet.")
-
     plan = db.execute(
         select(FinalRecoveryPlan).where(
             FinalRecoveryPlan.id == job.aggregate_id,
@@ -400,6 +602,13 @@ def reconstruct_unknown_recovery_result(
     ).scalar_one_or_none()
     if plan is None:
         raise HTTPException(status_code=404, detail="Recovery plan not found.")
+    lease_expires_at = _as_utc(job.lease_expires_at)
+    if lease_expires_at is None or lease_expires_at > now:
+        raise HTTPException(status_code=409, detail="Recovery dispatch is not result-unknown yet.")
+    if job.status not in {"claimed", "running"} and not (
+        job.status == "completed" and plan.execution_status == "ambiguous"
+    ):
+        raise HTTPException(status_code=409, detail="Recovery dispatch is not result-unknown yet.")
     incident = db.execute(
         select(FinalOutcomeIncident).where(
             FinalOutcomeIncident.id == plan.incident_id,

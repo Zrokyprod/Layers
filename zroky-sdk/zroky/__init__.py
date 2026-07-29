@@ -75,12 +75,9 @@ from zroky._internal.timeout_manager import TimeoutManager
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401
 from zroky._protect import protect  # noqa: F401
-from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
-from zroky._verified_action import await_action_proof, verified_action  # noqa: F401
-from zroky.intent import pre_execution_guard  # noqa: F401
 from zroky._runner import (  # noqa: F401
-    EnvCredentialResolver,
     RUNNER_CAPABILITY_VERSION,
+    EnvCredentialResolver,
     ProtectedActionRunner,
     RunnerExecutionContext,
     ZrokyRunnerError,
@@ -89,6 +86,7 @@ from zroky._runner import (  # noqa: F401
     generic_rest_adapter,
     stripe_refund_adapter,
 )
+from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Backward-compat aliases for mutable test-fixture state
@@ -104,7 +102,9 @@ from zroky._telemetry import (  # noqa: F401
     _payload_guard_log_order,
     _payload_guard_logged_call_ids,
 )
+from zroky._verified_action import await_action_proof, verified_action  # noqa: F401
 from zroky._verify import verify_outcome  # noqa: F401
+from zroky.intent import pre_execution_guard  # noqa: F401
 
 # Re-export preflight public API from preflight.py
 from zroky.preflight import (  # noqa: F401
@@ -117,6 +117,7 @@ from zroky.preflight import (  # noqa: F401
     print_validation,
     validate,
 )
+from zroky.recovery_runner import RecoveryRunner, recovery_step_idempotency_key  # noqa: F401
 
 _ASYNC_AVAILABLE = True
 

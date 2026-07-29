@@ -292,7 +292,7 @@ class FinalDomainOutboxJob(Base):
             name="ck_final_domain_outbox_jobs_type",
         ),
         CheckConstraint(
-            "status IN ('pending','claimed','running','succeeded','retrying','dead')",
+            "status IN ('pending','claimed','running','completed','failed','succeeded','retrying','dead')",
             name="ck_final_domain_outbox_jobs_status",
         ),
         Index("ix_final_outbox_scope_status", "project_id", "environment", "status", "available_at"),

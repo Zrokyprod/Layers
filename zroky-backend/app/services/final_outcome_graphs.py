@@ -8,8 +8,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalWorkflowIntent
+from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalWorkflowIntent
 from app.domain.outcome_graph import build_outcome_graph_snapshot, classify_outcome_graph_snapshot
+from app.services.audit_logs import AUDIT_ACTION_RESOLVED, add_audit_log
 
 
 FINAL_OUTCOME_CLASSIFICATIONS = {
@@ -76,6 +77,7 @@ def recheck_due_outcome_graphs(
     )
     updated = 0
     for row in rows:
+        previous_classification = row.classification
         graph = _loads(row.graph_json)
         recheck_count = int(graph.get("recheck_count") or 0) + 1
         if recheck_count > MAX_RECHECKS:
@@ -107,10 +109,42 @@ def recheck_due_outcome_graphs(
             verification_window_seconds=verification_window_seconds,
         )
         db.add(row)
+        if previous_classification != "verified" and row.classification == "verified":
+            _resolve_recovering_incidents(db, row, now=current)
         updated += 1
     if updated:
         db.commit()
     return {"checked": len(rows), "updated": updated}
+
+
+def _resolve_recovering_incidents(db: Session, row: FinalOutcomeGraph, *, now: datetime) -> None:
+    incidents = list(
+        db.execute(
+            select(FinalOutcomeIncident).where(
+                FinalOutcomeIncident.project_id == row.project_id,
+                FinalOutcomeIncident.environment == row.environment,
+                FinalOutcomeIncident.outcome_graph_id == row.id,
+                FinalOutcomeIncident.status == "recovering",
+            )
+        ).scalars()
+    )
+    for incident in incidents:
+        incident.status = "resolved"
+        incident.resolved_at = now
+        add_audit_log(
+            db,
+            tenant_id=row.project_id,
+            diagnosis_id=incident.id,
+            action=AUDIT_ACTION_RESOLVED,
+            actor_subject="system:outcome-graph-sweep",
+            metadata={
+                "incident_id": incident.id,
+                "outcome_graph_id": row.id,
+                "classification": row.classification,
+                "resolved_by": "outcome_graph_recheck",
+            },
+        )
+        db.add(incident)
 
 
 def rebuild_outcome_graph_snapshot(db: Session, row: FinalOutcomeGraph) -> dict[str, Any] | None:
