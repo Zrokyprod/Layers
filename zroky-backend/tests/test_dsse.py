@@ -3,7 +3,9 @@ from __future__ import annotations
 import base64
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.main import app
 from app.services.action_receipts import action_receipt_public_key_payload
 from app.services.dsse import pae, sign_envelope, verify_envelope
 
@@ -29,3 +31,12 @@ def test_dsse_rejects_wrong_public_key() -> None:
 
     with pytest.raises(ValueError, match="TAMPERED/INVALID"):
         verify_envelope(envelope, wrong_key)
+
+
+def test_attestation_public_key_endpoint_is_public() -> None:
+    with TestClient(app) as client:
+        response = client.get("/v1/attestations/public-key")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["algorithm"] == "ed25519"
+    assert response.json()["public_key"]
