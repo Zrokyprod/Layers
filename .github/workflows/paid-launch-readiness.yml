@@ -191,7 +191,7 @@ jobs:
             --dashboard-base-url "${{ inputs.production_dashboard_url }}"
 
   release-decision:
-    name: Release decision
+    name: Paid Launch Readiness
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
