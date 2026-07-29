@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
 import hashlib
 import json
+from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.api.routes.runs import AgentRunDeclareRequest, declare_run
 from app.core.limiter import limiter
-from app.db.models import FinalConnectorCapabilityDraft
+from app.db.models import FinalAgentRun, FinalAssurancePack, FinalConnectorCapabilityDraft, FinalWorkflowIntent
 from app.db.session import get_db_session
 
 
@@ -138,33 +139,230 @@ def ingest_otlp_traces(
     if not isinstance(resource_spans, list):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="OTLP JSON payload must include resourceSpans.")
 
-    created: list[str] = []
+    traces = _group_otlp_spans(resource_spans)
+    run_ids: list[str] = []
+    intents_declared = 0
+    spans_observed = 0
+    for trace_id, spans in traces.items():
+        spans_observed += len(spans)
+        run = _upsert_otlp_run(db, context=context, trace_id=trace_id, spans=spans)
+        run_ids.append(run.id)
+        intent_ids = []
+        for item in spans:
+            tool_name = _tool_name(item["attrs"])
+            if not tool_name:
+                continue
+            pack = _pack_for_tool(db, project_id=context.tenant_id, environment=run.environment, tool_name=tool_name)
+            if pack is None:
+                continue
+            intent, created = _create_otlp_intent(
+                db,
+                context=context,
+                environment=run.environment,
+                agent_ref=run.agent_ref,
+                trace_id=trace_id,
+                span=item["span"],
+                attrs=item["attrs"],
+            )
+            intent_ids.append(intent.id)
+            if created:
+                intents_declared += 1
+        if len(intent_ids) == 1 and run.intent_id is None:
+            run.intent_id = intent_ids[0]
+            db.add(run)
+    db.commit()
+    return {
+        "accepted": True,
+        "normalized_type": "run",
+        "runs": len(run_ids),
+        "intents_declared": intents_declared,
+        "spans_observed": spans_observed,
+        "count": len(run_ids),
+        "ids": run_ids,
+    }
+
+
+def _group_otlp_spans(resource_spans: list[Any]) -> dict[str, list[dict[str, Any]]]:
+    traces: dict[str, list[dict[str, Any]]] = {}
     for resource_span in resource_spans:
-        resource_attrs = _attrs((resource_span.get("resource") or {}).get("attributes") if isinstance(resource_span, dict) else None)
-        for scope_span in resource_span.get("scopeSpans", []) if isinstance(resource_span, dict) else []:
-            for span in scope_span.get("spans", []) if isinstance(scope_span, dict) else []:
+        if not isinstance(resource_span, dict):
+            continue
+        resource_attrs = _attrs((resource_span.get("resource") or {}).get("attributes"))
+        for scope_span in resource_span.get("scopeSpans", []):
+            if not isinstance(scope_span, dict):
+                continue
+            for span in scope_span.get("spans", []):
+                if not isinstance(span, dict):
+                    continue
                 attrs = {**resource_attrs, **_attrs(span.get("attributes"))}
                 trace_id = str(span.get("traceId") or attrs.get("trace_id") or "").strip()
-                span_id = str(span.get("spanId") or "").strip()
-                if not trace_id:
-                    continue
-                run = declare_run(
-                    request,
-                    AgentRunDeclareRequest(
-                        environment=str(attrs.get("deployment.environment") or "production"),
-                        external_run_id=trace_id,
-                        workflow_key=str(attrs.get("zroky.workflow.name") or attrs.get("zroky.workflow.id") or "otel-trace"),
-                        agent_ref=str(attrs.get("zroky.agent.name") or attrs.get("service.name") or "otel-agent"),
-                        status="running",
-                        run={"trace_id": trace_id, "span_id": span_id, "otel": span},
-                    ),
-                    f"otlp:{trace_id}:{span_id}",
-                    context,
-                    db,
-                )
-                created.append(run.id)
+                if trace_id:
+                    traces.setdefault(trace_id, []).append({"span": span, "attrs": attrs})
+    return traces
 
-    return {"accepted": True, "normalized_type": "run", "count": len(created), "ids": created}
+
+def _upsert_otlp_run(
+    db: Session,
+    *,
+    context: TenantContext,
+    trace_id: str,
+    spans: list[dict[str, Any]],
+) -> FinalAgentRun:
+    root = next((item for item in spans if not str(item["span"].get("parentSpanId") or "").strip()), None)
+    source = root or spans[0]
+    attrs = source["attrs"]
+    span = source["span"]
+    environment = _first_text(attrs, "zroky.environment", "deployment.environment.name", "deployment.environment") or "production"
+    run_payload = {
+        "trace_id": trace_id,
+        "root_span_id": root["span"].get("spanId") if root else None,
+        "spans": [item["span"] for item in spans],
+    }
+    row = db.execute(
+        select(FinalAgentRun).where(
+            FinalAgentRun.project_id == context.tenant_id,
+            FinalAgentRun.idempotency_key == f"otlp:{trace_id}",
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = FinalAgentRun(
+            project_id=context.tenant_id,
+            environment=environment,
+            idempotency_key=f"otlp:{trace_id}",
+            external_run_id=trace_id,
+            workflow_key=_workflow_key(attrs, span if root else None),
+            agent_ref=_agent_ref(attrs),
+        )
+    row.environment = environment
+    row.status = _run_status(root["span"] if root else None)
+    row.run_json = json.dumps(run_payload, sort_keys=True, separators=(",", ":"))
+    row.run_digest = _digest_json(run_payload)
+    row.started_at = _otlp_time(span.get("startTimeUnixNano")) or row.started_at
+    row.finished_at = _otlp_time(span.get("endTimeUnixNano")) if root else None
+    if root:
+        row.workflow_key = _workflow_key(attrs, span)
+        row.agent_ref = _agent_ref(attrs)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _create_otlp_intent(
+    db: Session,
+    *,
+    context: TenantContext,
+    environment: str,
+    agent_ref: str | None,
+    trace_id: str,
+    span: dict[str, Any],
+    attrs: dict[str, Any],
+) -> tuple[FinalWorkflowIntent, bool]:
+    span_id = str(span.get("spanId") or "").strip()
+    key = f"otlp:{trace_id}:{span_id}"
+    intent = _tool_arguments(attrs.get("gen_ai.tool.call.arguments"))
+    digest = _digest_json(intent)
+    existing = db.execute(
+        select(FinalWorkflowIntent).where(
+            FinalWorkflowIntent.project_id == context.tenant_id,
+            FinalWorkflowIntent.idempotency_key == key,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.intent_digest != digest:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="OTLP tool-call intent conflicts with an existing span.")
+        return existing, False
+    row = FinalWorkflowIntent(
+        project_id=context.tenant_id,
+        environment=environment,
+        idempotency_key=key,
+        agent_ref=agent_ref,
+        intent_digest=digest,
+        intent_json=json.dumps(intent, sort_keys=True, separators=(",", ":")),
+    )
+    db.add(row)
+    db.flush()
+    return row, True
+
+
+def _pack_for_tool(
+    db: Session,
+    *,
+    project_id: str,
+    environment: str,
+    tool_name: str,
+) -> FinalAssurancePack | None:
+    rows = db.execute(
+        select(FinalAssurancePack).where(
+            FinalAssurancePack.project_id == project_id,
+            FinalAssurancePack.environment == environment,
+            FinalAssurancePack.status == "active",
+        )
+    ).scalars()
+    for row in rows:
+        try:
+            pack = json.loads(row.pack_json)
+        except Exception:
+            continue
+        if tool_name in (pack.get("tool_bindings") or []):
+            return row
+    return None
+
+
+def _tool_name(attrs: dict[str, Any]) -> str | None:
+    name = str(attrs.get("gen_ai.tool.name") or "").strip()
+    if name:
+        return name
+    if str(attrs.get("gen_ai.operation.name") or "").strip() == "execute_tool":
+        return str(attrs.get("gen_ai.tool.name") or "").strip() or None
+    return None
+
+
+def _tool_arguments(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if value in (None, ""):
+        return {}
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {"raw": value}
+        return parsed if isinstance(parsed, dict) else {"raw": value}
+    return {"raw": value}
+
+
+def _workflow_key(attrs: dict[str, Any], root_span: dict[str, Any] | None) -> str:
+    return _first_text(attrs, "zroky.workflow.name") or str((root_span or {}).get("name") or "otel-trace").strip() or "otel-trace"
+
+
+def _agent_ref(attrs: dict[str, Any]) -> str:
+    return _first_text(attrs, "zroky.agent.name", "gen_ai.agent.name", "gen_ai.agent.id", "service.name") or "otel-agent"
+
+
+def _run_status(root_span: dict[str, Any] | None) -> str:
+    if root_span is None:
+        return "running"
+    code = (root_span.get("status") or {}).get("code") if isinstance(root_span.get("status"), dict) else None
+    if code in {"STATUS_CODE_ERROR", 2, "2"}:
+        return "failed"
+    return "succeeded" if root_span.get("endTimeUnixNano") else "running"
+
+
+def _first_text(attrs: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = attrs.get(key)
+        if value not in (None, "", [], {}):
+            return str(value).strip().lower() if key.startswith("deployment.environment") or key == "zroky.environment" else str(value).strip()
+    return None
+
+
+def _otlp_time(value: Any) -> datetime | None:
+    if value in (None, ""):
+        return None
+    try:
+        return datetime.fromtimestamp(int(value) / 1_000_000_000, timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 @router.post("/mcp/tools/import", status_code=status.HTTP_201_CREATED)

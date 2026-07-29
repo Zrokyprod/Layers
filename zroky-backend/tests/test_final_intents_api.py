@@ -17,10 +17,12 @@ from app.db.base import Base
 from app.db.models import (
     AuditLog,
     FinalDomainOutboxJob,
+    FinalAgentRun,
     FinalEvidenceBundle,
     FinalOutcomeGraph,
     FinalOutcomeIncident,
     FinalRecoveryPlan,
+    FinalWorkflowIntent,
 )
 from app.db.session import get_db_session
 from app.main import app
@@ -655,6 +657,8 @@ def test_otlp_json_trace_intake_normalizes_spans_to_runs(client: TestClient) -> 
     body = response.json()
     assert body["accepted"] is True
     assert body["count"] == 1
+    assert body["runs"] == 1
+    assert body["spans_observed"] == 1
 
     fetched = client.get(f"/v1/runs/{body['ids'][0]}")
     assert fetched.status_code == 200
@@ -662,6 +666,210 @@ def test_otlp_json_trace_intake_normalizes_spans_to_runs(client: TestClient) -> 
     assert run["environment"] == "staging"
     assert run["external_run_id"] == "trace-otlp-1"
     assert run["workflow_key"] == "support-flow"
+
+
+def _genai_otlp_payload(*, trace_id: str = "trace-genai-1", zroky_agent_name: str | None = None) -> dict:
+    root_attrs = [
+        {"key": "gen_ai.agent.name", "value": {"stringValue": "langchain-agent"}},
+    ]
+    if zroky_agent_name:
+        root_attrs.append({"key": "zroky.agent.name", "value": {"stringValue": zroky_agent_name}})
+    return {
+        "resourceSpans": [
+            {
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "agent-service"}},
+                        {"key": "deployment.environment.name", "value": {"stringValue": "staging"}},
+                    ],
+                },
+                "scopeSpans": [
+                    {
+                        "spans": [
+                            {
+                                "traceId": trace_id,
+                                "spanId": "span-root",
+                                "name": "langchain.agent",
+                                "parentSpanId": "",
+                                "startTimeUnixNano": "1700000000000000000",
+                                "endTimeUnixNano": "1700000001000000000",
+                                "status": {"code": "STATUS_CODE_OK"},
+                                "attributes": root_attrs,
+                            },
+                            {
+                                "traceId": trace_id,
+                                "spanId": "span-tool-bound",
+                                "parentSpanId": "span-root",
+                                "name": "stripe.refunds.create",
+                                "attributes": [
+                                    {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
+                                    {"key": "gen_ai.tool.name", "value": {"stringValue": "stripe.refunds.create"}},
+                                    {
+                                        "key": "gen_ai.tool.call.arguments",
+                                        "value": {
+                                            "stringValue": json.dumps(
+                                                {
+                                                    "charge_id": "ch_test_123",
+                                                    "amount_minor": 450000,
+                                                    "currency": "inr",
+                                                }
+                                            )
+                                        },
+                                    },
+                                ],
+                            },
+                            {
+                                "traceId": trace_id,
+                                "spanId": "span-tool-unbound",
+                                "parentSpanId": "span-root",
+                                "name": "email.send",
+                                "attributes": [
+                                    {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
+                                    {"key": "gen_ai.tool.name", "value": {"stringValue": "email.send"}},
+                                    {"key": "gen_ai.tool.call.arguments", "value": {"stringValue": "{\"to\":\"customer@example.com\"}"}},
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    }
+
+
+def test_otlp_genai_trace_declares_one_run_and_bound_tool_intent_idempotently(client: TestClient) -> None:
+    client.tenant_role["value"] = "admin"
+    pack_response = client.post(
+        "/v1/assurance-packs",
+        json={
+            "environment": "staging",
+            "pack": {
+                "schema_version": "zroky.workflow_assurance_pack.v1",
+                "workflow_key": "stripe-refund",
+                "version": "1.0.0",
+                "tool_bindings": ["stripe.refunds.create"],
+                "object_types": [{"key": "refund", "schema": {"type": "object"}}],
+                "effects": [{"key": "refund_posted", "object_type": "refund", "predicate": "refund.status == 'posted'"}],
+                "source_bindings": [
+                    {
+                        "key": "stripe_refunds",
+                        "connector_capability": "stripe.refund.read",
+                        "object_type": "refund",
+                        "freshness_seconds": 300,
+                    }
+                ],
+            },
+        },
+    )
+    assert pack_response.status_code == 201, pack_response.text
+    pack_id = pack_response.json()["id"]
+    payload = _genai_otlp_payload()
+
+    first = client.post("/v1/events/otlp/v1/traces", json=payload)
+    assert first.status_code == 202, first.text
+    assert first.json()["runs"] == 1
+    assert first.json()["intents_declared"] == 1
+    assert first.json()["spans_observed"] == 3
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        runs = session.query(FinalAgentRun).filter_by(project_id="proj_test").all()
+        intents = session.query(FinalWorkflowIntent).filter_by(project_id="proj_test").all()
+        assert len(runs) == 1
+        assert len(intents) == 1
+        assert runs[0].idempotency_key == "otlp:trace-genai-1"
+        assert runs[0].external_run_id == "trace-genai-1"
+        assert runs[0].agent_ref == "langchain-agent"
+        assert runs[0].workflow_key == "langchain.agent"
+        assert runs[0].environment == "staging"
+        assert runs[0].status == "succeeded"
+        assert runs[0].intent_id == intents[0].id
+        assert intents[0].idempotency_key == "otlp:trace-genai-1:span-tool-bound"
+        assert json.loads(intents[0].intent_json) == {"amount_minor": 450000, "charge_id": "ch_test_123", "currency": "inr"}
+        run_id = runs[0].id
+        intent_id = intents[0].id
+
+    observation = client.post(
+        "/v1/observations",
+        json={
+            "environment": "staging",
+            "run_id": run_id,
+            "intent_id": intent_id,
+            "source_kind": "stripe",
+            "observed_object_ref": "refund:rf_otlp",
+            "observed_state": {"status": "posted", "amount_minor": 450000, "charge_id": "ch_test_123", "currency": "inr"},
+            "provenance": {"source_binding": "stripe_refunds"},
+            "observed_at": "2026-07-21T10:10:00Z",
+            "read_at": "2026-07-21T10:10:05Z",
+        },
+    )
+    assert observation.status_code == 201, observation.text
+    graph = client.post(f"/v1/runs/{run_id}/outcome-graph", json={"assurance_pack_id": pack_id})
+    assert graph.status_code == 201, graph.text
+    assert graph.json()["classification"] == "verified"
+
+    retry = client.post("/v1/events/otlp/v1/traces", json=payload)
+    assert retry.status_code == 202, retry.text
+    assert retry.json()["intents_declared"] == 0
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        assert session.query(FinalAgentRun).filter_by(project_id="proj_test").count() == 1
+        assert session.query(FinalWorkflowIntent).filter_by(project_id="proj_test").count() == 1
+
+
+def test_otlp_zroky_agent_name_overrides_genai_agent_name(client: TestClient) -> None:
+    payload = _genai_otlp_payload(trace_id="trace-override", zroky_agent_name="explicit-agent")
+
+    response = client.post("/v1/events/otlp/v1/traces", json=payload)
+    assert response.status_code == 202, response.text
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        run = session.query(FinalAgentRun).filter_by(project_id="proj_test", external_run_id="trace-override").one()
+        assert run.agent_ref == "explicit-agent"
+
+
+def test_otlp_partial_batch_updates_same_trace_when_root_arrives(client: TestClient) -> None:
+    partial = _genai_otlp_payload(trace_id="trace-partial")
+    spans = partial["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    partial["resourceSpans"][0]["scopeSpans"][0]["spans"] = [spans[1]]
+
+    first = client.post("/v1/events/otlp/v1/traces", json=partial)
+    assert first.status_code == 202, first.text
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        run = session.query(FinalAgentRun).filter_by(project_id="proj_test", external_run_id="trace-partial").one()
+        assert run.status == "running"
+
+    root = _genai_otlp_payload(trace_id="trace-partial")
+    second = client.post("/v1/events/otlp/v1/traces", json=root)
+    assert second.status_code == 202, second.text
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        runs = session.query(FinalAgentRun).filter_by(project_id="proj_test", external_run_id="trace-partial").all()
+        assert len(runs) == 1
+        assert runs[0].status == "succeeded"
+        assert runs[0].workflow_key == "langchain.agent"
+
+
+def test_workflow_assurance_pack_without_tool_bindings_remains_valid(client: TestClient) -> None:
+    response = client.post(
+        "/v1/assurance-packs/validate",
+        json={
+            "pack": {
+                "schema_version": "zroky.workflow_assurance_pack.v1",
+                "workflow_key": "legacy-pack",
+                "version": "1.0.0",
+                "object_types": [{"key": "refund", "schema": {"type": "object"}}],
+                "effects": [{"key": "refund_posted", "object_type": "refund", "predicate": "refund.status == 'posted'"}],
+                "source_bindings": [
+                    {
+                        "key": "stripe_refunds",
+                        "connector_capability": "stripe.refund.read",
+                        "object_type": "refund",
+                        "freshness_seconds": 300,
+                    }
+                ],
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["valid"] is True
 
 
 def test_mcp_tool_import_creates_untrusted_capability_draft(client: TestClient) -> None:

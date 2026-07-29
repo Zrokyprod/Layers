@@ -103,6 +103,8 @@ def create_pack(
     _require_admin(context)
     pack = validate_assurance_pack(body.pack)
     payload = pack.model_dump(by_alias=True)
+    if "tool_bindings" not in body.pack:
+        payload.pop("tool_bindings", None)
     digest = _digest(payload)
     environment = body.environment.strip().lower()
     existing = db.execute(

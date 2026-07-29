@@ -38,6 +38,7 @@ class WorkflowAssurancePack(BaseModel):
     schema_version: str = SCHEMA_VERSION
     workflow_key: str = Field(min_length=1, max_length=160)
     version: str = Field(min_length=1, max_length=32)
+    tool_bindings: list[str] = Field(default_factory=list)
     intent_schema: dict[str, Any] = Field(default_factory=dict)
     object_types: list[AssurancePackObjectType] = Field(min_length=1)
     effects: list[AssurancePackEffect] = Field(min_length=1)
