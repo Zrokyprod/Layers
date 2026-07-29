@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
+import httpx
+
 from app.services.connectors.sor.core import *  # noqa: F403
 from app.services.connectors.sor.http_base import *  # noqa: F403
 

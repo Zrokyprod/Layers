@@ -6,8 +6,9 @@ import httpx
 from pydantic import BaseModel, Field, field_validator
 
 from app.infrastructure.relay_protocol import RelayReadCommand
+from app.services.connectors.sor.core import ConnectorConfigError
+from app.services.connectors.sor.http_adapters import GenericRestApiConnector
 from app.services.outcome_reconciliation import SourceRecord
-from app.services.system_of_record_connectors import ConnectorConfigError, GenericRestApiConnector
 
 
 class GenericRestReadManifest(BaseModel):

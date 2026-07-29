@@ -5,8 +5,9 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.infrastructure.relay_protocol import RelayReadCommand
+from app.services.connectors.sor.core import ConnectorConfigError
+from app.services.connectors.sor.postgres import PostgresReadOnlyConnector
 from app.services.outcome_reconciliation import SourceRecord
-from app.services.system_of_record_connectors import ConnectorConfigError, PostgresReadOnlyConnector
 
 
 class PostgresReadManifest(BaseModel):
