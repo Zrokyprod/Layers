@@ -20,11 +20,11 @@ _set_redis_idempotency = _ingest_processor._set_redis_idempotency
 
 def _sync_ingest_processor_compat_hooks() -> None:
     """Keep historical monkeypatch paths on this route module effective."""
-    _ingest_processor.process_diagnosis = process_diagnosis
     _ingest_processor.enrich_payload_with_cost_buckets = enrich_payload_with_cost_buckets
     _ingest_processor.get_redis_client = get_redis_client
     _ingest_processor._check_redis_idempotency = _check_redis_idempotency
     _ingest_processor._set_redis_idempotency = _set_redis_idempotency
+    _ingest_processor.process_diagnosis = process_diagnosis
 
 
 def process_ingest_batch_for_tenant(*args, **kwargs) -> IngestBatchResponse:

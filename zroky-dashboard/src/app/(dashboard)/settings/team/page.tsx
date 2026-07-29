@@ -456,7 +456,7 @@ export default function TeamPage() {
         id="pending-invitations"
         eyebrow="Invitations"
         title="Pending invites"
-        copy="Resend or revoke invitations that have not been accepted."
+        copy="Revoke invites that should not become access."
         className="team-list-section"
       >
 

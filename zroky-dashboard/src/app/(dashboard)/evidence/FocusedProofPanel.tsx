@@ -7,6 +7,8 @@ import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-but
 import { StatusPill } from "@/components/status-pill";
 import type {
   ActionReceiptResponse,
+  FinalEvidenceBundleResponse,
+  FinalEvidenceBundleVerificationResponse,
   RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
 import type { EvidenceLedgerRow } from "@/lib/evidence-ledger";
@@ -16,7 +18,10 @@ import { formatDateTime, humanize } from "@/lib/format";
 type FocusedProofPanelProps = {
   evidenceError: Error | null;
   evidencePack: RuntimePolicyEvidencePackResponse | undefined;
+  finalBundle: FinalEvidenceBundleResponse | undefined;
+  finalBundleVerification: FinalEvidenceBundleVerificationResponse | undefined;
   isExporting: boolean;
+  isFinalBundleLoading: boolean;
   isEvidenceLoading: boolean;
   isReceiptLoading: boolean;
   onExport: () => void;
@@ -105,13 +110,27 @@ function exportLabel(row: EvidenceLedgerRow): string {
 
 function verificationSummary({
   evidencePack,
+  finalBundle,
+  finalBundleVerification,
   receipt,
   row,
 }: {
   evidencePack: RuntimePolicyEvidencePackResponse | undefined;
+  finalBundle: FinalEvidenceBundleResponse | undefined;
+  finalBundleVerification: FinalEvidenceBundleVerificationResponse | undefined;
   receipt: ActionReceiptResponse | undefined;
   row: EvidenceLedgerRow | null;
 }) {
+  if (finalBundle) {
+    return {
+      algorithm: finalBundleVerification?.algorithm ?? finalBundle.signature?.algorithm ?? "Ed25519",
+      digest: finalBundle.bundle_digest,
+      fingerprint: finalBundle.bundle_digest,
+      label: "Final Evidence Bundle",
+      status: finalBundleVerification?.verification_status === "pass" ? "Signed final proof verified" : "Final proof needs review",
+      tone: finalBundleVerification?.verification_status === "pass" ? "success" : "warning",
+    };
+  }
   if (receipt) {
     const hash = receipt.evidence_hash ?? row?.digest ?? null;
     return {
@@ -302,11 +321,54 @@ function CompactEvidencePackProof({ pack }: { pack: RuntimePolicyEvidencePackRes
   );
 }
 
+function CompactFinalBundleProof({
+  bundle,
+  verification,
+}: {
+  bundle: FinalEvidenceBundleResponse;
+  verification: FinalEvidenceBundleVerificationResponse | undefined;
+}) {
+  const facts: ProofFact[] = [
+    { label: "Bundle digest", value: bundle.bundle_digest, mono: true },
+    { label: "Subject", value: `${bundle.subject_type} / ${bundle.subject_id}`, mono: true },
+    { label: "Signing key", value: bundle.signature?.key_id ?? verification?.key_id ?? "-", mono: true },
+    { label: "Created", value: formatDateTime(bundle.created_at) },
+  ];
+  const pass = verification?.verification_status === "pass";
+  const steps: ProofPathStep[] = [
+    { label: "Intent", detail: "Recorded in final bundle", status: recordFrom(bundle.bundle.intent).id ? "Linked" : "Captured", tone: "success" },
+    { label: "Policy", detail: "Governance snapshot", status: Object.keys(recordFrom(bundle.bundle.policy)).length ? "Captured" : "Review", tone: Object.keys(recordFrom(bundle.bundle.policy)).length ? "success" : "warning" },
+    { label: "Observations", detail: `${recordsFrom(bundle.bundle.observations).length} source read${recordsFrom(bundle.bundle.observations).length === 1 ? "" : "s"}`, status: "Captured", tone: "success" },
+    { label: "Recovery", detail: readable(recordFrom(bundle.bundle.recovery).status), status: "Captured", tone: "success" },
+    { label: "Signature", detail: verification?.algorithm ?? bundle.signature?.algorithm ?? "Ed25519", status: pass ? "Verified" : "Review", tone: pass ? "success" : "warning" },
+  ];
+
+  return (
+    <div className="ev-proof-simple" aria-label="Final Evidence Bundle">
+      <header className="ev-proof-simple-head">
+        <div>
+          <span className="ev-eyebrow">Signed Final Proof</span>
+          <h3>Final bundle is independently checkable</h3>
+        </div>
+        <StatusPill value={verification?.verification_status ?? "pending"} label={pass ? "Verified" : "Review"} tone={pass ? "success" : "warning"} />
+      </header>
+      <ProofPath steps={steps} />
+      <ProofFacts facts={facts} />
+      <p className="ev-proof-note">
+        Verification recomputes the bundle digest and checks the Ed25519 signature over canonical bundle JSON.
+      </p>
+    </div>
+  );
+}
+
 export function FocusedProofPanel({
   evidenceError,
   evidencePack,
+  finalBundle,
+  finalBundleVerification,
   isExporting,
   isEvidenceLoading,
+  isFinalBundleLoading,
   isReceiptLoading,
   onExport,
   onPrint,
@@ -315,12 +377,13 @@ export function FocusedProofPanel({
   row,
 }: FocusedProofPanelProps) {
   const [copyState, setCopyState] = useState("");
-  const isLoading = isEvidenceLoading || isReceiptLoading;
+  const isLoading = isEvidenceLoading || isReceiptLoading || isFinalBundleLoading;
   const error = receiptError ?? evidenceError;
-  const loaded = Boolean(receipt || evidencePack);
+  const loaded = Boolean(receipt || evidencePack || finalBundle);
   const canExport = Boolean(row?.exportable) && !isLoading && !isExporting;
   const canPrint = loaded && !isLoading;
-  const verification = verificationSummary({ evidencePack, receipt, row });
+  const verification = verificationSummary({ evidencePack, finalBundle, finalBundleVerification, receipt, row });
+  const isDemoRow = row?.id.startsWith("demo:");
 
   async function copyFingerprint() {
     if (!verification?.fingerprint) return;
@@ -330,6 +393,47 @@ export function FocusedProofPanel({
     } catch {
       setCopyState("Copy failed");
     }
+  }
+
+  if (isDemoRow && row) {
+    return (
+      <aside className="ev-proof-panel" aria-label="Focused proof panel">
+        <section className="ev-focused-card ev-focused-card-demo">
+          <header className="ev-focused-demo-head">
+            <h2>Selected proof</h2>
+            <a href={row.href}>Permalink <ExternalLink size={13} aria-hidden="true" /></a>
+          </header>
+          <dl className="ev-selected-proof-list">
+            <div><dt>Proof</dt><dd>{row.title}</dd></div>
+            <div><dt>Workflow</dt><dd>{row.agentName}</dd></div>
+            <div><dt>Source</dt><dd>{row.systemRef ?? row.sourceLabel}</dd></div>
+            <div><dt>Verdict</dt><dd><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></dd></div>
+            <div><dt>Signed</dt><dd>{row.detail}</dd></div>
+            <div><dt>Bundle</dt><dd>bundle_7f3a9c4</dd></div>
+            <div><dt>Digest</dt><dd><code>{row.digest}</code></dd></div>
+          </dl>
+          <DashboardButton icon={<Download />} onClick={onExport} variant="primary">
+            Export proof JSON
+          </DashboardButton>
+        </section>
+
+        <section className="ev-proof-detail" aria-label="Selected proof detail">
+          <div className="ev-demo-proof-path">
+            <header>
+              <h3>Signed evidence path</h3>
+              <span>4 steps</span>
+            </header>
+            {["Event captured", "Digest computed", "Signed by connector", "Included in bundle"].map((step, index) => (
+              <div key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+                <small>{row.detail}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      </aside>
+    );
   }
 
   return (
@@ -357,10 +461,10 @@ export function FocusedProofPanel({
                   : "Export proof JSON"}
           </DashboardButton>
         </div>
-        {verification ? (
+        {verification && !isDemoRow ? (
           <section
             className="ev-external-verify"
-            aria-label={loaded ? "Independent verification material" : "Recorded intent fingerprint"}
+            aria-label={receipt || evidencePack || finalBundle ? "Independent verification material" : "Recorded intent fingerprint"}
           >
             <div>
               <ShieldCheck size={16} aria-hidden="true" />
@@ -392,7 +496,7 @@ export function FocusedProofPanel({
           <dl className="ev-focused-meta">
             <div>
               <dt>System</dt>
-              <dd>{row.systemRef ?? "Not linked"}</dd>
+              <dd>{row.systemRef ?? "-"}</dd>
             </div>
             <div>
               <dt>Export</dt>
@@ -425,10 +529,26 @@ export function FocusedProofPanel({
             <strong>Proof unavailable</strong>
             <span>{error.message || unavailableCopy(row)}</span>
           </div>
+        ) : isDemoRow ? (
+          <div className="ev-demo-proof-path">
+            <header>
+              <h3>Signed evidence path</h3>
+              <span>4 steps</span>
+            </header>
+            {["Event captured", "Digest computed", "Signed by connector", "Included in bundle"].map((step, index) => (
+              <div key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+                <small>{row.detail}</small>
+              </div>
+            ))}
+          </div>
         ) : receipt ? (
           <CompactReceiptProof receipt={receipt} />
         ) : evidencePack ? (
           <CompactEvidencePackProof pack={evidencePack} />
+        ) : finalBundle ? (
+          <CompactFinalBundleProof bundle={finalBundle} verification={finalBundleVerification} />
         ) : (
           <div className="ev-empty-state">{unavailableCopy(row)}</div>
         )}

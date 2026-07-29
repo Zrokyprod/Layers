@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
+import httpx
+
 from app.services.connectors.sor.core import *  # noqa: F403
 from app.services.connectors.sor.http_base import *  # noqa: F403
 
@@ -520,6 +526,7 @@ class GenericRestApiConnector:
     record_ref: str
     bearer_token: str | None = None
     path_template: str = "/records/{record_ref}"
+    path_values: Mapping[str, Any] | None = None
     query: Mapping[str, Any] | None = None
     record_path: str | None = None
     timeout_seconds: float = 5.0
@@ -533,7 +540,7 @@ class GenericRestApiConnector:
         connector = HttpJsonRecordConnector(
             base_url=self.base_url,
             path_template=self.path_template,
-            path_values={"record_ref": self.record_ref},
+            path_values={"record_ref": self.record_ref, **(self.path_values or {})},
             query=self.query,
             bearer_token=self.bearer_token,
             record_path=self.record_path,

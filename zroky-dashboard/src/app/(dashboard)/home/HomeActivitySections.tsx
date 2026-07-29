@@ -2,26 +2,22 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowUpRight, CheckCircle2, ChevronRight, ClipboardCheck, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, ClipboardCheck, ShieldCheck } from "lucide-react";
 
 import { StatusPill } from "@/components/status-pill";
-import { buildActionLifecycle } from "@/lib/action-lifecycle";
+import { buildActionView } from "@/lib/action-view";
 import type { StatusTone } from "@/lib/action-status";
 import { field, formatDateTime, humanize } from "@/lib/format";
 import type {
   ActionIntentResponse,
-  ActionExecutionAttemptResponse,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
 } from "@/lib/api";
 
 type HomeActivitySectionsProps = {
-  windowStart: string;
-  generatedAt: string;
   intents: ActionIntentResponse[];
   approvals: RuntimePolicyDecisionResponse[];
   outcomes: OutcomeReconciliationView[];
-  staleAttempts: ActionExecutionAttemptResponse[];
   loading: boolean;
 };
 
@@ -41,15 +37,6 @@ function byRecent<T extends { created_at?: string | null; checked_at?: string | 
     const bTime = new Date(b.checked_at ?? b.created_at ?? 0).getTime();
     return bTime - aTime;
   });
-}
-
-function inTimeframe(value: string | null | undefined, windowStart: string, generatedAt: string): boolean {
-  if (!value) return false;
-  const time = new Date(value).getTime();
-  const start = new Date(windowStart).getTime();
-  const end = new Date(generatedAt).getTime();
-  if (![time, start, end].every(Number.isFinite)) return true;
-  return time >= start && time <= end;
 }
 
 function approvalTitle(approval: RuntimePolicyDecisionResponse): string {
@@ -133,7 +120,6 @@ function ActivityList({
                 <StatusPill value={row.status} tone={row.tone} />
                 <em>{formatDateTime(row.createdAt)}</em>
               </span>
-              <ChevronRight className="mc-activity-row-chevron" aria-hidden="true" size={16} />
             </Link>
           ))}
         </div>
@@ -145,44 +131,24 @@ function ActivityList({
 }
 
 export function HomeActivitySections({
-  windowStart,
-  generatedAt,
   intents,
   approvals,
   outcomes,
-  staleAttempts,
   loading,
 }: HomeActivitySectionsProps) {
-  const lifecycleByActionId = new Map(
-    buildActionLifecycle({
-      intents,
-      decisions: approvals,
-      outcomes,
-      attempts: staleAttempts,
-      staleAttemptIds: staleAttempts.map((attempt) => attempt.attempt_id),
-    })
-      .filter((row) => row.actionId)
-      .map((row) => [row.actionId, row]),
-  );
-  const protectedActions = byRecent(intents)
-    .filter((intent) => inTimeframe(intent.created_at, windowStart, generatedAt))
-    .slice(0, 4)
-    .map((intent): ActivityRow => {
-    const lifecycle = lifecycleByActionId.get(intent.action_id);
+  const protectedActions = byRecent(intents).slice(0, 4).map((intent): ActivityRow => {
+    const view = buildActionView(intent);
     return {
       id: intent.action_id,
-      title: lifecycle?.title ?? humanize(intent.action_type),
-      meta: lifecycle?.agentName ?? intent.agent_profile?.display_name ?? "Unknown agent",
-      status: lifecycle?.stage.label ?? humanize(intent.status),
-      tone: lifecycle?.stage.tone ?? "neutral",
-      href: `/actions?action_id=${encodeURIComponent(intent.action_id)}`,
+      title: view.title,
+      meta: view.agentName,
+      status: view.statusLabel,
+      tone: view.statusTone,
+      href: `/operations?action_id=${encodeURIComponent(intent.action_id)}`,
       createdAt: intent.created_at,
     };
-    });
-  const recentApprovals = byRecent(approvals)
-    .filter((approval) => inTimeframe(approval.created_at, windowStart, generatedAt))
-    .slice(0, 4)
-    .map((approval): ActivityRow => ({
+  });
+  const recentApprovals = byRecent(approvals).slice(0, 4).map((approval): ActivityRow => ({
     id: approval.id,
     title: approvalTitle(approval),
     meta: approval.agent_name ?? humanize(approval.action_type) ?? "Approval",
@@ -190,29 +156,26 @@ export function HomeActivitySections({
     tone: approvalTone(approval),
     href: `/approvals?decision_id=${encodeURIComponent(approval.id)}`,
     createdAt: approval.created_at,
-    }));
-  const proofChecks = byRecent(outcomes)
-    .filter((outcome) => inTimeframe(outcome.checked_at ?? outcome.created_at, windowStart, generatedAt))
-    .slice(0, 4)
-    .map((outcome): ActivityRow => ({
+  }));
+  const proofChecks = byRecent(outcomes).slice(0, 4).map((outcome): ActivityRow => ({
     id: outcome.id,
     title: outcome.system_ref ?? humanize(outcome.action_type) ?? "Outcome check",
     meta: outcome.reason ? humanize(outcome.reason) : humanize(outcome.connector_type),
     status: outcome.verdict ?? outcome.verification_status ?? "not_verified",
     tone: outcomeTone(outcome),
-    href: `/outcomes?check_id=${encodeURIComponent(outcome.id)}`,
+    href: "/outcomes",
     createdAt: outcome.checked_at ?? outcome.created_at,
-    }));
+  }));
 
   return (
     <div className="mc-activity-grid" aria-label="Recent Home activity">
       <ActivityList
         title="Recent protected actions"
         eyebrow="Actions"
-        href="/actions"
+        href="/operations"
         icon={<ShieldCheck size={16} />}
         rows={protectedActions}
-        empty="No protected actions in this timeframe."
+        empty="No protected actions yet."
         loading={loading}
       />
       <ActivityList
@@ -221,7 +184,7 @@ export function HomeActivitySections({
         href="/approvals"
         icon={<ClipboardCheck size={16} />}
         rows={recentApprovals}
-        empty="No approval activity in this timeframe."
+        empty="No approval activity yet."
         loading={loading}
       />
       <ActivityList
@@ -230,7 +193,7 @@ export function HomeActivitySections({
         href="/outcomes"
         icon={<CheckCircle2 size={16} />}
         rows={proofChecks}
-        empty="No proof checks in this timeframe."
+        empty="No proof checks yet."
         loading={loading}
       />
     </div>

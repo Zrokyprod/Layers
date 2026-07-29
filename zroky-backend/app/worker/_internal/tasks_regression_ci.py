@@ -13,7 +13,6 @@ def process_regression_ci_run(
     run_id: str,
     request_payload: dict,
 ) -> dict:
-    """Execute a persisted regression-CI run from the durable worker queue."""
     task_key = f"regression-ci:{tenant_id}:{run_id}"
     with idempotency_guard(task_key) as acquired:
         if not acquired:

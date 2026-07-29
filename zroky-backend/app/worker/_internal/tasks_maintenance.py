@@ -8,63 +8,7 @@ def requeue_pending_diagnosis_jobs(
     older_than_seconds: int = 60,
     limit: int = 100,
 ) -> dict[str, Any]:
-    session = SessionLocal()
-    enqueued = 0
-    failed = 0
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(1, older_than_seconds))
-    bounded_limit = min(max(1, limit), 1000)
-
-    try:
-        set_db_tenant_context(session, tenant_id)
-        jobs = list(
-            session.execute(
-                select(DiagnosisJob)
-                .where(
-                    DiagnosisJob.tenant_id == tenant_id,
-                    DiagnosisJob.status.in_(REQUEUEABLE_DIAGNOSIS_STATUSES),
-                    DiagnosisJob.updated_at <= cutoff,
-                )
-                .order_by(DiagnosisJob.updated_at.asc())
-                .limit(bounded_limit)
-            )
-            .scalars()
-            .all()
-        )
-
-        for job in jobs:
-            try:
-                process_diagnosis.delay(
-                    tenant_id,
-                    job.diagnosis_id,
-                    None if job.call_id else _safe_json_object(job.payload_json),
-                )
-                job.error_message = None
-                session.add(job)
-                enqueued += 1
-                record_diagnosis_job("queued")
-            except Exception as exc:
-                job.error_message = mask_error_message(exc)
-                session.add(job)
-                failed += 1
-                record_diagnosis_job("enqueue_failed")
-
-        session.commit()
-        return {
-            "status": "ok",
-            "tenant_id": tenant_id,
-            "scanned": len(jobs),
-            "enqueued": enqueued,
-            "failed": failed,
-        }
-    except Exception:
-        session.rollback()
-        logger.exception(
-            "pending_diagnosis_requeue_failed",
-            extra={"event": "diagnosis_requeue", "tenant_id": tenant_id},
-        )
-        raise
-    finally:
-        session.close()
+    return {"status": "skipped", "tenant_id": tenant_id, "reason": "diagnosis_worker_removed"}
 
 
 @celery_app.task(name="app.worker.tasks.purge_project_retention", queue="diagnosis_fast")

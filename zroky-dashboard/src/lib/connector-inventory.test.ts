@@ -417,6 +417,7 @@ function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryRe
         requires_customer_credentials: true,
         dashboard_href: "/integrations#generic-rest-connector",
         backend_capability: "generic_rest",
+        manifest_id: "generic_rest.v1",
         availability_notes: null,
       },
     ],
@@ -435,6 +436,7 @@ function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryRe
         requires_customer_credentials: true,
         dashboard_href: null,
         backend_capability: null,
+        manifest_id: null,
         availability_notes: null,
       },
     ],
@@ -540,17 +542,25 @@ describe("connector-inventory", () => {
 
     expect(inventory.rows.map((row) => row.id)).toEqual([
       "generic_rest",
+      "hubspot_crm",
+      "salesforce_crm",
+      "zendesk_ticket",
+      "jira_issue",
       "stripe_refund",
+      "stripe_payment",
+      "shopify_admin",
       "postgres_read",
       "github",
-      "slack",
     ]);
     expect(inventory.categoryGroups.map((group) => group.category)).toEqual([
       "payments",
+      "commerce",
+      "crm",
+      "support_itsm",
       "workflow",
       "database_custom",
     ]);
-    expect(inventory.rows.some((row) => row.id === "hubspot_crm" || row.id === "stripe_payment")).toBe(false);
+    expect(inventory.rows.some((row) => row.id === "razorpay_refund" || row.id === "slack")).toBe(false);
   });
 
   it("focuses counts on verifier health, not vertical connector names", () => {
@@ -1125,6 +1135,7 @@ describe("connector-inventory", () => {
 
     const generic = inventory.proofRows.find((row) => row.id === "generic_rest");
     expect(generic?.latestCheck?.id).toBe("new");
+    expect(generic?.metadata.manifestId).toBe("generic_rest.v1");
     expect(inventory.registry).toEqual({ available: 0, template: 1, planned: 1 });
     expect(inventory.coverageRows.map((row) => row.actionType)).toEqual([
       "crm.deal.update",

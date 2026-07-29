@@ -177,13 +177,7 @@ class SourceMutationRecord(Base):
 
 
 class ConnectorCredential(Base):
-    """Versioned, tenant-scoped connector credential metadata.
-
-    Secrets live here only when the customer explicitly chooses
-    ``zroky_managed`` custody. Customer-managed and private-runner
-    credentials retain an opaque reference only; the reference is never
-    returned from the API or copied to audit metadata.
-    """
+    """Versioned tenant-scoped connector credential metadata."""
 
     __tablename__ = "connector_credentials"
 
@@ -200,28 +194,18 @@ class ConnectorCredential(Base):
     key_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     key_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
     kms_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    scopes_json: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'[]'")
-    )
-    allowed_connector_types_json: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'[]'")
-    )
+    scopes_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    allowed_connector_types_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
     expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
-    rotation_due_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    rotation_due_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     supersedes_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("connector_credentials.id", ondelete="SET NULL"), nullable=True
     )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true"), default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"), default=True)
     created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         nullable=False,
@@ -240,24 +224,12 @@ class ConnectorCredential(Base):
         ),
         CheckConstraint(
             "(custody_mode = 'zroky_managed' AND ciphertext IS NOT NULL AND secret_ref IS NULL) "
-            "OR (custody_mode IN ('customer_managed','private_runner') "
-            "AND ciphertext IS NULL AND secret_ref IS NOT NULL)",
+            "OR (custody_mode IN ('customer_managed','private_runner') AND ciphertext IS NULL AND secret_ref IS NOT NULL)",
             name="ck_connector_credentials_custody_payload",
         ),
-        UniqueConstraint(
-            "project_id", "name", "version", name="ux_connector_credentials_project_name_version"
-        ),
-        Index(
-            "ix_connector_credentials_project_name_active",
-            "project_id",
-            "name",
-            "is_active",
-        ),
-        Index(
-            "ix_connector_credentials_project_rotation_due",
-            "project_id",
-            "rotation_due_at",
-        ),
+        UniqueConstraint("project_id", "name", "version", name="ux_connector_credentials_project_name_version"),
+        Index("ix_connector_credentials_project_name_active", "project_id", "name", "is_active"),
+        Index("ix_connector_credentials_project_rotation_due", "project_id", "rotation_due_at"),
     )
 
 
@@ -275,28 +247,16 @@ class ConnectorCredentialAuditEvent(Base):
     )
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    metadata_json: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'{}'")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, nullable=False, server_default=func.now()
-    )
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('created','rotated','bound','revoked','used')",
             name="ck_connector_credential_audit_event_type",
         ),
-        Index(
-            "ix_connector_credential_audit_project_created",
-            "project_id",
-            "created_at",
-        ),
-        Index(
-            "ix_connector_credential_audit_credential_created",
-            "credential_id",
-            "created_at",
-        ),
+        Index("ix_connector_credential_audit_project_created", "project_id", "created_at"),
+        Index("ix_connector_credential_audit_credential_created", "credential_id", "created_at"),
     )
 
 

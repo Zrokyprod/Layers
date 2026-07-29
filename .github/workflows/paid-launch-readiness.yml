@@ -1,149 +1,48 @@
-name: Paid Launch Readiness
+name: Final Production Release
 
 on:
-  pull_request:
-    branches: ["main", "develop", "codex/stabilize-dirty-tree"]
   push:
-    branches: ["main", "develop", "codex/stabilize-dirty-tree"]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
+    inputs:
+      production_api_url:
+        description: "Optional deployed backend base URL for production smoke"
+        required: false
+        type: string
+      production_dashboard_url:
+        description: "Optional deployed dashboard base URL for production smoke"
+        required: false
+        type: string
 
 concurrency:
-  group: paid-launch-readiness-${{ github.ref }}
+  group: final-production-release-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  backend:
-    name: Backend / ${{ matrix.name }}
+  tracker:
+    name: Tracker verifier
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify build tracker
+        shell: pwsh
+        run: ./scripts/verify_zroky_build_plan.ps1
+
+  backend-final:
+    name: Backend final gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: zroky-backend
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: tenant-session
-            name: tenant session selection
-            tests: tests/test_tenant_session_project_selection.py
-          - id: tenant-scoping
-            name: tenant path scoping
-            tests: tests/test_tenant_project_route_scoping.py
-          - id: ingest
-            name: durable ingest and trace graph
-            tests: >-
-              tests/test_ingest.py::test_rich_ingest_event_creates_masked_trace_graph
-              tests/test_ingest.py::test_duplicate_event_id_does_not_duplicate_trace_span_or_cost
-              tests/test_ingest.py::test_ingest_idempotency_event_id_prevents_duplicate_cost_and_call
-          - id: capture-health
-            name: capture health
-            tests: >-
-              tests/test_capture_health.py::test_capture_health_summarizes_sdk_gateway_and_span_sources
-              tests/test_capture_health.py::test_gateway_heartbeat_uses_api_key_and_creates_capture_alerts
-              tests/test_capture_health.py::test_gateway_stream_to_db_to_capture_health_e2e
-          - id: failure-intelligence
-            name: failure intelligence
-            tests: tests/test_failure_intelligence.py
-          - id: replay-runs
-            name: replay run API contract
-            tests: >-
-              tests/test_replay_runs.py::TestDispatchReplayRun::test_dispatch_creates_pending_run
-              tests/test_replay_runs.py::TestDispatchReplayRun::test_cross_tenant_golden_set_returns_none
-              tests/test_replay_runs.py::TestDispatchReplayRun::test_stamps_requested_mode_with_executor_compatibility
-              tests/test_replay_runs.py::TestDispatchReplayRun::test_create_replay_from_call_creates_one_click_run
-              tests/test_replay_runs.py::TestMarkCallAsGolden::test_active_without_expected_behavior_rejected
-              tests/test_replay_runs.py::TestReplayModeInResponse::test_backfills_warning_for_legacy_stub_rows
-              tests/test_replay_runs.py::TestCreateReplayFromIssueRoute::test_creates_one_click_replay_from_issue
-              tests/test_replay_runs.py::TestInvariants::test_valid_run_statuses_match_db_check
-          - id: replay-executor
-            name: replay executor trust
-            tests: >-
-              tests/test_replay_executor.py::TestExecuteReplayRun::test_real_replay_from_issue_marks_verified_fix
-              tests/test_replay_executor.py::TestExecuteReplayRun::test_only_inconclusive_finalizes_not_verified
-              tests/test_replay_executor.py::TestLiveLlmResolver::test_mocked_tool_requires_captured_tool_snapshot
-              tests/test_replay_executor.py::TestLiveLlmResolver::test_live_sandbox_fails_closed_without_runtime
-              tests/test_replay_executor.py::TestLiveLlmResolver::test_budget_exceeded_returns_error
-              tests/test_replay_executor.py::TestLiveLlmResolver::test_provider_error_returns_error
-          - id: replay-claiming
-            name: replay worker claiming
-            tests: tests/test_replay_worker_claiming.py
-          - id: goldens
-            name: behavioral Goldens
-            tests: >-
-              tests/test_goldens.py::TestAddTrace::test_add_trace_active_without_expected_behavior_rejected
-              tests/test_goldens.py::TestAddTrace::test_add_trace_with_source_evidence_defaults_to_draft
-              tests/test_goldens.py::TestPatchRoute::test_patch_flaky_and_blocking_flags_persist
-              tests/test_goldens.py::TestTraceRoutes::test_add_trace_201
-              tests/test_goldens.py::TestTraceRoutes::test_add_trace_active_without_expected_behavior_422
-              tests/test_goldens.py::TestInvariants::test_valid_golden_trace_statuses_match_db_check
-              tests/test_goldens.py::TestInvariants::test_legacy_rows_without_expected_behavior_are_draft
-          - id: regression-ci-routes
-            name: regression CI routes
-            tests: tests/test_regression_ci_routes.py
-          - id: regression-ci-orchestrator
-            name: regression CI orchestrator
-            tests: tests/test_regression_ci_orchestrator.py
-          - id: runtime-policy
-            name: runtime policy gate
-            tests: tests/test_runtime_policy_gate.py
-          - id: verified-action-kernel
-            name: verified action kernel
-            tests: >-
-              tests/test_action_intents.py
-              tests/test_agent_profiles_routes.py
-              tests/test_tool_registry_routes.py
-          - id: outcome-reconciliation
-            name: outcome reconciliation
-            tests: tests/test_outcome_reconciliation.py
-          - id: system-record-connectors
-            name: system-of-record connectors
-            tests: >-
-              tests/test_system_of_record_connector_http.py
-              tests/test_system_of_record_integrations.py
-          - id: design-partner-handoff
-            name: design-partner handoff contract
-            tests: >-
-              tests/test_design_partner_install_kit.py
-              tests/test_design_partner_owner_proof_artifact.py
-          - id: deployment-smoke-contract
-            name: deployment smoke contract
-            tests: tests/test_deployment_smoke_contract.py
-          - id: billing
-            name: billing and quota
-            tests: >-
-              tests/test_billing_v2.py::TestBillingPlans::test_all_plans_have_same_keys
-              tests/test_billing_v2.py::TestRazorpayCheckoutRoute::test_create_order_computes_plan_amount_and_tracks_pending_request
-              tests/test_billing_v2.py::TestRazorpayCheckoutRoute::test_verify_payment_activates_plan_after_valid_signature
-              tests/test_billing_v2.py::TestBillingQuota::test_strict_quota_check_failure_denies_and_alerts
-              tests/test_billing_v2.py::TestBillingQuota::test_event_counter_increment_is_portable_and_accumulates_once
-              tests/test_billing_v2.py::TestBillingQuota::test_hosted_usage_endpoint_returns_calls_replay_goldens_and_metering
-              tests/test_billing_v2.py::TestWebhookRoute::test_happy_path_payment_succeeded
-              tests/test_billing_v2.py::TestWebhookRoute::test_idempotent_replay
-              tests/test_billing_v2.py::TestPortalRoute::test_happy_path_without_customer
-              tests/test_billing_v2.py::TestInvariants::test_plan_codes_match_tier_matrix
-          - id: owner-health
-            name: owner launch health
-            tests: tests/test_owner_money_path_health.py
-          - id: owner-audit-readiness
-            name: owner audit and production readiness
-            tests: >-
-              tests/test_owner_mutation_audit.py
-              tests/test_owner_route_gate.py
-              tests/test_feature_flags.py
-              tests/test_owner_support_billing.py::test_owner_support_ticket_detail_and_reply
-          - id: production-config
-            name: production config
-            tests: >-
-              tests/test_production_config.py
-              tests/test_launch_env_validator.py
-          - id: launch-gate-contracts
-            name: launch gate contracts
-            tests: >-
-              tests/test_launch_static_contract.py
-              tests/test_paid_launch_readiness_script_contract.py
 
     steps:
       - uses: actions/checkout@v4
@@ -160,70 +59,40 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run backend readiness suite
+      - name: Run final backend gates
         env:
           TESTING: "true"
-          DATABASE_URL: sqlite:///./.data/paid_launch_${{ matrix.id }}.db
-          DATABASE_READ_REPLICA_URL: ""
-          AUTH_JWT_SECRET: paid-launch-ci-secret-key-32-characters
+          DATABASE_URL: sqlite:///./.data/final_backend_release.db
+          AUTH_JWT_SECRET: final-release-ci-secret-key-32-characters
           ALLOW_PROJECT_HEADER_CONTEXT: "true"
           REQUIRE_PROVISIONING_TOKEN: "false"
           ENABLE_READY_REDIS_CHECK: "false"
-          INGEST_ENFORCE_RATE_LIMIT: "false"
-          BILLING_QUOTA_FAILURE_POLICY: strict
-          TMPDIR: ${{ runner.temp }}/zroky-paid-launch
+          PROVIDER_KEY_VAULT_KEK: final-release-provider-key-vault-kek-32-chars
+          PROVIDER_KEY_VAULT_KEY_ID: final-release-local-kek-v1
         run: |
-          mkdir -p .data "$TMPDIR"
-          python -m pytest ${{ matrix.tests }} -q --tb=short
+          mkdir -p .data
+          python -m pytest \
+            tests/test_final_backend_route_allowlist.py \
+            tests/test_final_codebase_shape.py \
+            tests/test_final_domain_outbox_worker.py \
+            tests/test_final_product_smoke_contract.py \
+            tests/test_final_domain_skeleton.py \
+            tests/test_final_domain_tables.py \
+            tests/test_final_intents_api.py::test_observe_only_workflow_runs_end_to_end_with_signed_evidence \
+            tests/test_final_intents_api.py::test_final_approval_resolution_requires_role_and_binding_digest \
+            tests/test_final_intents_api.py::test_final_approval_deny_blocks_bound_intent \
+            tests/test_final_intents_api.py::test_stripe_refund_test_loop_verifies_real_sor_and_catches_false_success \
+            tests/test_final_intents_api.py::test_incident_recovery_execution_queues_customer_executor \
+            tests/test_final_intents_api.py::test_new_workflow_shape_publishes_without_backend_code_change \
+            tests/test_owner_route_gate.py \
+            tests/test_production_config.py \
+            -q --tb=short
+          python -m py_compile ../scripts/run_stripe_test_loop.py
 
-  money-path-evidence:
-    name: Release-candidate money-path evidence
+  dashboard-final:
+    name: Dashboard final gates
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            zroky-backend/requirements.txt
-            zroky-backend/requirements-dev.txt
-            zroky-sdk/pyproject.toml
-
-      - name: Install release evidence dependencies
-        run: |
-          python -m pip install -r zroky-backend/requirements.txt -r zroky-backend/requirements-dev.txt
-          python -m pip install -e zroky-sdk
-
-      - name: Prove launch-ready money path
-        env:
-          TMPDIR: ${{ runner.temp }}/zroky-money-path
-        run: |
-          mkdir -p "$TMPDIR"
-          python scripts/run_money_path_demo.py --json
-
-      - name: Prove design-partner install kit
-        env:
-          TMPDIR: ${{ runner.temp }}/zroky-design-partner-kit
-        run: |
-          mkdir -p "$TMPDIR"
-          python scripts/run_design_partner_install_kit.py --json
-
-      - name: Prove blocking Golden stops regression
-        env:
-          TMPDIR: ${{ runner.temp }}/zroky-money-path-blocked
-        run: |
-          mkdir -p "$TMPDIR"
-          python scripts/run_money_path_demo.py --json --blocked-ci-demo
-
-  dashboard:
-    name: Dashboard reliability surfaces
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: zroky-dashboard
@@ -238,125 +107,31 @@ jobs:
           cache: npm
           cache-dependency-path: zroky-dashboard/package-lock.json
 
-      - name: Install dependencies
+      - name: Install dashboard dependencies
         run: npm ci
 
-      - name: Run reliability surface tests
+      - name: Run dashboard unit gates
         run: |
-          npm test -- \
-            "src/components/dashboard-shell.test.tsx" \
-            "src/components/providers.test.tsx" \
-            "src/components/command-palette.test.tsx" \
-            "src/lib/dashboard-route-contract.test.ts" \
-            "src/lib/route-auth-guard.test.ts" \
-            "src/lib/keyboard-shortcuts.test.tsx" \
-            "src/lib/replay-mode.test.ts" \
+          npm test -- --run \
+            src/lib/dashboard-route-contract.test.ts \
+            src/lib/route-auth-guard.test.ts \
+            src/components/dashboard-shell.test.tsx \
+            src/components/command-palette.test.tsx \
             "src/app/(dashboard)/home/page.test.tsx" \
-            "src/app/(dashboard)/agents/page.test.tsx" \
-            "src/app/(dashboard)/approvals/page.test.tsx" \
-            "src/app/(dashboard)/evidence/page.test.tsx" \
+            "src/app/(dashboard)/operations/page.test.tsx" \
             "src/app/(dashboard)/outcomes/page.test.tsx" \
-            "src/app/(dashboard)/policies/page.test.tsx" \
-            "src/app/(dashboard)/integrations/page.test.tsx" \
-            "src/app/(dashboard)/settings/integrations/page.test.tsx" \
-            "src/app/(dashboard)/settings/billing/page.test.tsx" \
-            "src/app/(dashboard)/settings/keys/page.test.tsx" \
-            "src/app/(dashboard)/settings/providers/page.test.tsx"
+            "src/app/(dashboard)/evidence/page.test.tsx"
 
       - name: Build dashboard
         env:
-          NEXT_PUBLIC_API_URL: https://api.zroky.com
+          ZROKY_API_BASE_URL: http://127.0.0.1:8010
+          ZROKY_ALLOW_LOCAL_API_BASE_URL: "1"
         run: npm run build
 
-  admin:
-    name: Owner/admin launch surfaces
+  sdk-final:
+    name: SDK final gates
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    defaults:
-      run:
-        working-directory: zroky-admin
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: zroky-admin/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run owner launch tests
-        run: |
-          npm test -- \
-            "src/app/owner/layout.test.tsx" \
-            "src/app/owner/page.test.tsx" \
-            "src/app/owner/money-path/page.test.tsx" \
-            "src/app/owner/pricing/page.test.tsx" \
-            "src/app/owner/infrastructure/page.test.tsx" \
-            "src/app/owner/settings/page.test.tsx" \
-            "src/app/owner/support/page.test.tsx"
-
-      - name: Build admin
-        env:
-          NEXT_PUBLIC_OWNER_API_URL: https://api.zroky.com
-        run: npm run build
-
-  gateway:
-    name: Gateway durable capture
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: zroky-gateway
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go 1.22
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-          cache: true
-          cache-dependency-path: zroky-gateway/go.sum
-
-      - name: Run gateway tests
-        run: go test ./...
-
-  replay-worker:
-    name: Replay worker trust
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: zroky-replay-worker
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: zroky-replay-worker/pyproject.toml
-
-      - name: Install replay worker dependencies
-        run: python -m pip install -e . pytest pytest-asyncio respx
-
-      - name: Run replay worker tests
-        run: python -m pytest
-
-  python-sdk:
-    name: Python SDK capture
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: zroky-sdk
 
     steps:
       - uses: actions/checkout@v4
@@ -369,25 +144,12 @@ jobs:
           cache-dependency-path: zroky-sdk/pyproject.toml
 
       - name: Install Python SDK dependencies
+        working-directory: zroky-sdk
         run: python -m pip install -e ".[dev]"
 
-      - name: Run Python SDK tests
-        env:
-          TMPDIR: ${{ runner.temp }}/zroky-sdk
-        run: |
-          mkdir -p "$TMPDIR"
-          python -m pytest
-
-  js-sdk:
-    name: JavaScript SDK capture
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: zroky-sdk-js
-
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run Python SDK final gates
+        working-directory: zroky-sdk
+        run: python -m pytest tests/test_final_sdk_shape.py tests/test_final_sdk_public_surface.py tests/test_final_pre_execution_guard.py tests/test_runner.py -q
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -397,39 +159,22 @@ jobs:
           cache-dependency-path: zroky-sdk-js/package-lock.json
 
       - name: Install JS SDK dependencies
+        working-directory: zroky-sdk-js
         run: npm ci
 
-      - name: Run JS SDK tests
-        run: npm test
+      - name: Run JS SDK final gates
+        working-directory: zroky-sdk-js
+        run: npm test -- tests/public_surface.test.ts tests/intent.test.ts tests/guard.test.ts tests/verified_action.test.ts tests/verify.test.ts
 
-  regression-ci-action:
-    name: Regression CI action
+      - name: Build JS SDK package
+        working-directory: zroky-sdk-js
+        run: npm run build
+
+  production-smoke:
+    name: Optional deployed production smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: zroky-regression-ci-action
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: zroky-regression-ci-action/package-lock.json
-
-      - name: Install action dependencies
-        run: npm ci
-
-      - name: Run action tests
-        run: npm test
-
-  docs-source-truth:
-    name: Docs drift and source of truth
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.production_api_url != '' && inputs.production_dashboard_url != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -439,49 +184,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run docs drift check
-        run: python scripts/check_docs_drift.py
-
-      - name: Run static launch contract check
-        run: python scripts/check_launch_static_contract.py
-
-      - name: Enforce README-only planning source
-        shell: bash
+      - name: Run deployed smoke
         run: |
-          set -euo pipefail
-          tracked_markdown="$(git ls-files '*.md' | grep -v '^README.md$' || true)"
-          existing_markdown=""
-          while IFS= read -r path; do
-            if [[ -n "$path" && -e "$path" ]]; then
-              existing_markdown="${existing_markdown}${path}"$'\n'
-            fi
-          done <<< "$tracked_markdown"
-          if [[ -n "$existing_markdown" ]]; then
-            echo "::error::Root README.md must be the only tracked product-planning Markdown file."
-            printf '%s' "$existing_markdown"
-            exit 1
-          fi
-          grep -q "single product and implementation source of truth" README.md
+          python scripts/run_final_product_smoke.py \
+            --api-base-url "${{ inputs.production_api_url }}" \
+            --dashboard-base-url "${{ inputs.production_dashboard_url }}"
 
-  paid-launch-readiness:
-    name: Paid Launch Readiness
+  release-decision:
+    name: Release decision
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
-      - backend
-      - money-path-evidence
-      - dashboard
-      - admin
-      - gateway
-      - replay-worker
-      - python-sdk
-      - js-sdk
-      - regression-ci-action
-      - docs-source-truth
+      - tracker
+      - backend-final
+      - dashboard-final
+      - sdk-final
+      - production-smoke
     if: ${{ always() }}
 
     steps:
-      - name: Require all paid launch jobs to pass
+      - name: Require final gates
         env:
           NEEDS_JSON: ${{ toJson(needs) }}
         run: |
@@ -491,14 +213,16 @@ jobs:
           import sys
 
           needs = json.loads(os.environ["NEEDS_JSON"])
+          allowed_skips = {"production-smoke"}
           failures = {
               name: metadata.get("result")
               for name, metadata in needs.items()
               if metadata.get("result") != "success"
+              and not (name in allowed_skips and metadata.get("result") == "skipped")
           }
           if failures:
               for name, result in sorted(failures.items()):
                   print(f"{name}: {result}")
               sys.exit(1)
-          print("All paid launch readiness jobs passed.")
+          print("Final production release gates passed.")
           PY

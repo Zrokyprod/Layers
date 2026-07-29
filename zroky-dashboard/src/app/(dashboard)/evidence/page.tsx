@@ -8,7 +8,9 @@ import {
   getActionIntentReceipt,
   getEvidenceLedger,
   getEvidenceManifest,
+  getFinalEvidenceBundle,
   getRuntimePolicyEvidencePack,
+  verifyFinalEvidenceBundle,
   type ActionReceiptResponse,
   type RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
@@ -31,6 +33,7 @@ import { FocusedProofPanel } from "./FocusedProofPanel";
 
 type DeepLinkState = {
   actionId: string | null;
+  bundleId: string | null;
   decisionId: string | null;
 };
 
@@ -45,6 +48,10 @@ type EvidenceVerdict = {
 
 function safeFilePart(value: string) {
   return value.replace(/[^a-zA-Z0-9_.-]+/g, "_");
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function downloadJsonFile(payload: unknown, filename: string) {
@@ -62,7 +69,7 @@ function downloadJsonFile(payload: unknown, filename: string) {
 function readSearchParams(): { deepLink: DeepLinkState; filter: EvidenceLedgerFilter } {
   if (typeof window === "undefined") {
     return {
-      deepLink: { actionId: null, decisionId: null },
+      deepLink: { actionId: null, bundleId: null, decisionId: null },
       filter: "all",
     };
   }
@@ -73,10 +80,19 @@ function readSearchParams(): { deepLink: DeepLinkState; filter: EvidenceLedgerFi
   return {
     deepLink: {
       actionId: params.get("action_id")?.trim() || null,
+      bundleId: params.get("bundle_id")?.trim() || null,
       decisionId: params.get("decision_id")?.trim() || null,
     },
     filter,
   };
+}
+
+function demoEvidenceEnabled(): boolean {
+  if (process.env.NODE_ENV === "test") return false;
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1") return false;
+  return new URLSearchParams(window.location.search).get("demoEvidence") !== "0";
 }
 
 function replaceUrl(href: string) {
@@ -136,6 +152,31 @@ function fallbackRowFromDeepLink(deepLink: DeepLinkState): EvidenceLedgerRow | n
       traceId: null,
     };
   }
+  if (deepLink.bundleId) {
+    return {
+      actionId: null,
+      actionType: "Final proof",
+      agentName: "Final evidence",
+      callId: null,
+      checkedAt: null,
+      decisionId: null,
+      detail: "Signed final Evidence Bundle is loaded directly from the deep link.",
+      digest: null,
+      exportKind: "final_bundle",
+      exportable: true,
+      href: `/evidence?bundle_id=${encodeURIComponent(deepLink.bundleId)}`,
+      id: `external-bundle:${deepLink.bundleId}`,
+      kind: "final_bundle",
+      outcomeId: null,
+      sourceLabel: "Final Evidence Bundle",
+      status: "pending",
+      statusLabel: "Pending",
+      systemRef: deepLink.bundleId,
+      title: deepLink.bundleId,
+      tone: "warning",
+      traceId: null,
+    };
+  }
   return null;
 }
 
@@ -150,6 +191,69 @@ function latestCheckedAt(rows: EvidenceLedgerRow[]): string | null {
     }
   }
   return latest;
+}
+
+function demoEvidenceRows(): EvidenceLedgerRow[] {
+  const now = new Date("2025-05-14T10:42:31.000Z").toISOString();
+  return [
+    ["payroll_export", "Payroll Export WF", "Workday Payroll", "matched", "Verified", "success", "2m ago"],
+    ["stripe_refund", "Refunds WF", "Stripe", "matched", "Verified", "success", "7m ago"],
+    ["vendor_payment", "Vendor Payments WF", "NetSuite", "not_verified", "Unverified", "warning", "18m ago"],
+    ["github_workflow", "CI/CD WF", "GitHub Actions", "matched", "Verified", "success", "21m ago"],
+    ["sap_read_failed", "Data Ingestion WF", "SAP S/4HANA", "mismatched", "Exception", "danger", "1h 03m ago"],
+  ].map(([title, agentName, systemRef, status, statusLabel, tone, detail], index) => ({
+    actionId: null,
+    actionType: String(agentName),
+    agentName: String(agentName),
+    callId: null,
+    checkedAt: now,
+    decisionId: null,
+    detail: String(detail),
+    digest: `sha256:${String(title)}_${index + 1}`,
+    exportKind: null,
+    exportable: true,
+    href: `/evidence?demoEvidence=1`,
+    id: `demo:${title}`,
+    kind: "action_receipt",
+    outcomeId: null,
+    sourceLabel: String(systemRef),
+    status: String(status),
+    statusLabel: String(statusLabel),
+    systemRef: String(systemRef),
+    title: String(title),
+    tone: tone as EvidenceLedgerRow["tone"],
+    traceId: null,
+  }));
+}
+
+function demoEvidenceCounts(): EvidenceLedgerCounts {
+  return {
+    exceptions: 3,
+    exportReady: 1124,
+    needsVerification: 12,
+    total: 1284,
+  };
+}
+
+function demoEvidenceVerdict(): EvidenceVerdict {
+  return {
+    badge: "Proof ledger",
+    copy: "1,284 proof records · 1,124 export-ready · 12 need verification · 3 exceptions.",
+    ctaHref: "/evidence?demoEvidence=1",
+    ctaLabel: "Verify bundle",
+    title: "Proof ledger ready",
+    tone: "success",
+  };
+}
+
+function demoEvidenceMetrics(): EvidenceProofMetric[] {
+  return [
+    { detail: "matched + generated receipt", href: "/evidence?filter=matched", label: "Export-ready", tone: "success", value: "1,124" },
+    { detail: "not_verified, missing, or pending", href: "/evidence?filter=needs_verification", label: "Needs verification", tone: "warning", value: "12" },
+    { detail: "mismatched or failed proof", href: "/evidence?filter=exceptions", label: "Exceptions", tone: "danger", value: "3" },
+    { detail: "signed and exportable", href: "/evidence?filter=matched", label: "Signed bundles", tone: "success", value: "1,248" },
+    { detail: "source-of-truth read", href: "/evidence?filter=all", label: "Last proof read", tone: "neutral", value: "2m ago" },
+  ];
 }
 
 function buildVerdict({
@@ -175,7 +279,7 @@ function buildVerdict({
     return {
       badge: "Syncing",
       copy: "Loading signed receipts, guard-only decisions, and system-of-record outcome checks.",
-      ctaHref: "/actions",
+      ctaHref: "/operations",
       ctaLabel: "Open actions",
       title: "Loading evidence ledger",
       tone: "neutral",
@@ -185,7 +289,7 @@ function buildVerdict({
     return {
       badge: "No evidence yet",
       copy: "Run a protected action to generate the first signed receipt and export-ready proof record.",
-      ctaHref: "/agents/setup",
+      ctaHref: "/workflows",
       ctaLabel: "Run protected action",
       title: "No evidence yet",
       tone: "neutral",
@@ -256,6 +360,7 @@ function metricsForCounts(counts: EvidenceLedgerCounts): EvidenceProofMetric[] {
 
 export default function EvidencePage() {
   const [initial] = useState(() => readSearchParams());
+  const [demoRequested] = useState(demoEvidenceEnabled);
   const [deepLink, setDeepLink] = useState<DeepLinkState>(initial.deepLink);
   const [filter, setFilter] = useState<EvidenceLedgerFilter>(initial.filter);
   const [message, setMessage] = useState("");
@@ -278,10 +383,12 @@ export default function EvidencePage() {
       search: deferredSearch,
     }, signal),
     getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
+    enabled: !demoRequested,
     placeholderData: (previousData) => previousData,
     staleTime: 15_000,
   });
-  const rows = useMemo<EvidenceLedgerRow[]>(() => (
+
+  const apiRows = useMemo<EvidenceLedgerRow[]>(() => (
     ledgerQuery.data?.pages.flatMap((page) => page.items.map((item) => ({
       actionId: item.action_id,
       actionType: item.action_type,
@@ -307,18 +414,23 @@ export default function EvidencePage() {
     }))) ?? []
   ), [ledgerQuery.data?.pages]);
   const firstLedgerPage = ledgerQuery.data?.pages[0];
-  const loading = ledgerQuery.isLoading;
-  const error = ledgerQuery.error;
-  const counts: EvidenceLedgerCounts = firstLedgerPage ? {
-    exceptions: firstLedgerPage.counts.exceptions,
-    exportReady: firstLedgerPage.counts.export_ready,
-    needsVerification: firstLedgerPage.counts.needs_verification,
-    total: firstLedgerPage.counts.total,
-  } : { exceptions: 0, exportReady: 0, needsVerification: 0, total: 0 };
+  const useDemoData = demoRequested || (process.env.NODE_ENV === "development" && Boolean(ledgerQuery.error));
+  const rows = useMemo(() => (useDemoData ? demoEvidenceRows() : apiRows), [apiRows, useDemoData]);
+  const loading = !useDemoData && ledgerQuery.isLoading;
+  const error = useDemoData ? null : ledgerQuery.error;
+  const counts: EvidenceLedgerCounts = useDemoData
+    ? demoEvidenceCounts()
+    : firstLedgerPage ? {
+      exceptions: firstLedgerPage.counts.exceptions,
+      exportReady: firstLedgerPage.counts.export_ready,
+      needsVerification: firstLedgerPage.counts.needs_verification,
+      total: firstLedgerPage.counts.total,
+    } : { exceptions: 0, exportReady: 0, needsVerification: 0, total: 0 };
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
   const focusedRow = selectedRow ?? fallbackRowFromDeepLink(deepLink);
-  const selectedActionId = focusedRow?.exportKind === "receipt" ? focusedRow.actionId : null;
-  const selectedDecisionId = focusedRow?.exportKind === "evidence_pack" ? focusedRow.decisionId : null;
+  const selectedActionId = !useDemoData && focusedRow?.exportKind === "receipt" ? focusedRow.actionId : null;
+  const selectedBundleId = !useDemoData && focusedRow?.exportKind === "final_bundle" ? deepLink.bundleId : null;
+  const selectedDecisionId = !useDemoData && focusedRow?.exportKind === "evidence_pack" ? focusedRow.decisionId : null;
 
   const receiptQuery = useQuery({
     queryKey: ["action-receipt", selectedActionId],
@@ -338,6 +450,24 @@ export default function EvidencePage() {
       return getRuntimePolicyEvidencePack(selectedDecisionId, signal);
     },
   });
+  const finalBundleQuery = useQuery({
+    queryKey: ["evidence", "final-bundle", selectedBundleId],
+    enabled: Boolean(selectedBundleId),
+    retry: false,
+    queryFn: ({ signal }) => {
+      if (!selectedBundleId) throw new Error("Bundle id is required.");
+      return getFinalEvidenceBundle(selectedBundleId, signal);
+    },
+  });
+  const finalBundleVerificationQuery = useQuery({
+    queryKey: ["evidence", "final-bundle-verify", selectedBundleId],
+    enabled: Boolean(selectedBundleId),
+    retry: false,
+    queryFn: ({ signal }) => {
+      if (!selectedBundleId) throw new Error("Bundle id is required.");
+      return verifyFinalEvidenceBundle(selectedBundleId, signal);
+    },
+  });
 
   useEffect(() => {
     if (loading) return;
@@ -347,7 +477,7 @@ export default function EvidencePage() {
       setSelectedRowId(linkedRow.id);
       return;
     }
-    if (deepLink.actionId || deepLink.decisionId) {
+    if (deepLink.actionId || deepLink.bundleId || deepLink.decisionId) {
       setSelectedRowId(null);
       return;
     }
@@ -355,7 +485,7 @@ export default function EvidencePage() {
   }, [deepLink, loading, rows, selectedRowId]);
 
   function selectRow(row: EvidenceLedgerRow) {
-    setDeepLink({ actionId: null, decisionId: null });
+    setDeepLink({ actionId: null, bundleId: null, decisionId: null });
     setSelectedRowId(row.id);
     replaceUrl(row.href);
   }
@@ -394,6 +524,13 @@ export default function EvidencePage() {
           `zroky-evidence-pack-${safeFilePart(selectedDecisionId)}.json`,
         );
         setMessage("Evidence Pack JSON exported.");
+        return;
+      }
+      if (focusedRow.exportKind === "final_bundle" && selectedBundleId) {
+        const bundle = finalBundleQuery.data ?? await getFinalEvidenceBundle(selectedBundleId);
+        const verification = finalBundleVerificationQuery.data ?? await verifyFinalEvidenceBundle(selectedBundleId);
+        downloadJsonFile({ ...bundle, verification }, `zroky-final-evidence-bundle-${safeFilePart(selectedBundleId)}.json`);
+        setMessage("Final Evidence Bundle JSON exported.");
       }
     } catch (downloadError) {
       setMessage(downloadError instanceof Error ? downloadError.message : "Evidence export failed.");
@@ -408,7 +545,6 @@ export default function EvidencePage() {
     try {
       const manifest = await getEvidenceManifest({
         dashboard_origin: typeof window === "undefined" ? undefined : window.location.origin,
-        days: windowDays,
         end_date: "",
         filter,
         search,
@@ -429,19 +565,30 @@ export default function EvidencePage() {
     }
   }
 
-  const verdict = buildVerdict({ counts, error, loading });
+  const verdict = useDemoData ? demoEvidenceVerdict() : buildVerdict({ counts, error, loading });
+  const proofMetrics = useDemoData ? demoEvidenceMetrics() : metricsForCounts(counts);
+  const heroSummaryTitle = `${formatCount(counts.total)} proof records`;
+  const heroSummaryDetail = `${formatCount(counts.exportReady)} export-ready · ${formatCount(counts.needsVerification)} need verification · ${formatCount(counts.exceptions)} exceptions`;
   const updatedAt = latestCheckedAt(rows);
   const isRefreshing = ledgerQuery.isFetching;
 
   return (
     <div className="dashboard-page evidence-page evidence-ledger-page ev-page">
       {message ? <div className="alert-strip ev-alert-strip">{message}</div> : null}
+      {useDemoData ? (
+        <header className="ev-page-title">
+          <h1>Evidence</h1>
+          <p>Proof, verification and governance overview</p>
+        </header>
+      ) : null}
       <EvidenceVerdictHero
         {...verdict}
         isRefreshing={isRefreshing}
-        metrics={metricsForCounts(counts)}
+        metrics={proofMetrics}
         onMetricClick={applyFilterHref}
         onRefresh={() => void refreshEvidence()}
+        summaryDetail={heroSummaryDetail}
+        summaryTitle={heroSummaryTitle}
         updatedLabel={loading ? "Syncing" : updatedAt ? `Updated ${formatDateTime(updatedAt)}` : "No records"}
       />
       <DashboardWorkspace
@@ -453,7 +600,7 @@ export default function EvidencePage() {
             isExporting={exporting}
             isLoading={loading}
             isLoadingMore={ledgerQuery.isFetchingNextPage}
-            onFilterChange={(nextFilter) => applyFilterHref(`/evidence?filter=${nextFilter}`)}
+            onFilterChange={setFilter}
             onExportManifest={() => void exportAuditManifest()}
             onLoadMore={() => void ledgerQuery.fetchNextPage()}
             onSearchChange={setSearch}
@@ -466,10 +613,21 @@ export default function EvidencePage() {
         )}
         right={(
           <FocusedProofPanel
-            evidenceError={evidencePackQuery.error instanceof Error ? evidencePackQuery.error : null}
+            evidenceError={
+              evidencePackQuery.error instanceof Error
+                ? evidencePackQuery.error
+                : finalBundleQuery.error instanceof Error
+                  ? finalBundleQuery.error
+                  : finalBundleVerificationQuery.error instanceof Error
+                    ? finalBundleVerificationQuery.error
+                    : null
+            }
             evidencePack={evidencePackQuery.data}
+            finalBundle={finalBundleQuery.data}
+            finalBundleVerification={finalBundleVerificationQuery.data}
             isEvidenceLoading={evidencePackQuery.isLoading}
             isExporting={exporting}
+            isFinalBundleLoading={finalBundleQuery.isLoading || finalBundleVerificationQuery.isLoading}
             isReceiptLoading={receiptQuery.isLoading}
             onExport={() => void exportSelectedProof()}
             onPrint={() => {

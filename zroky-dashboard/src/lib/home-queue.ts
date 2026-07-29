@@ -194,7 +194,7 @@ export function buildDecisionQueue({
       detail: approval.reasons[0] ?? (approval.expires_at ? `Expires ${timeUntil(approval.expires_at, nowMs)}` : "Human decision required."),
       status: approval.status,
       actionLabel: "Review",
-      href: `/approvals?decision_id=${encodeURIComponent(approval.id)}`,
+      href: `/operations?decision_id=${encodeURIComponent(approval.id)}`,
       createdAt: approval.created_at,
       actionId: intent?.action_id ?? null,
       decisionId: approval.id,
@@ -217,7 +217,7 @@ export function buildDecisionQueue({
       detail: `${view.statusLabel} / ${view.receiptLabel}`,
       status: intent.proof_status,
       actionLabel: "Open action",
-      href: `/actions?action_id=${encodeURIComponent(intent.action_id)}`,
+      href: `/operations?action_id=${encodeURIComponent(intent.action_id)}`,
       createdAt: intent.created_at,
       actionId: intent.action_id,
       decisionId: intent.runtime_policy_decision_id,
@@ -240,7 +240,7 @@ export function buildDecisionQueue({
       detail: `Attempt ${attempt.attempt_number} ${attempt.status} / ${ageDetail(attempt.updated_at, nowMs)}`,
       status: attempt.status,
       actionLabel: "Open action",
-      href: `/actions?action_id=${encodeURIComponent(attempt.action_id)}`,
+      href: `/operations?action_id=${encodeURIComponent(attempt.action_id)}`,
       createdAt: attempt.updated_at,
       actionId: attempt.action_id,
       decisionId: intent?.runtime_policy_decision_id ?? null,
@@ -268,11 +268,11 @@ export function homeVerdictForQueue(
 } {
   if (!hasSetup) {
     return {
-      title: "Setup required",
-      detail: "Protect your first agent action before trusting production autonomy.",
+      title: "Your agent control center",
+      detail: "See what needs approval, what was verified, and where autonomy is creating risk.",
       tone: "neutral",
       ctaLabel: "Set up agent",
-      ctaHref: "/agents/setup",
+      ctaHref: "/workflows",
     };
   }
   const first = rows[0];
@@ -291,7 +291,7 @@ export function homeVerdictForQueue(
       detail: "No agent action needs your decision right now.",
       tone: "success",
       ctaLabel: "View actions",
-      ctaHref: "/actions",
+      ctaHref: "/operations",
     };
   }
   if (first.priority === "P0") {

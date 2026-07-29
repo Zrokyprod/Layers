@@ -36,6 +36,7 @@ def _issue_token(user: User) -> AuthTokenResponse:
     secret = _require_auth_secret()
     access_expire_hours = max(1, settings.AUTH_JWT_EXPIRE_HOURS)
     refresh_expire_hours = max(access_expire_hours, settings.AUTH_REFRESH_TOKEN_EXPIRE_HOURS)
+    revocation_generation = token_store.revocation_generation(user.id)
 
     access_token = issue_access_token(
         user_id=user.id,
@@ -43,6 +44,7 @@ def _issue_token(user: User) -> AuthTokenResponse:
         subject=user.subject,
         expire_hours=access_expire_hours,
         secret=secret,
+        token_revocation_generation=revocation_generation,
     )
     refresh_token = issue_refresh_token(
         user_id=user.id,
@@ -50,6 +52,7 @@ def _issue_token(user: User) -> AuthTokenResponse:
         subject=user.subject,
         expire_hours=refresh_expire_hours,
         secret=secret,
+        token_revocation_generation=revocation_generation,
     )
 
     return AuthTokenResponse(
@@ -155,7 +158,7 @@ def _validated_session_handoff_token(body: SessionHandoffRequest, db: Session) -
             detail="Invalid session handoff tokens.",
         )
 
-    if token_store.is_user_token_revoked(access_user_id, access_claims.get("iat")):
+    if token_store.is_user_token_revoked(access_user_id, access_claims.get("iat"), access_claims.get("rev")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="All sessions for this user have been revoked.",

@@ -34,7 +34,7 @@ export type ControlLoopStats = {
 };
 
 const LOOP_LINKS = [
-  { label: "Agents", href: "/agents" },
+  { label: "Agents", href: "/operations" },
   { label: "Policies", href: "/policies" },
   { label: "Approvals", href: "/approvals" },
   { label: "Outcomes", href: "/outcomes" },
@@ -58,7 +58,7 @@ export function ControlLoopStrip({
       id: "propose",
       label: "Propose",
       detail: "Agent submits an intent with contract and digest.",
-      href: "/actions",
+      href: "/operations",
       stat: metricLabel(actionCount, "intents"),
       Icon: Bot,
     },
@@ -82,7 +82,7 @@ export function ControlLoopStrip({
       id: "run",
       label: "Run",
       detail: "Approved actions are handed to a trusted runner.",
-      href: "/agents",
+      href: "/operations",
       stat: "Runner path",
       Icon: PlayCircle,
     },
@@ -98,7 +98,7 @@ export function ControlLoopStrip({
       id: "receipt",
       label: "Receipt",
       detail: "Signed receipts prove what was allowed and why.",
-      href: "/actions",
+      href: "/operations",
       stat: metricLabel(receiptCount, "receipts"),
       Icon: ReceiptText,
     },

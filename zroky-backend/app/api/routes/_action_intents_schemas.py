@@ -131,6 +131,7 @@ class ActionRunnerRegisterRequest(BaseModel):
     supported_operation_kinds: list[str] = Field(default_factory=list)
     credential_scope: dict[str, Any] = Field(default_factory=dict)
     capability_version: str | None = Field(default=None, max_length=64)
+    capability_manifest: dict[str, Any] = Field(default_factory=dict)
 
 
 class ActionRunnerHeartbeatRequest(BaseModel):
@@ -138,6 +139,7 @@ class ActionRunnerHeartbeatRequest(BaseModel):
     heartbeat_payload: dict[str, Any] = Field(default_factory=dict)
     supported_operation_kinds: list[str] | None = None
     capability_version: str | None = Field(default=None, max_length=64)
+    capability_manifest: dict[str, Any] | None = None
 
 
 class ActionRunnerClaimRequest(BaseModel):
@@ -177,6 +179,7 @@ class ActionRunnerResponse(BaseModel):
     status: str
     supported_operation_kinds: list[str]
     credential_scope: dict[str, Any]
+    capability_manifest: dict[str, Any]
     heartbeat_payload: dict[str, Any]
     capability_version: str | None
     last_heartbeat_at: datetime | None
@@ -200,6 +203,7 @@ class ActionExecutionAdapterContractResponse(BaseModel):
     verification_connector: str
     credential_boundary: str
     protected_credential_returned: bool
+    executor_enforcement_options: dict[str, list[str]]
 
 
 class ActionExecutionAdapterListResponse(BaseModel):

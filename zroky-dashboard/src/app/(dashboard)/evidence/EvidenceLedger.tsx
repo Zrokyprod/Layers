@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Clock3, Download, Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
@@ -35,7 +34,7 @@ type EvidenceLedgerProps = {
 function rowKindLabel(row: EvidenceLedgerRow): string {
   if (row.kind === "action_receipt") {
     if (row.sourceLabel === "Blocked action audit") return "Blocked action audit";
-    return row.exportable ? "Signed receipt" : "Protected action record";
+    return row.exportable ? "Action receipt" : "Protected action record";
   }
   if (row.kind === "orphan_decision") return "Guard-only evidence";
   return "Unlinked outcome";
@@ -120,12 +119,9 @@ export function EvidenceLedger({
             placeholder="Search proof records..."
           />
         </label>
-        <div
-          className="ev-manifest-scope"
-          aria-label={`Manifest scope: ${exportableCount} exportable record${exportableCount === 1 ? "" : "s"} in view`}
-        >
+        <div className="ev-manifest-scope" aria-label="Manifest scope">
           <strong>{exportableCount}</strong>
-          <span>exportable</span>
+          <span>exportable in view</span>
         </div>
       </div>
 
@@ -151,46 +147,64 @@ export function EvidenceLedger({
       ) : filteredRows.length === 0 ? (
         <div className="ev-empty-state">No records match this filter or search.</div>
       ) : (
-        <>
-          <div className="ev-ledger-list">
-          {filteredRows.map((row) => {
-            const selected = row.id === selectedRowId;
-            return (
-              <article
-                key={row.id}
-                className="ev-ledger-row"
-                data-focused={selected ? "true" : undefined}
-                data-kind={row.kind}
-                data-tone={row.tone}
-                aria-current={selected ? "true" : undefined}
-              >
-                <div className="ev-ledger-main">
-                  <div className="ev-ledger-titleline">
-                    <div>
-                      <span className="ev-row-kind">{rowKindLabel(row)}</span>
-                      <h3>{row.title}</h3>
-                    </div>
-                    <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} />
-                  </div>
-                  <p>{row.agentName} / {row.actionType}</p>
-                  <div className="ev-row-facts" aria-label="Record summary">
-                    <span><Clock3 size={13} aria-hidden="true" />{formatDateTime(row.checkedAt)}</span>
-                    <span><Download size={13} aria-hidden="true" />{exportLabel(row)}</span>
-                  </div>
-                  <small className="ev-row-detail">{row.systemRef ?? row.detail}</small>
-                </div>
-                <div className="ev-ledger-actions">
-                  <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
-                    {actionLabel(row)}
-                  </DashboardButton>
-                  {row.kind === "unlinked_outcome" ? (
-                    <Link className="ev-link" href="/outcomes">Open outcomes</Link>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-          </div>
+        <div className="ev-ledger-table-wrap">
+          <table className="ev-ledger-table">
+            <thead>
+              <tr>
+                <th scope="col">Proof</th>
+                <th scope="col">Workflow</th>
+                <th scope="col">Source</th>
+                <th scope="col">Verdict</th>
+                <th scope="col">Signed</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((row) => {
+                const selected = row.id === selectedRowId;
+                return (
+                  <tr
+                    key={row.id}
+                    className="ev-ledger-row"
+                    data-focused={selected ? "true" : undefined}
+                    data-kind={row.kind}
+                    data-tone={row.tone}
+                    aria-current={selected ? "true" : undefined}
+                  >
+                    <td>
+                      <span className="ev-proof-name">
+                        <span className="ev-proof-dot" aria-hidden="true" />
+                        <span>
+                          <strong>{row.title}</strong>
+                          <small>{rowKindLabel(row)}</small>
+                          {row.digest ? (
+                            <small className="ev-proof-digest">
+                              <span>Digest</span>
+                              <code>{row.digest}</code>
+                            </small>
+                          ) : null}
+                        </span>
+                      </span>
+                    </td>
+                    <td>{row.kind === "unlinked_outcome" ? row.actionType : row.agentName}</td>
+                    <td>{row.systemRef ?? row.sourceLabel}</td>
+                    <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
+                    <td>
+                      <span className="ev-signed-cell">
+                        {row.id.startsWith("demo:") ? row.detail : formatDateTime(row.checkedAt)}
+                        <small>{exportLabel(row)}</small>
+                      </span>
+                    </td>
+                    <td>
+                      <DashboardButton onClick={() => onSelectRow(row)} size="sm" variant="soft">
+                        {actionLabel(row)}
+                      </DashboardButton>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           {hasMore ? (
             <div className="ev-ledger-load-more">
               <DashboardButton disabled={isLoadingMore} onClick={onLoadMore} variant="soft">
@@ -198,7 +212,7 @@ export function EvidenceLedger({
               </DashboardButton>
             </div>
           ) : null}
-        </>
+        </div>
       )}
     </section>
   );

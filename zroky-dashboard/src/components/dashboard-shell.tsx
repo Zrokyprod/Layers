@@ -3,48 +3,41 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
-  ArrowRight,
-  Activity,
-  Bot,
-  Calendar,
-  Check,
+  Bell,
   ChevronDown,
-  Clock3,
+  CreditCard,
   FileJson,
   FolderOpen,
   Gauge,
   Inbox,
+  KeyRound,
   LockKeyhole,
   LogOut,
   Menu,
+  Network,
   Plug,
-  RotateCcw,
   Search,
   Settings2,
-  ShieldAlert,
-  ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
 
 import { clearAccessToken } from "@/lib/auth";
-import { getBillingMe, getBillingUsage, listIssues } from "@/lib/api";
-import { isDashboardPrimaryPath } from "@/lib/dashboard-route-contract";
+import { getBillingMe, listIssues } from "@/lib/api";
+import { DASHBOARD_PRIMARY_ROUTES } from "@/lib/dashboard-route-contract";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
-import { useMe, useMyProjects, useProjectSettings } from "@/lib/hooks";
-import { formatPlanLabel, hasFeatureAccess } from "./feature-gate";
+import { useMe, useMyProjects } from "@/lib/hooks";
+import { hasFeatureAccess } from "./feature-gate";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsHelp } from "./shortcuts-help";
 
 type NavItem = {
   id: string;
-  href?: string;
+  href: string;
   label: string;
   subtitle: string;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
@@ -54,223 +47,44 @@ type NavItem = {
   visibleInNav?: boolean;
 };
 
-function visibleInPrimaryNav(href: string): boolean {
-  return isDashboardPrimaryPath(href);
-}
+const NAV_META: Record<string, Pick<NavItem, "subtitle" | "Icon">> = {
+  home: { subtitle: "Proof posture, attention queue, verification readiness, and recent evidence.", Icon: Inbox },
+  operations: { subtitle: "Runs, incidents, approvals, and remediation queues.", Icon: Gauge },
+  workflows: { subtitle: "Assurance Packs, policies, and trusted workflow bindings.", Icon: Network },
+  connectors: { subtitle: "Read-only source connectors and proof readiness.", Icon: Plug },
+  evidence: { subtitle: "Signed bundles, proof trails, audit hashes, and export readiness.", Icon: FileJson },
+  settings: { subtitle: "API keys, members, billing, and workspace controls.", Icon: Settings2 },
+};
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    id: "home",
-    href: "/home",
-    label: "Home",
-    subtitle: "Mission control for protected agents, held actions, verified outcomes, and evidence gaps.",
-    Icon: Inbox,
-    visibleInNav: visibleInPrimaryNav("/home"),
-  },
-  {
-    id: "actions",
-    href: "/actions",
-    label: "Actions",
-    subtitle: "Protected action lifecycle, quotas, receipts, verification, and bypass risk.",
-    Icon: Activity,
-    visibleInNav: visibleInPrimaryNav("/actions"),
-  },
-  {
-    id: "agents",
-    href: "/agents",
-    label: "Agents",
-    subtitle: "Protected agents, mandates, high-risk action coverage, and outcome proof readiness.",
-    Icon: Bot,
-    visibleInNav: visibleInPrimaryNav("/agents"),
-  },
-  {
-    id: "approvals",
-    href: "/approvals",
-    label: "Approvals",
-    subtitle: "Held risky actions, runtime policy decisions, approval trail, and Evidence Pack access.",
-    Icon: LockKeyhole,
-    visibleInNav: visibleInPrimaryNav("/approvals"),
-  },
-  {
-    id: "outcomes",
-    href: "/outcomes",
-    label: "Outcomes",
-    subtitle: "System-of-record verification for high-stakes agent actions.",
-    Icon: ShieldCheck,
-    visibleInNav: visibleInPrimaryNav("/outcomes"),
-  },
-  {
-    id: "evidence",
-    href: "/evidence",
-    label: "Evidence",
-    subtitle: "Decision evidence packs, outcome proof, audit hashes, and customer export readiness.",
-    Icon: FileJson,
-    visibleInNav: visibleInPrimaryNav("/evidence"),
-  },
-  {
-    id: "connectors",
-    href: "/integrations",
-    label: "Connectors",
-    subtitle: "System-of-record connectors, preflight status, and pilot handoff readiness.",
-    Icon: Plug,
-    visibleInNav: visibleInPrimaryNav("/integrations"),
-  },
-  {
-    id: "policies",
-    href: "/policies",
-    label: "Policies",
-    subtitle: "Agent mandates, runtime limits, approval-required actions, and kill switch state.",
-    Icon: ShieldAlert,
-    visibleInNav: visibleInPrimaryNav("/policies"),
-  },
-  {
-    id: "settings",
-    href: "/settings/keys",
-    label: "Settings",
-    subtitle: "API keys, members, billing, and workspace controls.",
-    Icon: Settings2,
-    visibleInNav: visibleInPrimaryNav("/settings"),
-  },
+const VISIBLE_NAV: NavItem[] = DASHBOARD_PRIMARY_ROUTES.map((route) => ({
+  ...route,
+  ...(NAV_META[route.id] ?? { subtitle: route.label, Icon: Inbox }),
+}));
+
+const SETTINGS_CHILD_LINKS = [
+  { href: "/settings/keys", label: "API Keys", Icon: KeyRound },
+  { href: "/settings/team", label: "Members", Icon: UserRound },
+  { href: "/settings/billing", label: "Plan & Billing", Icon: CreditCard },
+  { href: "/settings/workspace", label: "Workspace", Icon: FolderOpen },
 ];
 
-const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
+type ShellMenu = "account" | "workspace";
 
-const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; itemIds: string[] }> = [
-  { id: "control", label: "Control", itemIds: ["home", "approvals", "actions", "agents"] },
-  { id: "proof", label: "Proof", itemIds: ["outcomes", "evidence"] },
-  { id: "configure", label: "Configure", itemIds: ["policies", "connectors"] },
-];
-
-const DATE_PRESETS = [
-  { id: "24h", label: "Last 24 hours", days: 1, helper: "Action exceptions and cost from the last day." },
-  { id: "7d", label: "Last 7 days", days: 7, helper: "Default production review window." },
-  { id: "14d", label: "Last 14 days", days: 14, helper: "Useful for release-cycle checks." },
-  { id: "30d", label: "Last 30 days", days: 30, helper: "Monthly trend review." },
-] as const;
-
-type DatePresetId = (typeof DATE_PRESETS)[number]["id"];
-type ShellMenu = "workspace" | "route" | "date" | "env" | "account";
-
-const DASHBOARD_ROUTES = [
-  ...NAV_ITEMS,
-  {
-    id: "projects",
-    href: "/projects",
-    label: "Projects",
-    subtitle: "Project list, subscription limit, active context, and deletion controls.",
-    Icon: FolderOpen,
-  },
-  {
-    id: "account",
-    href: "/account",
-    label: "Account",
-    subtitle: "Personal identity, password, sessions, and account security.",
-    Icon: UserRound,
-  },
-];
-
-function getRouteMeta(pathname: string): NavItem | null {
-  return (
-    DASHBOARD_ROUTES.find((r) => {
-      if (!r.href) return false;
-      const prefix = routePrefixForHref(r.href);
-      return pathname === prefix || pathname.startsWith(`${prefix}/`);
-    }) ?? null
-  );
-}
-
-function getTitle(pathname: string): string {
-  return getRouteMeta(pathname)?.label ?? "Dashboard";
-}
-
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("en", {
-    notation: "compact",
-    maximumFractionDigits: value >= 10_000 ? 1 : 0,
-  }).format(value);
-}
-
-function formatDateShort(date: Date): string {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
-}
-
-function formatStatusLabel(value: string | null | undefined): string {
-  const normalized = (value ?? "").trim().toLowerCase();
-  if (!normalized) return "Unavailable";
-  if (normalized === "loading") return "Syncing";
-  return normalized
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
-}
-
-function formatClassToken(value: string | null | undefined): string {
-  const normalized = (value ?? "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-  return normalized || "unavailable";
-}
-
-function safeDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function periodCopy(currentPeriodEnd: string | null | undefined, trialEnd: string | null | undefined): string {
-  const trial = safeDate(trialEnd);
-  const periodEnd = safeDate(currentPeriodEnd);
-  const target = trial ?? periodEnd;
-  if (!target) return "Billing period unavailable";
-
-  const today = new Date();
-  const msRemaining = target.getTime() - today.getTime();
-  const daysRemaining = Math.ceil(msRemaining / 86_400_000);
-  const prefix = trial ? "Trial ends" : "Renews";
-
-  if (daysRemaining < 0) return `${prefix} ${formatDateShort(target)}`;
-  if (daysRemaining === 0) return `${prefix} today`;
-  if (daysRemaining === 1) return `${prefix} tomorrow`;
-  return `${prefix} in ${daysRemaining} days`;
-}
-
-function numericEntitlement(planTemplate: Record<string, unknown> | undefined, key: string): number | null {
-  const value = planTemplate?.[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function dateRangeLabel(
-  dateRange: { from: Date | null; to: Date | null },
-  activePreset: DatePresetId,
-): string {
-  const preset = DATE_PRESETS.find((item) => item.id === activePreset);
-  if (preset) return preset.label;
-  if (dateRange.from && dateRange.to) {
-    return `${formatDateShort(dateRange.from)} - ${formatDateShort(dateRange.to)}`;
-  }
-  return "Last 7 days";
+function demoDashboardRequested(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("demoHome") === "1" || params.get("demoOperations") === "1" || params.get("demoDashboard") === "1";
 }
 
 function routePrefixForHref(href: string): string {
-  if (href.startsWith("/settings")) return "/settings";
-  if (href.startsWith("/projects")) return "/projects";
-  return href;
+  const cleanHref = href.split(/[?#]/)[0] || href;
+  if (cleanHref.startsWith("/settings")) return "/settings";
+  if (cleanHref.startsWith("/projects")) return "/projects";
+  return cleanHref;
 }
 
 function navClass(pathname: string, href: string): string {
+  if (href.includes("#") || href.includes("?")) return "nav-link";
   const prefix = routePrefixForHref(href);
   return pathname === prefix || pathname.startsWith(`${prefix}/`)
     ? "nav-link nav-link-active"
@@ -380,12 +194,12 @@ function ProjectContextGate({
     ? "No active project found"
     : requiresSelection
       ? "Select a project to load this dashboard"
-      : "Loading project context";
+      : "Preparing workspace";
   const body = noProjects
     ? "Ask an owner to add your account to a project before dashboard modules can load data."
     : requiresSelection
       ? "Dashboard data is scoped by project. Choose the project you want to inspect."
-      : "Preparing project-scoped data before loading dashboard modules.";
+      : "Preparing project-scoped dashboard modules.";
 
   return (
     <section className="panel project-context-gate" aria-live="polite">
@@ -394,7 +208,7 @@ function ProjectContextGate({
           <h3>{title}</h3>
           <p>{body}</p>
         </div>
-        {isLoading ? <span className="pill">Loading</span> : null}
+        {isLoading ? <span className="pill">Syncing</span> : null}
       </div>
 
       {requiresSelection ? (
@@ -425,37 +239,22 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
   const appShellRef = useRef<HTMLDivElement>(null);
-  const workspaceMenuRef = useRef<HTMLDivElement>(null);
-  const workspaceButtonRef = useRef<HTMLButtonElement>(null);
-  const workspacePopoverRef = useRef<HTMLDivElement>(null);
-  const routeMenuRef = useRef<HTMLDivElement>(null);
-  const dateMenuRef = useRef<HTMLDivElement>(null);
-  const envMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
   const [projectSearch, setProjectSearch] = useState("");
-  const [workspacePopoverStyle, setWorkspacePopoverStyle] = useState<CSSProperties | null>(null);
-  const [workspacePopoverTarget, setWorkspacePopoverTarget] = useState<HTMLElement | null>(null);
-  const [activeDatePreset, setActiveDatePreset] = useState<DatePresetId>("7d");
   const [compactShell, setCompactShell] = useState(false);
-  const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
+  const [, setCompactSidebarOpen] = useState(false);
+  const [localPreview, setLocalPreview] = useState(false);
   const accountMenuOpen = openMenu === "account";
 
   const {
-    sidebarOpen,
     toggleSidebar,
     setLastVisitedPage,
     selectedProject,
     setSelectedProject,
-    dateRange,
-    setDateRange,
-    realTimeEnabled,
-    toggleRealTime,
   } = useDashboardStore();
 
-  const projectQuery = useProjectSettings(selectedProject);
   const myProjectsQuery = useMyProjects();
   const meQuery = useMe();
 
@@ -466,13 +265,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }, [pathname, setLastVisitedPage]);
 
   useEffect(() => {
-    setWorkspacePopoverTarget(appShellRef.current ?? document.body);
-  }, []);
+    setLocalPreview(demoDashboardRequested());
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
 
-    const mobileShell = window.matchMedia("(max-width: 1120px)");
+    const mobileShell = window.matchMedia("(max-width: 1279px)");
     const syncMobileSidebar = () => {
       const isCompact = mobileShell.matches;
       setCompactShell(isCompact);
@@ -503,11 +302,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     : null;
   const projectSelectionRequired = myProjects.length > 1 && !selectedProject;
   const noActiveProjects = Boolean(myProjectsQuery.data && myProjects.length === 0);
-  const projectContextLoading = myProjectsQuery.isLoading || (myProjects.length === 1 && !selectedProject);
-  const projectContextReady = Boolean(selectedProject)
+  const localProjectFallback = localPreview && (myProjectsQuery.isError || process.env.NODE_ENV !== "production");
+  const projectContextLoading = !localProjectFallback && (myProjectsQuery.isLoading || (myProjects.length === 1 && !selectedProject));
+  const projectContextReady = localProjectFallback || (Boolean(selectedProject)
     && !projectSelectionRequired
     && !noActiveProjects
-    && (!myProjectsQuery.data || selectedProjectMembership != null);
+    && (!myProjectsQuery.data || selectedProjectMembership != null));
 
   useEffect(() => {
     if (!myProjectsQuery.data) return;
@@ -532,14 +332,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node;
-      const isInsideMenu = [
-        workspaceMenuRef,
-        workspacePopoverRef,
-        routeMenuRef,
-        dateMenuRef,
-        envMenuRef,
-        accountMenuRef,
-      ].some((ref) => ref.current?.contains(target));
+      const isInsideMenu = accountMenuRef.current?.contains(target);
       if (!isInsideMenu) setOpenMenu(null);
     }
 
@@ -557,48 +350,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     };
   }, [openMenu]);
 
-  useLayoutEffect(() => {
-    if (openMenu !== "workspace") {
-      setWorkspacePopoverStyle(null);
-      return;
-    }
-
-    function syncWorkspacePopover() {
-      if (typeof window === "undefined") return;
-      const trigger = workspaceButtonRef.current;
-      if (!trigger) return;
-
-      const gutter = 12;
-      const rect = trigger.getBoundingClientRect();
-      const width = Math.min(312, window.innerWidth - gutter * 2);
-      const left = Math.min(Math.max(rect.left, gutter), window.innerWidth - width - gutter);
-      const bottom = Math.max(gutter, window.innerHeight - rect.top + 8);
-      const maxHeight = Math.max(180, rect.top - gutter * 2);
-
-      setWorkspacePopoverStyle({
-        position: "fixed",
-        left,
-        right: "auto",
-        top: "auto",
-        bottom,
-        width,
-        maxHeight,
-      });
-    }
-
-    syncWorkspacePopover();
-    window.addEventListener("resize", syncWorkspacePopover);
-    window.addEventListener("scroll", syncWorkspacePopover, true);
-    return () => {
-      window.removeEventListener("resize", syncWorkspacePopover);
-      window.removeEventListener("scroll", syncWorkspacePopover, true);
-    };
-  }, [openMenu]);
-
   const issuesQuery = useQuery({
     queryKey: ["shell-issues-count"],
     queryFn: () => listIssues({ status: "open", limit: 50 }),
-    enabled: projectContextReady,
+    enabled: projectContextReady && !localProjectFallback,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
@@ -606,118 +361,29 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const billingQuery = useQuery({
     queryKey: ["billing", "me"],
     queryFn: ({ signal }) => getBillingMe(signal),
-    enabled: projectContextReady,
-    staleTime: 60_000,
-  });
-
-  const billingUsageQuery = useQuery({
-    queryKey: ["billing", "usage"],
-    queryFn: ({ signal }) => getBillingUsage(signal),
-    enabled: projectContextReady,
+    enabled: projectContextReady && !localProjectFallback,
     staleTime: 60_000,
   });
 
   const issuesCount = issuesQuery.data?.items?.length ?? 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
-  const subscriptionContextLoading = !projectContextReady && projectContextLoading;
-  const billingLoading = subscriptionContextLoading || billingQuery.isLoading;
-  const planLabel = billingLoading ? "Loading" : formatPlanLabel(planCode);
-  const billingStatus = billingQuery.data?.status ?? (billingLoading ? "loading" : "unavailable");
-  const billingStatusLabel = formatStatusLabel(billingStatus);
-  const billingStatusClass = formatClassToken(billingStatus);
-  const protectedActionsQuota = numericEntitlement(planTemplate, "actions.protected.monthly_quota");
-  const protectedActionsMeter = billingUsageQuery.data?.protected_actions;
-  const protectedActionsUsed = typeof protectedActionsMeter?.used === "number" ? protectedActionsMeter.used : null;
-  const protectedActionsLimit = protectedActionsMeter?.unlimited
-    ? -1
-    : typeof protectedActionsMeter?.limit === "number"
-      ? protectedActionsMeter.limit
-      : protectedActionsQuota;
-  const protectedActionsQuotaLabel = protectedActionsQuota === -1
-    ? "Unlimited"
-    : protectedActionsQuota != null
-      ? formatCompactNumber(protectedActionsQuota)
-      : null;
-  const protectedActionsLimitLabel = protectedActionsLimit === -1
-    ? "Unlimited"
-    : protectedActionsLimit != null
-      ? formatCompactNumber(protectedActionsLimit)
-      : protectedActionsQuotaLabel;
-  const planPeriod = billingLoading
-    ? "Syncing subscription"
-    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && protectedActionsLimitLabel
-      ? protectedActionsLimit === -1
-        ? "Unlimited plan"
-        : "Monthly quota"
-      : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
-  const protectedActionsPercent = protectedActionsLimit != null && protectedActionsLimit > 0 && protectedActionsUsed != null
-    ? clampPercent((protectedActionsUsed / protectedActionsLimit) * 100)
-    : 0;
-  const protectedActionsUsagePending = billingUsageQuery.isLoading && !protectedActionsMeter;
-  const planMetricMain = billingLoading
-    ? "Loading"
-    : protectedActionsLimit === -1
-      ? "Unlimited"
-      : protectedActionsUsed != null && protectedActionsLimitLabel
-        ? `${formatCompactNumber(protectedActionsUsed)} / ${protectedActionsLimitLabel}`
-        : protectedActionsLimitLabel
-          ? `0 / ${protectedActionsLimitLabel}`
-          : "Quota n/a";
-  const planMetricTotal = billingLoading
-    ? "usage"
-    : protectedActionsLimit === -1
-      ? "protected actions"
-      : protectedActionsUsagePending
-        ? "syncing usage"
-        : protectedActionsMeter
-          ? "used this month"
-          : "plan quota";
-  const showPlanUsageTrack = protectedActionsLimit != null && protectedActionsLimit > 0;
-  const planUsagePercent = showPlanUsageTrack ? protectedActionsPercent : 0;
-  const protectedActionsUsageTone =
-    protectedActionsMeter?.state === "exceeded" ||
-    protectedActionsMeter?.state === "blocked" ||
-    protectedActionsPercent >= 100
-      ? "critical"
-      : protectedActionsMeter?.state === "near_limit" || protectedActionsPercent >= 80
-        ? "warning"
-        : "ok";
-  const planCardStatusClass =
-    protectedActionsUsageTone === "critical"
-      ? "is-critical"
-      : protectedActionsUsageTone === "warning"
-        ? "is-warning"
-        : "is-ok";
-  const planFooterLabel =
-    protectedActionsUsageTone === "critical"
-      ? "Limit reached"
-      : protectedActionsUsageTone === "warning"
-        ? "Near monthly limit"
-        : planPeriod;
-  const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
-  const currentRoute = getRouteMeta(pathname);
-  const showDashboardTimeWindow = !pathname.startsWith("/settings");
-  const sidebarVisible = compactShell ? compactSidebarOpen : sidebarOpen;
+  const settingsNavActive = pathname === "/settings" || pathname.startsWith("/settings/");
+  const sidebarVisible = true;
 
   const badges: Record<string, number> = {};
   if (issuesCount > 0) badges.issues = issuesCount;
 
-  const orgName =
-    selectedProjectMembership?.project_name?.trim() ||
-    projectQuery.data?.name?.trim() ||
-    (projectSelectionRequired
-      ? "Select project"
-      : myProjectsQuery.isLoading || projectQuery.isLoading
-        ? "Loading project"
-        : "Project unavailable");
-  const envDisplay = envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
   const accountEmail = meQuery.data?.email?.trim() || null;
   const accountName =
     meQuery.data?.display_name?.trim() ||
     (accountEmail ? accountEmail.split("@")[0] : null) ||
     (meQuery.isLoading ? "Loading account" : "Account");
   const accountInitials = initials(accountName || accountEmail || "User");
+  const workspaceName =
+    selectedProjectMembership?.project_name?.trim() ||
+    (localProjectFallback ? "Local preview" : null) ||
+    (projectSelectionRequired ? "Select project" : "ZROKY workspace");
 
   function toggleMenu(menu: ShellMenu) {
     if (menu === "workspace" && openMenu !== "workspace") setProjectSearch("");
@@ -733,32 +399,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     toggleSidebar();
   }
 
-  function applyDatePreset(presetId: DatePresetId) {
-    const preset = DATE_PRESETS.find((item) => item.id === presetId) ?? DATE_PRESETS[1];
-    const to = new Date();
-    const from = new Date(to);
-    from.setDate(to.getDate() - preset.days);
-    setActiveDatePreset(preset.id);
-    setDateRange({ from, to });
+  function openCommandPalette() {
     setOpenMenu(null);
-    void queryClient.invalidateQueries({
-      predicate: (query) => {
-        const root = query.queryKey[0];
-        return (
-          typeof root === "string" &&
-          [
-            "calls",
-            "cost",
-            "loops",
-            "outcomes",
-            "traces",
-            "reliability",
-            "shell-issues-count",
-            "shell-agents-count",
-          ].includes(root)
-        );
-      },
-    });
+    window.dispatchEvent(new CustomEvent("open-command-palette"));
   }
 
   function switchProject(projectId: string) {
@@ -774,17 +417,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     });
   }
 
-  function openProjectDetails(projectId: string) {
-    if (projectId !== selectedProject) {
-      setSelectedProject(projectId);
-      void queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] !== "me",
-      });
-    }
-    setOpenMenu(null);
-    router.push(`/projects/${encodeURIComponent(projectId)}`);
-  }
-
   function onLogout() {
     setOpenMenu(null);
     clearAccessToken();
@@ -792,127 +424,51 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
-  const workspacePopover = openMenu === "workspace" && workspacePopoverStyle ? (
-    <div
-      ref={workspacePopoverRef}
-      className="shell-popover shell-popover-up shell-popover-portal org-popover"
-      role="menu"
-      aria-label="Project menu"
-      style={workspacePopoverStyle}
-    >
-      {showProjectSearch ? (
-        <label className="org-project-search">
-          <Search size={14} aria-hidden="true" />
-          <input
-            type="search"
-            value={projectSearch}
-            onChange={(event) => setProjectSearch(event.target.value)}
-            placeholder="Find project"
-            aria-label="Find project"
-          />
-        </label>
-      ) : null}
-      {filteredProjects.length > 0 ? (
-        filteredProjects.map((project) => {
-          const isSelected = project.project_id === selectedProject;
-          return (
-            <button
-              key={project.project_id}
-              type="button"
-              className={`shell-menu-item${isSelected ? " is-active" : ""}`}
-              role="menuitem"
-              aria-current={isSelected ? "true" : undefined}
-              onClick={() => openProjectDetails(project.project_id)}
-            >
-              <FolderOpen size={15} aria-hidden="true" />
-              <span>
-                <strong>{project.project_name}</strong>
-              </span>
-              {isSelected ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
-            </button>
-          );
-        })
-      ) : projectSearch.trim() ? (
-        <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
-          <Search size={15} aria-hidden="true" />
-          <span>
-            <strong>No matching projects</strong>
-            <small>Try another project name.</small>
-          </span>
-        </div>
-      ) : (
-        <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
-          <AlertTriangle size={15} aria-hidden="true" />
-          <span>
-            <strong>{myProjectsQuery.isLoading ? "Loading projects" : "No active projects"}</strong>
-            <small>{myProjectsQuery.isLoading ? "Fetching your memberships." : "Ask an admin to add you to a project."}</small>
-          </span>
-        </div>
-      )}
-      <div className="org-popover-divider" aria-hidden="true" />
-      <Link href="/projects" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
-        <Settings2 size={15} aria-hidden="true" />
-        <span>
-          <strong>Manage projects</strong>
-        </span>
-      </Link>
-      <Link href="/settings/team" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
-        <UserRound size={15} aria-hidden="true" />
-        <span>
-          <strong>Team access</strong>
-        </span>
-      </Link>
-    </div>
-  ) : null;
-
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${sidebarVisible ? "" : "sidebar-collapsed"}`}
+      className="app-shell"
       data-dashboard-system="control-v1"
     >
       {/* Sidebar */}
-      <aside className={`sidebar ${sidebarVisible ? "" : "sidebar-hidden"}`}>
-        <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
-          <Image
-            src="/zroky-brand.png"
-            alt="Zroky"
-            width={148}
-            height={50}
-            priority
-            className="sidebar-logo-image"
-          />
+      <aside className="sidebar">
+        <div className="sidebar-logo-row">
+          <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
+            <Image
+              src="/zroky-brand.png"
+              alt="Zroky"
+              width={112}
+              height={32}
+              priority
+              className="sidebar-logo-image"
+            />
+          </Link>
+          <button
+            type="button"
+            className="sidebar-logo-toggle"
+            onClick={onToggleSidebar}
+            aria-label="Toggle sidebar"
+            hidden
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            {sidebarVisible ? <X size={15} aria-hidden="true" /> : <Menu size={15} aria-hidden="true" />}
+          </button>
+        </div>
+
+        <Link href="/projects" className="sidebar-context-card" aria-label="Open project context">
+          <span className="sidebar-context-mark" aria-hidden="true">
+            <FolderOpen size={14} />
+          </span>
+          <span className="sidebar-context-copy">
+            <strong>{workspaceName}</strong>
+          </span>
+          <ChevronDown size={13} aria-hidden="true" />
         </Link>
 
         <nav className="nav-links" aria-label="Primary">
-          {NAV_SECTIONS.map((section, index) => {
-            const sectionItems = section.itemIds
-              .map((id) => VISIBLE_NAV.find((item) => item.id === id))
-              .filter((item): item is NavItem => Boolean(item));
-            if (sectionItems.length === 0) return null;
-            return (
-              <div key={section.id} className="nav-section-block" data-nav-section={section.id}>
-                <span className={`nav-section-label${index > 0 ? " nav-section-label-spaced" : ""}`}>{section.label}</span>
-                {sectionItems.map((item) => {
-                  const { badgeKey } = item;
-                  const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
-                  return (
-                    <NavFeatureGate
-                      key={item.id}
-                      item={item}
-                      pathname={pathname}
-                      badgeCount={count}
-                      planTemplate={planTemplate}
-                      planCode={planCode}
-                      entitlementLoading={billingQuery.isLoading}
-                    />
-                  );
-                })}
-              </div>
-            );
-          })}
-          <span className="nav-section-label nav-section-label-spaced">Workspace</span>
-          {VISIBLE_NAV.filter((item) => item.id === "settings").map((item) => {
+          <span className="nav-section-label">Navigation</span>
+          {VISIBLE_NAV.map((item) => {
             const { badgeKey } = item;
             const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
             return (
@@ -928,198 +484,53 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-
-        <div className="sidebar-foot">
-          <Link href="/settings/billing" className={`plan-card ${planCardStatusClass}`} aria-label="Open billing and usage">
-            <div className="plan-card-head">
-              <span className="plan-badge">{planLabel}</span>
-              <span className={`plan-status plan-status-${billingStatusClass}`}>{billingStatusLabel}</span>
-            </div>
-            <div className="plan-usage-summary">
-              <span className="plan-usage-kicker">Protected actions</span>
-              <div className="plan-usage-label">
-                <span>{planMetricMain}</span>
-                <span className="plan-usage-total">{planMetricTotal}</span>
-              </div>
-            </div>
-            {showPlanUsageTrack ? (
-              <div className="plan-usage-track">
-                <div className="plan-usage-fill" style={{ width: `${planUsagePercent}%` }} />
-              </div>
-            ) : null}
-            <div className="plan-card-footrow">
-              <span className="plan-renew">{planFooterLabel}</span>
-              <span className="plan-usage-link">
-                Billing <ArrowRight size={12} aria-hidden="true" />
-              </span>
-            </div>
-          </Link>
-
-          <div className="org-menu" ref={workspaceMenuRef}>
-            <button
-              ref={workspaceButtonRef}
-              type="button"
-              className={`org-widget${openMenu === "workspace" ? " org-widget-active" : ""}`}
-              aria-label="Open project menu"
-              aria-haspopup="menu"
-              aria-expanded={openMenu === "workspace"}
-              onClick={() => toggleMenu("workspace")}
-            >
-              <span className="org-avatar" aria-hidden="true">
-                {initials(orgName)}
-              </span>
-              <span className="org-info">
-                <span className="org-kicker">Project</span>
-                <span className="org-name">{orgName}</span>
-                <span className="org-meta">
-                  <span className="org-env">
-                    <span className="org-env-dot" />
-                    {envDisplay}
-                  </span>
-                </span>
-              </span>
-              <ChevronDown size={13} className="org-chevron" />
-            </button>
-            {workspacePopover && workspacePopoverTarget ? createPortal(workspacePopover, workspacePopoverTarget) : null}
-          </div>
-
-        </div>
       </aside>
 
       {/* Content */}
       <section className="content">
         <header className="topbar">
-          <div className="topbar-breadcrumb" ref={routeMenuRef}>
+          <div className="topbar-left">
             <button
               type="button"
               className="sidebar-toggle"
               onClick={onToggleSidebar}
               aria-label="Toggle sidebar"
+              hidden
+              aria-hidden="true"
+              tabIndex={-1}
             >
               {sidebarVisible ? <X size={16} /> : <Menu size={16} />}
             </button>
             <button
               type="button"
-              className="topbar-route-trigger"
-              aria-label="Open dashboard navigation menu"
-              aria-haspopup="menu"
-              aria-expanded={openMenu === "route"}
-              onClick={() => toggleMenu("route")}
+              className="topbar-search"
+              aria-label="Search evidence, incidents, workflows"
+              onClick={openCommandPalette}
             >
-              <span className="topbar-bc-page">{currentRoute?.label ?? getTitle(pathname)}</span>
-              <ChevronDown size={12} className="topbar-bc-chevron" />
+              <Search size={14} className="topbar-search-icon" aria-hidden="true" />
+              <span className="topbar-search-hint">Search evidence, incidents, workflows…</span>
+              <span className="topbar-search-kbd" aria-hidden="true">⌘K</span>
             </button>
-
-            {openMenu === "route" ? (
-              <div className="shell-popover topbar-popover route-popover" role="menu" aria-label="Dashboard navigation">
-                {VISIBLE_NAV.map((item) => {
-                  const Icon = item.Icon;
-                  const isActive = item.href ? pathname === item.href || pathname.startsWith(`${item.href}/`) : false;
-                  return item.href ? (
-                    <Link
-                      key={item.id}
-                      href={item.href}
-                      className={`shell-menu-item${isActive ? " is-active" : ""}`}
-                      role="menuitem"
-                      onClick={() => setOpenMenu(null)}
-                    >
-                      <Icon size={15} aria-hidden="true" />
-                      <span>
-                        <strong>{item.label}</strong>
-                      </span>
-                      {isActive ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
-                    </Link>
-                  ) : null;
-                })}
-              </div>
-            ) : null}
           </div>
 
           <div className="topbar-controls">
-            {showDashboardTimeWindow ? <div className="topbar-menu-wrap" ref={dateMenuRef}>
-              <button
-                type="button"
-                className="topbar-ctrl-btn"
-                aria-label="Choose dashboard time window"
-                aria-haspopup="menu"
-                aria-expanded={openMenu === "date"}
-                onClick={() => toggleMenu("date")}
-              >
-                <Calendar size={13} aria-hidden="true" />
-                <span>{selectedWindowLabel}</span>
-                <ChevronDown size={11} aria-hidden="true" />
-              </button>
-              {openMenu === "date" ? (
-                <div className="shell-popover topbar-popover date-popover" role="menu" aria-label="Dashboard time window">
-                  {DATE_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      className={`shell-menu-item${activeDatePreset === preset.id ? " is-active" : ""}`}
-                      role="menuitem"
-                      onClick={() => applyDatePreset(preset.id)}
-                    >
-                      <Clock3 size={15} aria-hidden="true" />
-                      <span>
-                        <strong>{preset.label}</strong>
-                      </span>
-                      {activeDatePreset === preset.id ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div> : null}
-
-            <div className="topbar-menu-wrap" ref={envMenuRef}>
-              <button
-                type="button"
-                className="topbar-env-btn"
-                aria-label="Open environment status"
-                aria-haspopup="menu"
-                aria-expanded={openMenu === "env"}
-                onClick={() => toggleMenu("env")}
-              >
-                <span className="topbar-env-dot" />
-                <span>{envDisplay}</span>
-                <ChevronDown size={11} aria-hidden="true" />
-              </button>
-              {openMenu === "env" ? (
-                <div className="shell-popover topbar-popover env-popover" role="menu" aria-label="Environment status">
-                  <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
-                    <Gauge size={15} aria-hidden="true" />
-                    <span>
-                      <strong>Runtime environment</strong>
-                    </span>
-                    <Check size={14} className="shell-menu-check" aria-hidden="true" />
-                  </div>
-                  <button
-                    type="button"
-                    className={`shell-menu-item${realTimeEnabled ? " is-active" : ""}`}
-                    role="menuitem"
-                    onClick={() => toggleRealTime()}
-                  >
-                    <RotateCcw size={15} aria-hidden="true" />
-                    <span>
-                      <strong>Live dashboard refresh</strong>
-                    </span>
-                    {realTimeEnabled ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <button type="button" className="topbar-icon-btn" aria-label="Notifications">
+              <Bell size={14} aria-hidden="true" />
+              {issuesCount > 0 ? <span className="topbar-notification-dot" aria-hidden="true" /> : null}
+            </button>
+            <span className="topbar-separator" aria-hidden="true" />
 
             <div className="topbar-menu-wrap topbar-account-menu" ref={accountMenuRef}>
               <button
                 type="button"
                 className={`topbar-account-btn${accountMenuOpen ? " topbar-account-btn-active" : ""}`}
-                aria-label={`Open profile menu for ${accountName}`}
+                aria-label="Open account menu"
                 aria-haspopup="menu"
                 aria-expanded={accountMenuOpen}
                 title={accountEmail ?? accountName}
                 onClick={() => toggleMenu("account")}
               >
-                <span className="user-avatar">{accountInitials}</span>
-                <span className="topbar-account-name">{accountName}</span>
+                <span className="topbar-account-name">Account</span>
                 <ChevronDown size={11} className="user-row-chevron" aria-hidden="true" />
               </button>
 

@@ -7,6 +7,8 @@ import EvidencePage from "./page";
 import type {
   ActionIntentResponse,
   ActionReceiptResponse,
+  FinalEvidenceBundleResponse,
+  FinalEvidenceBundleVerificationResponse,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   RuntimePolicyEvidencePackResponse,
@@ -17,7 +19,9 @@ const api = vi.hoisted(() => ({
   getActionIntentReceipt: vi.fn(),
   getEvidenceLedger: vi.fn(),
   getEvidenceManifest: vi.fn(),
+  getFinalEvidenceBundle: vi.fn(),
   getRuntimePolicyEvidencePack: vi.fn(),
+  verifyFinalEvidenceBundle: vi.fn(),
   listActionIntents: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
@@ -276,6 +280,54 @@ function evidencePack(overrides: Partial<RuntimePolicyEvidencePackResponse> = {}
   };
 }
 
+function finalBundle(overrides: Partial<FinalEvidenceBundleResponse> = {}): FinalEvidenceBundleResponse {
+  return {
+    id: "bundle_1",
+    project_id: "proj_1",
+    environment: "production",
+    subject_type: "incident",
+    subject_id: "incident_1",
+    bundle_digest: "abc123bundle",
+    bundle: {
+      schema_version: "zroky.final_evidence_bundle.v1",
+      intent: { id: "intent_1" },
+      policy: { decision: "allow" },
+      observations: [{ id: "obs_1" }],
+      snapshot: { classification: "verified" },
+      incident: { id: "incident_1" },
+      recovery: { status: "succeeded" },
+    },
+    signature: {
+      schema_version: "zroky.final_evidence_signature.v1",
+      envelope: "dsse-like",
+      payload_type: "application/vnd.zroky.final-evidence-bundle+json",
+      payload_digest: "sha256:abc123bundle",
+      algorithm: "Ed25519",
+      key_id: "zroky-action-receipt-v1",
+      public_key: "pub",
+      signature: "sig",
+      signed_payload: "bundle_json",
+    },
+    created_at: "2026-06-20T09:06:00Z",
+    ...overrides,
+  };
+}
+
+function finalBundleVerification(
+  overrides: Partial<FinalEvidenceBundleVerificationResponse> = {},
+): FinalEvidenceBundleVerificationResponse {
+  return {
+    bundle_id: "bundle_1",
+    bundle_digest: "abc123bundle",
+    verification_status: "pass",
+    digest_valid: true,
+    signature_valid: true,
+    algorithm: "Ed25519",
+    key_id: "zroky-action-receipt-v1",
+    ...overrides,
+  };
+}
+
 function ledgerResponse({
   decisions = [runtimeDecision()],
   intents = [actionIntent()],
@@ -358,6 +410,7 @@ describe("EvidencePage", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     api.getEvidenceLedger.mockResolvedValue(ledgerResponse());
     api.getActionIntentReceipt.mockResolvedValue(receipt());
+    api.getFinalEvidenceBundle.mockResolvedValue(finalBundle());
     api.getEvidenceManifest.mockResolvedValue({
       artifact: "zroky.evidence_manifest",
       schema_version: "zroky.evidence_manifest.v1",
@@ -396,6 +449,7 @@ describe("EvidencePage", () => {
       ],
     });
     api.getRuntimePolicyEvidencePack.mockResolvedValue(evidencePack());
+    api.verifyFinalEvidenceBundle.mockResolvedValue(finalBundleVerification());
   });
 
   it("renders the receipt-first ledger and loads only the selected Action Receipt", async () => {
@@ -410,9 +464,9 @@ describe("EvidencePage", () => {
     const ledger = screen.getByLabelText("Evidence ledger");
     const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
     expect(row).not.toBeNull();
-    expect(within(row).getByText("Signed receipt")).toBeInTheDocument();
-    expect(within(row).queryByText("Intent digest")).not.toBeInTheDocument();
-    expect(within(row).queryByText("sha256:intent_1")).not.toBeInTheDocument();
+    expect(within(row).getByText("Action receipt")).toBeInTheDocument();
+    expect(within(row).getByText("Digest")).toBeInTheDocument();
+    expect(within(row).getByText("sha256:intent_1")).toBeInTheDocument();
     expect(within(row).getByText("ticket:T-1001")).toBeInTheDocument();
     expect(within(row).getByText("Matched")).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: "Open receipt" })).toBeInTheDocument();
@@ -421,7 +475,7 @@ describe("EvidencePage", () => {
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
     expect(within(ledger).getByRole("button", { name: "Export manifest" })).toBeInTheDocument();
-    expect(within(ledger).getByLabelText("Manifest scope: 1 exportable record in view").textContent).toContain("1exportable");
+    expect(within(ledger).getByLabelText("Manifest scope").textContent).toContain("1exportable in view");
     expect(screen.getByRole("region", { name: "Independent verification material" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open public key" }).getAttribute("href")).toBe(
       "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
@@ -509,47 +563,22 @@ describe("EvidencePage", () => {
     expect(api.getActionIntentReceipt).not.toHaveBeenCalled();
   });
 
-  it("switches between protected-action proof records and keeps the URL in sync", async () => {
-    const guardDecision = runtimeDecision({
-      id: "decision_2",
-      call_id: "call_2",
-      trace_id: "trace_2",
-      action_type: "customer.access.grant",
-      tool_name: "customer.access.grant",
-      intended_action: { summary: "Grant customer access" },
-    });
-    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
-      decisions: [runtimeDecision(), guardDecision],
-    }));
-    api.getRuntimePolicyEvidencePack.mockImplementation((decisionId: string) => Promise.resolve(evidencePack({
-      decision_id: decisionId,
-      decision: {
-        ...guardDecision,
-        id: decisionId,
-        approval_scope_hash: "scope_2",
-      },
-    })));
+  it("loads a signed final evidence bundle from a direct link and shows verification", async () => {
+    window.history.pushState({}, "", "/evidence?bundle_id=bundle_1");
+    api.listActionIntents.mockResolvedValue({ total_in_page: 0, limit: 100, offset: 0, items: [] });
+    api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 0, items: [] });
+    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 0, items: [] });
 
     renderEvidencePage();
 
-    const ledger = await screen.findByLabelText("Evidence ledger");
-    const receiptRow = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
-    const guardRow = (await within(ledger).findByText("Grant customer access")).closest(".ev-ledger-row") as HTMLElement;
-
-    expect(receiptRow.getAttribute("data-focused")).toBe("true");
-    fireEvent.click(within(guardRow).getByRole("button", { name: "Open proof" }));
-
-    await waitFor(() => expect(guardRow.getAttribute("data-focused")).toBe("true"));
-    expect(window.location.search).toBe("?decision_id=decision_2");
-    expect(await screen.findByRole("heading", { name: "Runtime decision proof" })).toBeInTheDocument();
-    expect(screen.getByText("Guard-only Evidence Pack / Customer.access.grant")).toBeInTheDocument();
-    expect(api.getRuntimePolicyEvidencePack).toHaveBeenCalledWith("decision_2", expect.any(AbortSignal));
-
-    fireEvent.click(within(receiptRow).getByRole("button", { name: "Open receipt" }));
-
-    await waitFor(() => expect(receiptRow.getAttribute("data-focused")).toBe("true"));
-    expect(window.location.search).toBe("?action_id=act_1");
-    expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
+    const panel = await screen.findByLabelText("Focused proof panel");
+    expect(await within(panel).findByText("Signed Final Proof")).toBeInTheDocument();
+    expect(within(panel).getByText("Final bundle is independently checkable")).toBeInTheDocument();
+    expect(within(panel).getByText("Signed final proof verified")).toBeInTheDocument();
+    expect(within(panel).getAllByText("abc123bundle").length).toBeGreaterThan(0);
+    expect(within(panel).getByText("zroky-action-receipt-v1")).toBeInTheDocument();
+    expect(api.getFinalEvidenceBundle).toHaveBeenCalledWith("bundle_1", expect.any(AbortSignal));
+    expect(api.verifyFinalEvidenceBundle).toHaveBeenCalledWith("bundle_1", expect.any(AbortSignal));
   });
 
   it("searches the ledger and exports a scoped audit manifest", async () => {
@@ -568,7 +597,6 @@ describe("EvidencePage", () => {
     await waitFor(() => expect(api.getEvidenceManifest).toHaveBeenCalledWith(
       {
         dashboard_origin: "http://localhost:3000",
-        days: 7,
         end_date: "",
         filter: "all",
         search: "sha256:intent_1",

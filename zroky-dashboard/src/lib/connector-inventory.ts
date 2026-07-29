@@ -46,10 +46,15 @@ export type ConnectorInventoryId = ProofConnectorId | SupportConnectorId | Contr
 
 export const LAUNCH_VISIBLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "generic_rest",
-  "stripe_refund",
-  "postgres_read",
   "github",
-  "slack",
+  "hubspot_crm",
+  "jira_issue",
+  "salesforce_crm",
+  "shopify_admin",
+  "stripe_refund",
+  "stripe_payment",
+  "zendesk_ticket",
+  "postgres_read",
 ]);
 
 export const CONNECTOR_DISPLAY_LABELS: Record<string, string> = {
@@ -175,6 +180,7 @@ export type ConnectorInventoryRow = {
   supportedActionTypes: string[];
   metadata: {
     connectorType: string | null;
+    manifestId: string | null;
     maskedEndpoint: string | null;
     credentialSaved: boolean | null;
     supportAccount: string | null;
@@ -504,6 +510,7 @@ function proofRow(definition: ProofConnectorDefinition, checks: OutcomeReconcili
     supportedActionTypes: definition.supportedActionTypes,
     metadata: {
       connectorType: definition.status?.connector_type ?? null,
+      manifestId: null,
       maskedEndpoint: maskedEndpoint(definition.status),
       credentialSaved: credentialSaved(definition.status),
       supportAccount: null,
@@ -549,6 +556,7 @@ function supportRow(
     supportedActionTypes: [],
     metadata: {
       connectorType: id,
+      manifestId: null,
       maskedEndpoint: null,
       credentialSaved: null,
       supportAccount: account,
@@ -609,6 +617,7 @@ function mcpRow(status: McpUpstreamBindingResponse | null | undefined): Connecto
     supportedActionTypes: status?.allowed_tools ?? [],
     metadata: {
       connectorType: "mcp_upstream",
+      manifestId: null,
       maskedEndpoint: status?.endpoint_url ?? null,
       credentialSaved: status?.credential_configured ?? null,
       supportAccount: null,
@@ -707,6 +716,18 @@ function registryConnectorHints(registry: ToolRegistryResponse | null | undefine
   }
 
   return hints;
+}
+
+function registryManifestIds(registry: ToolRegistryResponse | null | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const item of registry?.verification_connectors ?? []) {
+    if (!item.manifest_id) continue;
+    out.set(item.id, item.manifest_id);
+    if (item.id === "database_read") {
+      out.set("postgres_read", item.manifest_id);
+    }
+  }
+  return out;
 }
 
 function connectorForAction(
@@ -1198,10 +1219,20 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
   ];
 
   const visibleConnectorIds = input.visibleConnectorIds ?? null;
+  const manifestIds = registryManifestIds(input.registry);
   const visibleProofDefinitions = visibleConnectorIds
     ? proofDefinitions.filter((definition) => visibleConnectorIds.has(definition.id))
     : proofDefinitions;
-  const proofRows = visibleProofDefinitions.map((definition) => proofRow(definition, checks));
+  const proofRows = visibleProofDefinitions.map((definition) => {
+    const row = proofRow(definition, checks);
+    return {
+      ...row,
+      metadata: {
+        ...row.metadata,
+        manifestId: manifestIds.get(definition.id) ?? null,
+      },
+    };
+  });
   const supportRows = [
     supportRow("github", input.github),
     supportRow("slack", input.slack),

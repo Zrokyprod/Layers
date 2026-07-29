@@ -23,61 +23,61 @@ describe("dashboard route contract", () => {
 
     expect(routeDirectories).toEqual([
       "account",
-      "actions",
-      "agents",
       "approvals",
       "evidence",
       "home",
+      "incidents",
       "integrations",
+      "operations",
       "outcomes",
       "policies",
       "projects",
       "settings",
+      "workflows",
     ]);
   });
 
   it("keeps the paid dashboard primary IA frozen", () => {
     expect(DASHBOARD_PRIMARY_ROUTES.map((route) => route.href)).toEqual([
       "/home",
-      "/approvals",
-      "/actions",
-      "/agents",
-      "/outcomes",
-      "/evidence",
-      "/policies",
+      "/operations",
+      "/workflows",
       "/integrations",
+      "/evidence",
       "/settings",
     ]);
     expect(DASHBOARD_PRIMARY_ROUTES.map((route) => route.label)).toEqual([
       "Home",
-      "Approvals",
-      "Actions",
-      "Agents",
-      "Outcomes",
-      "Evidence",
-      "Policies",
+      "Operations",
+      "Workflows",
       "Connectors",
+      "Evidence",
       "Settings",
     ]);
   });
 
-  it("keeps only account and project management as non-primary support routes", () => {
+  it("keeps final support pages protected but out of primary IA", () => {
     expect(DASHBOARD_SUPPORT_ROUTES.map((route) => route.href)).toEqual([
       "/account",
+      "/approvals",
+      "/outcomes",
+      "/policies",
       "/projects",
+      "/incidents",
     ]);
     expect(DASHBOARD_PROTECTED_PREFIXES).toEqual([
       "/home",
-      "/approvals",
-      "/actions",
-      "/agents",
-      "/outcomes",
-      "/evidence",
-      "/policies",
+      "/operations",
+      "/workflows",
       "/integrations",
+      "/evidence",
       "/settings",
       "/account",
+      "/approvals",
+      "/outcomes",
+      "/policies",
       "/projects",
+      "/incidents",
     ]);
   });
 
@@ -87,13 +87,14 @@ describe("dashboard route contract", () => {
     expect(isDashboardProtectedPath("/contracts/contract_1")).toBe(false);
     expect(isDashboardProtectedPath("/pricing")).toBe(false);
     expect(DASHBOARD_RETIRED_PREFIXES).toEqual([
+      "/actions",
+      "/agents",
       "/alerts",
       "/calls",
       "/ci-gates",
       "/contracts",
       "/cost",
       "/goldens",
-      "/incidents",
       "/issues",
       "/replay",
       "/trace",
@@ -101,8 +102,8 @@ describe("dashboard route contract", () => {
       "/labs",
     ]);
     expect(isDashboardRetiredPath("/contracts/contract_1")).toBe(true);
-    expect(isDashboardRetiredPath("/incidents")).toBe(true);
-    expect(isDashboardProtectedPath("/incidents")).toBe(false);
+    expect(isDashboardRetiredPath("/incidents")).toBe(false);
+    expect(isDashboardProtectedPath("/incidents")).toBe(true);
     expect(isDashboardRetiredPath("/labs/drift")).toBe(true);
     expect(isDashboardRetiredPath("/home")).toBe(false);
   });

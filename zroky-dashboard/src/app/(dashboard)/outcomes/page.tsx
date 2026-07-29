@@ -66,8 +66,8 @@ type ReverifyNotice = {
 
 function initialCheckId(): string | null {
   if (typeof window === "undefined") return null;
-  const searchParams = new URLSearchParams(window.location.search);
-  return searchParams.get("check_id") ?? searchParams.get("outcome_id");
+  const params = new URLSearchParams(window.location.search);
+  return params.get("check_id") ?? params.get("outcome_id");
 }
 
 function matchFieldsFor(check: OutcomeReconciliationView): string[] | null {

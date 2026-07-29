@@ -78,6 +78,9 @@ lint_output.txt
 .vscode/
 .idea/
 .codex/
+
+# Generated Codex screenshots
+.codex-*.png
 .codex-logs/
 codex-logs/
 .agents/
@@ -107,6 +110,7 @@ docfx_temp/
 .tmp/
 .worktrees/
 /artifacts/
+/.codex-artifacts/
 /dashboard-screenshot.png
 **/playwright-report/
 /zroky-dashboard/.codex-artifacts/

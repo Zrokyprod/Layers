@@ -14,10 +14,6 @@ def refresh_discovery_baselines(
     project_id: str | None = None,
     project_limit: int | None = None,
 ) -> dict[str, Any]:
-    """Refresh Discovery baselines for active projects.
-
-    The task is a hard no-op while DISCOVERY_ENABLED=false.
-    """
     settings = get_settings()
     if not settings.DISCOVERY_ENABLED:
         return _disabled_discovery_task_result("refresh_discovery_baselines")
@@ -35,27 +31,11 @@ def refresh_discovery_baselines(
         for current_project_id in project_ids:
             try:
                 set_db_tenant_context(session, current_project_id)
-                result = refresh_baselines(
-                    session,
-                    project_id=current_project_id,
-                    settings=settings,
-                )
+                result = refresh_baselines(session, project_id=current_project_id, settings=settings)
                 results.append(_discovery_result_payload(current_project_id, result))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 session.rollback()
-                errors.append(
-                    {
-                        "project_id": current_project_id,
-                        "error": mask_error_message(exc),
-                    }
-                )
-                logger.exception(
-                    "discovery_baseline_refresh_project_failed",
-                    extra={
-                        "event": "discovery_baseline_refresh",
-                        "project_id": current_project_id,
-                    },
-                )
+                errors.append({"project_id": current_project_id, "error": mask_error_message(exc)})
         return _discovery_task_summary(
             task="refresh_discovery_baselines",
             project_ids=project_ids,
@@ -72,11 +52,6 @@ def scan_discovery_anomalies(
     project_id: str | None = None,
     project_limit: int | None = None,
 ) -> dict[str, Any]:
-    """Scan new production calls and surface Discovery anomalies.
-
-    The runtime owns the watermark, so repeated task executions are idempotent
-    for already-scanned call rows.
-    """
     settings = get_settings()
     if not settings.DISCOVERY_ENABLED:
         return _disabled_discovery_task_result("scan_discovery_anomalies")
@@ -94,27 +69,11 @@ def scan_discovery_anomalies(
         for current_project_id in project_ids:
             try:
                 set_db_tenant_context(session, current_project_id)
-                result = scan_and_surface(
-                    session,
-                    project_id=current_project_id,
-                    settings=settings,
-                )
+                result = scan_and_surface(session, project_id=current_project_id, settings=settings)
                 results.append(_discovery_result_payload(current_project_id, result))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 session.rollback()
-                errors.append(
-                    {
-                        "project_id": current_project_id,
-                        "error": mask_error_message(exc),
-                    }
-                )
-                logger.exception(
-                    "discovery_scan_project_failed",
-                    extra={
-                        "event": "discovery_scan",
-                        "project_id": current_project_id,
-                    },
-                )
+                errors.append({"project_id": current_project_id, "error": mask_error_message(exc)})
         return _discovery_task_summary(
             task="scan_discovery_anomalies",
             project_ids=project_ids,
@@ -134,21 +93,15 @@ def _resolve_discovery_project_ids(
 ) -> list[str]:
     if project_id is not None:
         return [project_id]
-
     limit = max(1, int(project_limit if project_limit is not None else default_limit))
     return list(
-        session.execute(
-            select(Project.id).where(Project.is_active.is_(True)).order_by(Project.id.asc()).limit(limit)
-        )
+        session.execute(select(Project.id).where(Project.is_active.is_(True)).order_by(Project.id.asc()).limit(limit))
         .scalars()
         .all()
     )
 
 
-def _discovery_result_payload(
-    project_id: str,
-    result: DiscoveryRuntimeResult,
-) -> dict[str, Any]:
+def _discovery_result_payload(project_id: str, result: DiscoveryRuntimeResult) -> dict[str, Any]:
     return {
         "project_id": project_id,
         "enabled": result.enabled,

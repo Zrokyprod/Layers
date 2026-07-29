@@ -24,29 +24,20 @@ type PrimaryCommandCopy = {
 
 const PRIMARY_COMMAND_COPY: Record<DashboardPrimaryRoute["id"], PrimaryCommandCopy> = {
   home: {
-    description: "Protected agents, risky actions, outcome proof, approvals, and evidence gaps",
+    description: "Proof posture, attention queue, verification readiness, and recent evidence",
     shortcut: "Ctrl+H",
   },
-  actions: {
-    description: "Protected action lifecycle, quota, receipts, verification, and bypass risk",
+  operations: {
+    description: "Live runs, outcome incidents, approval queues, and recovery state",
   },
-  agents: {
-    description: "Protected agents, mandates, safety coverage, and proof readiness",
-  },
-  approvals: {
-    description: "Held risky actions, runtime policy decisions, and approval audit",
-  },
-  outcomes: {
-    description: "System-of-record matches, mismatches, and not-verified actions",
-  },
-  evidence: {
-    description: "Evidence packs, audit hashes, linked decisions, and export proof",
+  workflows: {
+    description: "Workflow Assurance Packs, validation, and immutable workflow versions",
   },
   connectors: {
-    description: "System-of-record connectors, preflight runs, and pilot handoff status",
+    description: "Read-only source connectors, test-read status, and proof readiness",
   },
-  policies: {
-    description: "Agent mandates, runtime limits, approval rules, and kill switch",
+  evidence: {
+    description: "Evidence bundles, audit hashes, linked decisions, and export proof",
   },
   settings: {
     href: "/settings/keys",

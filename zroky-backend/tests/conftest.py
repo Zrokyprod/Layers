@@ -22,11 +22,6 @@ os.environ.setdefault("ALLOW_PROJECT_HEADER_CONTEXT", "true")
 os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
 os.environ.setdefault("JWT_ISSUER", "")
 os.environ.setdefault("JWT_AUDIENCE", "")
-os.environ.setdefault("FEATURE_LEGACY_OBSERVABILITY_API", "true")
-os.environ.setdefault("FEATURE_LEGACY_REPLAY_API", "true")
-os.environ.setdefault("FEATURE_LEGACY_DIAGNOSIS_API", "true")
-os.environ.setdefault("FEATURE_LEGACY_ISSUES_API", "true")
-os.environ.setdefault("FEATURE_LEGACY_DIAGNOSIS_ALIAS", "true")
 
 # Clear the settings lru_cache so any subsequent get_settings() call reads
 # the env vars we just set above instead of a cached production value.

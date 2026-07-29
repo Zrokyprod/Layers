@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from app.db.models import McpInterceptionEvent
 from app.services._action_post_execution_connectors import *  # noqa: F403
 from app.services._action_post_execution_core import *  # noqa: F403
-from app.services.connector_credentials import RemoteCredentialResolutionRequired
 from app.services.approval_adaptations import revoke_active_rules_for_proof_failure
+from app.services.connector_credentials import RemoteCredentialResolutionRequired
 from app.services.private_runner_verification import enqueue_private_runner_verification
 from app.services.verification_execution_controls import (
     ControlledConnector,
@@ -13,11 +12,6 @@ from app.services.verification_execution_controls import (
 
 
 def _direct_record_connector_for_context(context: Mapping[str, Any]) -> ApiRecordConnector | None:
-    """Use explicit MCP/SOR evidence already captured in the execution plan.
-
-    This preserves the hybrid contract: the inline path captures upstream
-    evidence and queues work; the worker performs the actual proof evaluation.
-    """
     verification = _as_dict(context.get("verification"))
     if not verification:
         return None
@@ -27,7 +21,7 @@ def _direct_record_connector_for_context(context: Mapping[str, Any]) -> ApiRecor
         record_found = True
     if actual is None and not isinstance(record_found, bool):
         return None
-    connector_type = _connector_alias(verification.get("connector_type")) or "mcp_tool_result"
+    connector_type = _connector_alias(verification.get("connector_type")) or "direct_connector"
     return ApiRecordConnector(
         record=actual,
         record_found=record_found if isinstance(record_found, bool) else None,
@@ -76,8 +70,8 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
             connector_type = direct_connector.connector_type
             metadata = {
                 **_base_metadata(intent=intent, attempt=attempt, job=job, connector_type=connector_type),
-                "source": "mcp_proxy",
-                "proof_mode": "mcp_direct_hint",
+                "source": "direct_connector",
+                "proof_mode": "direct_connector_hint",
                 "mcp_event_id": _text(job_payload.get("mcp_event_id")),
             }
             outcome = reconcile_outcome(
@@ -319,46 +313,12 @@ def _run_receipt_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]
     ).scalar_one()
     intent.receipt_status = RECEIPT_GENERATED
     db.add(intent)
-    _link_mcp_interception_event(
-        db,
-        project_id=job.project_id,
-        mcp_event_id=_text(job_payload.get("mcp_event_id")),
-        receipt_id=generated.row.id,
-        receipt_digest=generated.row.receipt_digest,
-        proof_status=intent.proof_status,
-    )
     return {
         "status": "receipt_generated",
         "receipt_id": generated.row.id,
         "receipt_digest": generated.row.receipt_digest,
         "created": generated.created,
     }
-
-
-def _link_mcp_interception_event(
-    db: Session,
-    *,
-    project_id: str,
-    mcp_event_id: str | None,
-    receipt_id: str,
-    receipt_digest: str,
-    proof_status: str,
-) -> None:
-    if not mcp_event_id:
-        return
-    row = db.execute(
-        select(McpInterceptionEvent).where(
-            McpInterceptionEvent.project_id == project_id,
-            McpInterceptionEvent.id == mcp_event_id,
-        )
-    ).scalar_one_or_none()
-    if row is None:
-        return
-    row.action_receipt_id = receipt_id
-    row.receipt_digest = receipt_digest
-    row.proof_status = proof_status
-    db.add(row)
-
 
 def _mark_job_succeeded(db: Session, job: ActionPostExecutionJob, result: Mapping[str, Any]) -> ActionPostExecutionJob:
     current = _now()

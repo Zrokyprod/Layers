@@ -284,7 +284,6 @@ def finish_private_runner_verification(
         action_type=intent.action_type,
         system_ref=_text(context.get("system_ref")) or f"{row.connector_type}:{intent.id}",
         match_fields=[str(value) for value in context.get("match_fields", [])],
-        proof_manifest=_as_dict(context.get("proof_manifest")) or None,
         idempotency_key=f"private-runner-verification:{row.id}",
         metadata={
             "source": "private_runner",

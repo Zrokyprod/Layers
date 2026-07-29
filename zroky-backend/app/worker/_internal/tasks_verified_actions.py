@@ -141,23 +141,20 @@ def sweep_stale_action_execution_attempts(
     queue="verification_sweep",
 )
 def sweep_pending_proof_reconciliations(limit: int | None = None) -> dict:
-    """Expire pending proof checks whose verification window has closed.
+    """Expire overdue pending proof rows and report rows ready for reverify."""
+    from dataclasses import asdict
 
-    This is the bounded-limbo guard for temporal proof. It does not re-fetch SOR
-    evidence; a future reverify worker can consume the due rows surfaced by the
-    service. This task ensures overdue pending rows settle to mismatched or
-    unverifiable instead of staying pending forever.
-    """
-    from app.services.outcome_reconciliation import (
-        sweep_pending_reconciliation_checks,
-    )
+    from app.services.outcome_reconciliation import sweep_pending_reconciliation_checks
 
     settings = get_settings()
     if not settings.PROOF_PENDING_SWEEP_ENABLED:
         logger.info(
             "sweep_pending_proof_reconciliations: PROOF_PENDING_SWEEP_ENABLED=false - skipping"
         )
-        return {"skipped": True, "reason": "PROOF_PENDING_SWEEP_ENABLED=false"}
+        return {
+            "skipped": True,
+            "reason": "PROOF_PENDING_SWEEP_ENABLED=false",
+        }
 
     effective_limit = (
         int(limit)
@@ -166,26 +163,8 @@ def sweep_pending_proof_reconciliations(limit: int | None = None) -> dict:
     )
     session = SessionLocal()
     try:
-        result = sweep_pending_reconciliation_checks(
-            session,
-            limit=effective_limit,
-        )
-        payload = {
-            "expired": result.expired,
-            "due_for_reverify": result.due_for_reverify,
-            "expired_check_ids": result.expired_check_ids,
-            "due_check_ids": result.due_check_ids,
-        }
-        logger.info(
-            "pending_proof_reconciliations.completed",
-            extra={
-                "event": "pending_proof_reconciliation",
-                "task": "sweep_pending_proof_reconciliations",
-                "expired": result.expired,
-                "due_for_reverify": result.due_for_reverify,
-            },
-        )
-        return payload
+        result = sweep_pending_reconciliation_checks(session, limit=effective_limit)
+        return asdict(result)
     finally:
         session.close()
 

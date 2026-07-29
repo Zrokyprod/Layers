@@ -19,12 +19,12 @@ _PARTS = (
     "tasks_maintenance.py",
     "tasks_digest.py",
     "tasks_integrations.py",
-    "tasks_replay.py",
-    "tasks_regression_ci.py",
     "tasks_verified_actions.py",
+    "tasks_replay.py",
+    "tasks_final_domain_outbox.py",
     "tasks_billing.py",
-    "tasks_drift.py",
     "tasks_discovery.py",
+    "tasks_regression_ci.py",
 )
 
 

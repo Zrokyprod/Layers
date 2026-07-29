@@ -26,7 +26,6 @@ from app.db.models import (
     ActionIntent,
     ActionReceipt,
     ApiKey,
-    McpUpstreamBinding,
     OutcomeReconciliationCheck,
     PilotPolicy,
     RuntimePolicyDecision,
@@ -190,9 +189,6 @@ def get_home_summary(
             SystemOfRecordConnectorConfig.last_tested_at.is_not(None),
         ),
     )
-    mcp_binding = db.execute(
-        select(McpUpstreamBinding).where(McpUpstreamBinding.project_id == tenant_id)
-    ).scalar_one_or_none()
     pilot_policy = db.execute(
         select(PilotPolicy).where(PilotPolicy.project_id == tenant_id)
     ).scalar_one_or_none()
@@ -288,8 +284,8 @@ def get_home_summary(
             online_runners=online_runners,
             active_sor_connectors=active_sor_connectors,
             tested_sor_connectors=tested_sor_connectors,
-            mcp_gateway_status=mcp_binding.status if mcp_binding else "not_configured",
-            mcp_gateway_test_status=mcp_binding.test_status if mcp_binding else "not_tested",
+            mcp_gateway_status="not_configured",
+            mcp_gateway_test_status="not_tested",
             runtime_enabled=bool(policy_payload.get("runtime_enabled", True)),
             kill_switch_enabled=bool(policy_payload.get("kill_switch", False)),
         ),

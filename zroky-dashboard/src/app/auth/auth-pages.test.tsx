@@ -208,7 +208,7 @@ describe("auth pages", () => {
 
     await waitFor(() => {
       expect(storeAuthSession).toHaveBeenCalled();
-      expect(navigation.push).toHaveBeenCalledWith("/agents/setup?intent=protect-agent&plan=pro&source=pricing");
+      expect(navigation.push).toHaveBeenCalledWith("/workflows?intent=protect-agent&plan=pro&source=pricing");
     });
   });
 
@@ -273,6 +273,6 @@ describe("auth pages", () => {
     render(<VerifyEmailPage />);
 
     const continueLink = await screen.findByRole("link", { name: "Continue setup" });
-    expect(continueLink.getAttribute("href")).toBe("/agents/setup?intent=protect-agent&plan=pro");
+    expect(continueLink.getAttribute("href")).toBe("/workflows?intent=protect-agent&plan=pro");
   });
 });

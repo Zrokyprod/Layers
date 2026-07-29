@@ -4,12 +4,13 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
   ClipboardCheck,
   Copy,
   Database,
+  PlugZap,
   Power,
   PowerOff,
-  RefreshCw,
   Save,
   Search,
   ShieldCheck,
@@ -17,6 +18,7 @@ import {
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import {
+  DashboardMetricStrip,
   DashboardVerdictHero,
   DashboardWorkspace,
 } from "@/components/dashboard-scaffold";
@@ -90,8 +92,8 @@ import {
   buildConnectorInventory,
   connectorStateLabel,
   connectorUpdatedLabel,
+  LAUNCH_VISIBLE_CONNECTOR_IDS,
   type ConnectorCategoryGroup,
-  type ConnectorCoverageRow,
   type ConnectorInventory,
   type ConnectorInventoryId,
   type ConnectorInventoryRow,
@@ -617,9 +619,8 @@ function buildBridgeCurl(form: GenericRestFormState) {
   ].join("\n");
 }
 
-function statusValue(row: ConnectorInventoryRow | ConnectorCoverageRow) {
-  if ("state" in row) return row.state;
-  return row.status;
+function statusValue(row: ConnectorInventoryRow) {
+  return row.state;
 }
 
 function connectorSearchText(row: ConnectorInventoryRow): string {
@@ -633,6 +634,7 @@ function connectorSearchText(row: ConnectorInventoryRow): string {
     row.statusLabel,
     row.detail,
     row.metadata.connectorType,
+    row.metadata.manifestId,
     row.metadata.maskedEndpoint,
     setupProfile.methodLabel,
     setupProfile.requirement,
@@ -659,14 +661,11 @@ function filterCategoryGroups(
 }
 
 function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
-  const profile = connectorSetupProfile(row.id);
-  if (row.connected) return profile.oneClick ? `Manage ${connectorSystemLabel(row)}` : "Update access";
-  if (profile.oneClick) return `Connect ${connectorSystemLabel(row)}`;
-  if (row.id === "mcp_upstream") return "Configure MCP upstream";
-  if (row.id === "generic_rest") return "Set up custom REST";
-  if (row.id === "postgres_read") return "Set up database";
-  if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Add Stripe key";
-  return `Add ${connectorSystemLabel(row)} access`;
+  if (row.kind === "support") return row.ctaLabel;
+  if (row.id === "generic_rest") return "Connect custom REST";
+  if (row.id === "postgres_read") return "Connect database";
+  if (row.id === "ledger_template" || row.id === "customer_template") return "Connect template";
+  return `Connect ${connectorSystemLabel(row)}`;
 }
 
 function connectorSystemLabel(row: ConnectorInventoryRow): string {
@@ -682,31 +681,6 @@ function connectorSystemLabel(row: ConnectorInventoryRow): string {
 
 function connectorCardMeta(row: ConnectorInventoryRow): string {
   return connectorSetupProfile(row.id).cardLabel;
-}
-
-function connectorInspectorEyebrow(row: ConnectorInventoryRow): string {
-  return connectorSetupProfile(row.id).methodLabel;
-}
-
-function connectorInspectorCopy(row: ConnectorInventoryRow): string {
-  if (row.id === "mcp_upstream") {
-    return "Gate agent tool calls before they reach the real MCP server.";
-  }
-  const system = connectorSystemLabel(row);
-  if (row.kind === "support") return "Approvals and alerts for protected actions.";
-  if (row.id === "generic_rest") return "Verify any read-only API.";
-  if (row.id === "postgres_read") return "Verify records from a read-only database.";
-  if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Verify refunds and payments from Stripe.";
-  if (row.id === "razorpay_refund") return "Verify refunds from Razorpay.";
-  if (["hubspot_crm", "salesforce_crm", "zoho_crm"].includes(row.id)) return `Verify CRM changes from ${system}.`;
-  if (["zendesk_ticket", "freshdesk_ticket", "intercom", "jira_issue"].includes(row.id)) {
-    return `Verify support actions from ${system}.`;
-  }
-  if (["netsuite_finance", "quickbooks_ledger", "generic_finance"].includes(row.id)) {
-    return `Verify finance records from ${system}.`;
-  }
-  if (row.id === "shopify_admin") return "Verify commerce actions from Shopify.";
-  return `Verify agent actions from ${system}.`;
 }
 
 type ConnectorDisplayCard = {
@@ -772,47 +746,6 @@ function connectorDisplayCards(
   return cards;
 }
 
-function connectorPreflightSummary(row: ConnectorInventoryRow) {
-  if (row.state === "ready") {
-    return {
-      label: "Matched",
-      title: "Ready",
-      detail: "Proof checks can use this connector.",
-      tone: "success" as const,
-    };
-  }
-  if (row.state === "mismatched") {
-    return {
-      label: "Mismatched",
-      title: "Mismatch",
-      detail: "Last preflight did not match.",
-      tone: "danger" as const,
-    };
-  }
-  if (row.state === "failing") {
-    return {
-      label: "Blocked",
-      title: "Needs fix",
-      detail: "Connection check failed.",
-      tone: "danger" as const,
-    };
-  }
-  if (row.state === "not_tested") {
-    return {
-      label: "Needs check",
-      title: "Connected",
-      detail: "Run preflight once.",
-      tone: "warning" as const,
-    };
-  }
-  return {
-    label: "Not configured",
-    title: "Not connected",
-    detail: "Connect read-only access to start.",
-    tone: "neutral" as const,
-  };
-}
-
 function Fact({
   label,
   value,
@@ -829,56 +762,240 @@ function Fact({
   );
 }
 
-function CoverageMap({ rows }: { rows: ConnectorCoverageRow[] }) {
+function ConnectorOneClickFlow() {
+  const steps = [
+    ["Authorize read-only", "Grant read-only access"],
+    ["Validate manifest", "Verify schema & permissions"],
+    ["Run test-read", "Execute safe dry-run"],
+    ["Bind workflow", "Attach to workflows"],
+  ];
+
   return (
-    <section
-      className="panel connectors-coverage-panel connectors-coverage-panel-secondary"
-      aria-label="Verification coverage audit"
-      id="verification-coverage"
-    >
-      <details className="connectors-coverage-details">
-        <summary>
-          <span>
-            <span className="dashboard-eyebrow">Coverage audit</span>
-            <strong>Which agent actions can Zroky verify?</strong>
-          </span>
-          <small>{rows.length > 0 ? `${formatCount(rows.length)} observed action types` : "No observed action types yet"}</small>
-        </summary>
+    <ol className="connectors-one-click-flow" aria-label="One-click connector setup flow">
+      {steps.map(([step, detail], index) => (
+        <li key={step}>
+          <span>{index + 1}</span>
+          <strong>{step}</strong>
+          <small>{detail}</small>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
-        <div className="connectors-coverage-body">
-          <div className="connectors-section-head">
-            <div>
-              <h2>Verification coverage audit</h2>
-              <p>
-                Advanced view generated from observed action types and the tool registry. Actions without a healthy
-                verifier resolve to not_verified until a REST, SQL, or bridge verifier is configured.
-              </p>
-            </div>
-            <DashboardButtonLink href="/outcomes" variant="soft" size="sm">
-              Open Outcomes
-            </DashboardButtonLink>
+function ConnectorReadinessStrip({ inventory }: { inventory: ConnectorInventory }) {
+  const counts = inventory.counts;
+  const connectedSources = Math.max(
+    0,
+    counts.proofTotal - counts.notConfigured,
+  );
+  const coverageTone =
+    counts.actionTypesTotal === 0
+      ? "neutral"
+      : counts.unverifiableActionTypes > 0
+        ? "warning"
+        : "success";
+
+  return (
+    <DashboardMetricStrip
+      ariaLabel="Connector readiness"
+      className="connectors-readiness-strip"
+      columns={6}
+      metrics={[
+        {
+          id: "connected",
+          label: "Connected sources",
+          value: formatCount(connectedSources),
+          helper: "read-only proof access saved",
+          icon: <PlugZap aria-hidden="true" />,
+          tone: connectedSources > 0 ? "success" : "warning",
+        },
+        {
+          id: "ready",
+          label: "Test-read ready",
+          value: formatCount(counts.healthyVerifiers),
+          helper: "source reads passing",
+          icon: <CheckCircle2 aria-hidden="true" />,
+          tone: counts.healthyVerifiers > 0 ? "success" : "neutral",
+        },
+        {
+          id: "needs-test",
+          label: "Needs test-read",
+          value: formatCount(counts.notTested),
+          helper: "connected but not proven",
+          icon: <ClipboardCheck aria-hidden="true" />,
+          tone: counts.notTested > 0 ? "warning" : "neutral",
+        },
+        {
+          id: "blocked",
+          label: "Blocked",
+          value: formatCount(counts.failingVerifiers),
+          helper: "mismatch or source failure",
+          icon: <AlertTriangle aria-hidden="true" />,
+          tone: counts.failingVerifiers > 0 ? "danger" : "neutral",
+        },
+        {
+          id: "coverage",
+          label: "Coverage",
+          value: `${counts.coveragePercent}%`,
+          helper: `${formatCount(counts.actionTypesTotal)} action types observed`,
+          icon: <ShieldCheck aria-hidden="true" />,
+          tone: coverageTone,
+        },
+        {
+          id: "unconfigured",
+          label: "Unconfigured",
+          value: formatCount(counts.notConfigured),
+          helper: "available proof presets",
+          icon: <Database aria-hidden="true" />,
+          tone: counts.notConfigured > 0 ? "warning" : "success",
+        },
+      ]}
+    />
+  );
+}
+
+function connectorScopeLabel(row: ConnectorInventoryRow): string {
+  if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Payments · Transactions · Refunds";
+  if (row.id === "razorpay_refund") return "Payments · Payouts · Refunds";
+  if (row.id === "shopify_admin") return "Orders · Refunds · Discounts";
+  if (row.id === "hubspot_crm") return "Deals · Contacts · Activities";
+  if (row.id === "salesforce_crm") return "Accounts · Opportunities · Cases";
+  if (row.id === "zendesk_ticket") return "Tickets · Comments · Status";
+  if (row.id === "jira_issue") return "Issues · Transitions · Fields";
+  if (row.id === "postgres_read") return "Tables · Records · Audit fields";
+  return row.supportedActionTypes.slice(0, 3).map((item) => humanize(item)).join(" · ") || connectorCardMeta(row);
+}
+
+function connectorPrimitiveLabel(row: ConnectorInventoryRow): string {
+  if (row.id === "stripe_refund") return "refunds.retrieve";
+  if (row.id === "stripe_payment") return "payments.retrieve";
+  if (row.id === "razorpay_refund") return "refunds.fetch";
+  if (row.id === "shopify_admin") return "orders.get";
+  if (row.id === "hubspot_crm") return "crm.objects.get";
+  if (row.id === "salesforce_crm") return "sobjects.retrieve";
+  if (row.id === "zendesk_ticket") return "tickets.show";
+  if (row.id === "jira_issue") return "issues.get";
+  if (row.id === "postgres_read") return "select.read";
+  return row.id === "generic_rest" ? "generic_rest.read" : humanize(row.transport);
+}
+
+function connectorInspectorStatus(row: ConnectorInventoryRow) {
+  if (row.state === "missing") return { label: "Missing / Not connected", tone: "danger" as const };
+  return { label: connectorStateLabel(row.state), tone: row.tone };
+}
+
+function ConnectorSetupMatrix({
+  onConnect,
+  row,
+}: {
+  onConnect: () => void;
+  row: ConnectorInventoryRow;
+}) {
+  const manifestLoaded = row.metadata.manifestId != null && row.metadata.manifestId !== "";
+  const canConfigure = row.kind === "proof" && row.connected;
+  const canRunTestRead = canConfigure;
+  const canBindWorkflow = canConfigure && row.state === "ready";
+  const cards = [
+    {
+      action: "Edit",
+      disabled: !canConfigure,
+      detail: row.supportedActionTypes.length > 0 ? connectorScopeLabel(row) : "Read-only verifier scope",
+      icon: <ShieldCheck aria-hidden="true" />,
+      title: "Read-only scope",
+      reason: "Connect source first",
+      onClick: onConnect,
+    },
+    {
+      action: "Run test-read",
+      disabled: !canRunTestRead,
+      detail: row.connected ? (row.lastVerdict ? humanize(row.lastVerdict) : "Ready to execute") : "Not executed",
+      icon: <Search aria-hidden="true" />,
+      title: "Test-read",
+      reason: "Connect source first",
+      onClick: onConnect,
+    },
+    {
+      action: "Bind",
+      disabled: !canBindWorkflow,
+      detail: row.readinessStatus ? humanize(row.readinessStatus) : "Not bound to any workflow",
+      icon: <PlugZap aria-hidden="true" />,
+      title: "Workflow binding",
+      reason: row.connected ? "Run a passing test-read first" : "Connect source first",
+      onClick: onConnect,
+    },
+    {
+      action: manifestLoaded ? "View manifest" : "Upload manifest",
+      disabled: !manifestLoaded,
+      detail: manifestLoaded ? String(row.metadata.manifestId) : "No manifest loaded",
+      icon: <ClipboardCheck aria-hidden="true" />,
+      title: "Manifest",
+      reason: "Manifest upload is not wired yet",
+      onClick: onConnect,
+    },
+  ];
+
+  return (
+    <div className="connector-setup-matrix" aria-label="Selected verifier setup status">
+      {cards.map((card) => (
+        <article className="connector-setup-card" key={card.title}>
+          <span className="connector-setup-icon">{card.icon}</span>
+          <div>
+            <strong>{card.title}</strong>
+            <small>{card.detail}</small>
           </div>
+          <DashboardButton
+            disabled={card.disabled}
+            onClick={card.onClick}
+            size="sm"
+            title={card.disabled ? card.reason : undefined}
+            variant="soft"
+          >
+            {card.action}
+          </DashboardButton>
+        </article>
+      ))}
+    </div>
+  );
+}
 
-          {rows.length > 0 ? (
-            <div className="connectors-coverage-grid">
-              {rows.map((row) => (
-                <article className="connectors-coverage-row" data-tone={row.tone} key={row.actionType}>
-                  <div>
-                    <strong>{row.actionType}</strong>
-                    <span>{row.detail}</span>
-                  </div>
-                  <StatusPill value={row.status} label={row.label} tone={row.tone} />
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="connectors-empty-state">
-              <strong>No action types observed yet</strong>
-              <span>Run a protected action or configure an agent catalog to see verifier coverage.</span>
-            </div>
-          )}
+function SourceAudit({
+  rows,
+}: {
+  rows: ConnectorInventoryRow[];
+}) {
+  const auditRows = rows
+    .filter((row) => row.latestCheck)
+    .sort((left, right) => Date.parse(right.latestCheck?.checked_at ?? "") - Date.parse(left.latestCheck?.checked_at ?? ""))
+    .slice(0, 8)
+    .map((row) => ({ ...row, updatedAt: row.latestCheck?.checked_at ?? row.updatedAt }));
+
+  return (
+    <section className="panel connectors-source-audit-panel" aria-label="Recent test-reads">
+      <div className="connectors-source-audit-head">
+        <div>
+          <h2>Recent test-reads</h2>
+          <p>Recent connector activity and test-read attempts</p>
         </div>
-      </details>
+      </div>
+
+      <div className="connectors-source-audit-table">
+        <div className="connectors-source-audit-row connectors-source-audit-row-head">
+          <span>System</span>
+          <span>Primitive</span>
+          <span>Status</span>
+          <span>Last read</span>
+        </div>
+        {auditRows.length === 0 ? <div className="connectors-source-audit-empty">No test-reads yet.</div> : null}
+        {auditRows.map((row) => (
+          <div className="connectors-source-audit-row" key={row.id}>
+            <strong>{connectorSystemLabel(row)}</strong>
+            <span>{connectorPrimitiveLabel(row)}</span>
+            <StatusPill value={row.lastVerdict ?? row.state} label={row.lastVerdict ? humanize(row.lastVerdict) : connectorStateLabel(row.state)} tone={row.tone} />
+            <span>{row.updatedAt ? connectorUpdatedLabel(row) : "—"}</span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -901,8 +1018,7 @@ function ConnectorInventoryList({
       <div className="connectors-section-head">
         <div>
           <span className="dashboard-eyebrow">Connectors</span>
-          <h2>Connect a system</h2>
-          <p>One-click connectors use OAuth. Every other connector names the exact read-only credential you need.</p>
+          <h2>Available systems</h2>
         </div>
       </div>
 
@@ -928,25 +1044,30 @@ function ConnectorInventoryList({
                 <span>{cards.length} connector{cards.length === 1 ? "" : "s"}</span>
               </div>
               <div className="connector-row-list">
-                {cards.map((card) => (
-                  <button
-                    type="button"
-                    className="connector-inventory-row"
-                    data-selected={selectedId != null && card.ids.includes(selectedId)}
-                    data-tone={card.row.tone}
-                    key={card.key}
-                    onClick={() => onSelect(card.row.id)}
-                  >
-                    <ConnectorLogo id={card.logoId} />
-                    <span className="connector-row-main">
-                      <strong>{card.title}</strong>
-                      <small>{card.meta}</small>
-                    </span>
-                    <span className="connector-row-status">
-                      <StatusPill value={statusValue(card.row)} label={card.row.statusLabel} tone={card.row.tone} />
-                    </span>
-                  </button>
-                ))}
+                {cards.map((card) => {
+                  const selected = selectedId != null && card.ids.includes(selectedId);
+                  return (
+                    <button
+                      type="button"
+                      className="connector-inventory-row"
+                      data-selected={selected}
+                      data-tone={card.row.tone}
+                      key={card.key}
+                      onClick={() => onSelect(card.row.id)}
+                    >
+                      <ConnectorLogo id={card.logoId} />
+                      <span className="connector-row-main">
+                        <strong>{card.title}</strong>
+                        <small>{connectorScopeLabel(card.row)}</small>
+                      </span>
+                      <span className="connector-row-status">
+                        <span className="connector-availability-pill" data-selected={selected}>
+                          {selected ? "Selected" : "Available"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           );
@@ -3259,6 +3380,7 @@ function ConnectorInspector({
   onZohoStatusChange,
   onMcpStatusChange,
   row,
+  setupRequest,
 }: {
   mcpStatus: McpUpstreamBindingResponse | null;
   genericStatus: GenericRestConnectorStatusResponse | null;
@@ -3287,6 +3409,7 @@ function ConnectorInspector({
   onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
   onMcpStatusChange: (status: McpUpstreamBindingResponse) => void;
   row: ConnectorInventoryRow | null;
+  setupRequest: number;
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -3296,6 +3419,10 @@ function ConnectorInspector({
     setSetupOpen(false);
     setConnectionError(null);
   }, [row?.id]);
+
+  useEffect(() => {
+    if (setupRequest > 0 && row?.kind === "proof") setSetupOpen(true);
+  }, [row?.kind, setupRequest]);
 
   if (!row) {
     return (
@@ -3308,21 +3435,17 @@ function ConnectorInspector({
     );
   }
 
-  const preflight = connectorPreflightSummary(row);
+  const status = connectorInspectorStatus(row);
   const setupProfile = connectorSetupProfile(row.id);
-  const accessStatus = row.connected
-    ? "Saved"
-    : setupProfile.oneClick
-      ? "Authorization required"
-      : "Credential required";
-  const accessScope = row.id === "mcp_upstream"
-    ? "Policy-gated execution"
-    : row.kind === "support"
-      ? "Workflow delivery"
-      : "Read-only proof";
-  const needsOneClickAuthorization = setupProfile.oneClick && (
-    !row.connected || (row.id === "jira_issue" && !jiraStatus?.has_oauth_refresh_token)
-  );
+  const accessStatus = row.connected ? "Saved" : setupProfile.oneClick ? "Authorization required" : "Credential required";
+  const accessScope =
+    row.id === "mcp_upstream"
+      ? "Policy-gated execution"
+      : row.kind === "support"
+        ? "Workflow delivery"
+        : "Read-only proof";
+  const needsOneClickAuthorization =
+    setupProfile.oneClick && (!row.connected || (row.id === "jira_issue" && !jiraStatus?.has_oauth_refresh_token));
 
   const startOneClickConnect = async () => {
     setConnecting(true);
@@ -3333,23 +3456,14 @@ function ConnectorInspector({
         return;
       }
       if (row.id === "slack") {
-        const result = await startSlackInstall();
-        externalNavigator.assign(result.authorization_url);
+        externalNavigator.assign("/api/zroky/v1/settings/slack/connect/start");
         return;
       }
-      if (row.id === "zoho_crm") {
-        const result = await startZohoCrmOAuth();
-        externalNavigator.assign(result.authorization_url);
+      if (row.id === "zoho_crm" || row.id === "jira_issue") {
+        setSetupOpen(true);
         return;
       }
-      if (row.id === "jira_issue") {
-        const result = await startJiraIssueOAuth();
-        externalNavigator.assign(result.authorization_url);
-        return;
-      }
-      setSetupOpen(true);
-    } catch (err) {
-      setConnectionError(err instanceof Error ? err.message : "Failed to start connector authorization.");
+      if (row.href) externalNavigator.assign(row.href);
     } finally {
       setConnecting(false);
     }
@@ -3361,27 +3475,11 @@ function ConnectorInspector({
         <div className="connector-inspector-title">
           <ConnectorLogo id={row.id} size={26} />
           <div>
-            <span className="dashboard-eyebrow">{connectorInspectorEyebrow(row)}</span>
             <h2>{connectorSystemLabel(row)}</h2>
-            <p>{connectorInspectorCopy(row)}</p>
+            <p>{connectorScopeLabel(row)}</p>
           </div>
         </div>
-        <StatusPill value={row.state} label={connectorStateLabel(row.state)} tone={row.tone} />
-      </div>
-
-      <div className="connector-simple-status" data-tone={preflight.tone}>
-        <div>
-          <strong>{preflight.title}</strong>
-          <span>{preflight.detail}</span>
-        </div>
-        <div className="connector-simple-meta">
-          <span>
-            Updated <strong>{connectorUpdatedLabel(row)}</strong>
-          </span>
-          <span>
-            Verdict <strong>{row.lastVerdict ? humanize(row.lastVerdict) : "None"}</strong>
-          </span>
-        </div>
+        <StatusPill value={row.state} label={status.label} tone={status.tone} />
       </div>
 
       <div className="connector-launch-grid" aria-label="Connector access requirements">
@@ -3428,9 +3526,9 @@ function ConnectorInspector({
         )}
       </div>
 
-      {connectionError ? <div className="alert-strip connectors-alert">{connectionError}</div> : null}
+      <ConnectorSetupMatrix onConnect={() => setSetupOpen(true)} row={row} />
 
-      <details className="connector-advanced-details">
+      <details className="connector-advanced-details" open>
         <summary>
           <span>Details</span>
           <small>Status and fields</small>
@@ -3439,8 +3537,9 @@ function ConnectorInspector({
         <div className="connector-fact-grid">
           <Fact label="Transport" value={humanize(row.transport)} />
           <Fact label="Template" value={row.templateKind ? humanize(row.templateKind) : "Custom"} />
+          <Fact label="Auth method" value={row.metadata.connectorType ?? "API key"} />
           <Fact label="Connector type" value={row.metadata.connectorType} />
-          <Fact label="Endpoint" value={row.metadata.maskedEndpoint} />
+          <Fact label="Base URL" value={row.metadata.maskedEndpoint} />
           <Fact label="Credential saved" value={row.metadata.credentialSaved} />
           <Fact label="Health" value={row.healthStatus ? humanize(row.healthStatus) : null} />
           <Fact label="Readiness" value={row.readinessStatus ? humanize(row.readinessStatus) : null} />
@@ -3473,8 +3572,8 @@ function ConnectorInspector({
           onToggle={(event) => setSetupOpen(event.currentTarget.open)}
         >
           <summary>
-            <span>{row.id === "mcp_upstream" ? "Gateway setup" : row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Connect access"}</span>
-            <small>{row.id === "mcp_upstream" ? "Owner only" : row.id === "generic_rest" || row.id === "postgres_read" ? "Manual config" : "Secure setup"}</small>
+            <span>One-click setup</span>
+            <small>Read-only access · test-read · workflow binding</small>
           </summary>
           {setupOpen ? (
             <div className="connector-setup-body">
@@ -3584,6 +3683,7 @@ export default function IntegrationsPage() {
   const [partialFailure, setPartialFailure] = useState(false);
   const [selectedId, setSelectedId] = useState<ConnectorInventoryId | null>(initialConnectorFromUrl);
   const [connectorSearch, setConnectorSearch] = useState("");
+  const [setupRequest, setSetupRequest] = useState(0);
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -3671,13 +3771,14 @@ export default function IntegrationsPage() {
   }, [loadOverview]);
 
   const inventory = useMemo(
-    () => buildConnectorInventory({
-      ...overview,
-      customer: null,
-      ledger: null,
-      partialFailure,
-      visibleConnectorIds: CONFIGURABLE_CONNECTOR_IDS,
-    }),
+    () =>
+      buildConnectorInventory({
+        ...overview,
+        customer: null,
+        ledger: null,
+        partialFailure,
+        visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS,
+      }),
     [overview, partialFailure],
   );
   const visibleInventory = inventory;
@@ -3692,28 +3793,43 @@ export default function IntegrationsPage() {
     () => filterCategoryGroups(visibleInventory.categoryGroups, connectorSearch),
     [connectorSearch, visibleInventory.categoryGroups],
   );
-
+  const openSelectedConnectorSetup = () => {
+    const targetId = selectedRow?.kind === "proof" ? selectedRow.id : firstSelectedId(visibleInventory);
+    if (targetId) setSelectedId(targetId);
+    setSetupRequest((current) => current + 1);
+  };
   return (
     <div className="dashboard-page integrations-page connectors-page">
       <DashboardVerdictHero
         actions={
           <>
-            <DashboardButton icon={<RefreshCw />} loading={loading} onClick={() => void loadOverview()} variant="soft">
+            <DashboardButton loading={loading} onClick={() => void loadOverview()} variant="soft">
               Refresh
             </DashboardButton>
-            <DashboardButtonLink href="#connector-catalog" variant="primary">
-              Connect a system
-            </DashboardButtonLink>
+            {selectedRow?.kind === "support" ? (
+              <DashboardButtonLink href={selectedRow.href} variant="primary">
+                {connectorPrimaryCtaLabel(selectedRow)}
+              </DashboardButtonLink>
+            ) : (
+              <DashboardButton loading={loading} onClick={openSelectedConnectorSetup} variant="primary">
+                {selectedRow ? connectorPrimaryCtaLabel(selectedRow) : "Connect verifier"}
+              </DashboardButton>
+            )}
           </>
         }
-        copy="Choose a system, authorize read-only access, then run one real preflight. OAuth connectors connect in one click; manual connectors show the exact key or token required."
+        copy={`${visibleInventory.verdict.copy} One-click means read-only access, manifest validation, test-read, then Assurance Pack binding.`}
         eyebrow="Connectors"
-        icon={<Database />}
-        pill="3 one-click options"
-        tone="neutral"
+        pill="One-click · read-only"
+        tone={visibleInventory.verdict.tone}
         title="Connectors"
-        updatedLabel={loading ? "Refreshing" : "Updated live"}
+        updatedLabel={loading ? "Refreshing" : "Updated now"}
       />
+
+      <section className="connectors-flow-strip" aria-label="One-click connector setup">
+        <ConnectorOneClickFlow />
+      </section>
+
+      <ConnectorReadinessStrip inventory={visibleInventory} />
 
       <DashboardWorkspace
         className="connectors-workspace"
@@ -3755,11 +3871,12 @@ export default function IntegrationsPage() {
             onZohoStatusChange={(zoho) => setOverview((current) => ({ ...current, zoho }))}
             onMcpStatusChange={(mcp) => setOverview((current) => ({ ...current, mcp }))}
             row={selectedRow}
+            setupRequest={setupRequest}
           />
         }
       />
 
-      <CoverageMap rows={inventory.coverageRows} />
+      <SourceAudit rows={visibleInventory.proofRows} />
 
       {partialFailure ? (
         <div className="alert-strip connectors-alert">

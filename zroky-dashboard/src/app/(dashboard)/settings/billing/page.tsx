@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
+import { DashboardButton } from "@/components/dashboard-button";
 import { SettingsHero, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import {
@@ -532,17 +532,6 @@ function BillingSettingsContent() {
 
       {loading && !billingMe ? (
         <div className="loading" />
-      ) : billingRecordUnavailable ? (
-        <section className="billing-unavailable-state" aria-label="Billing unavailable">
-          <CreditCard aria-hidden="true" />
-          <div>
-            <h2>Billing data unavailable</h2>
-            <p>Your current plan and usage could not be confirmed. No fallback plan has been assumed.</p>
-          </div>
-          <DashboardButton icon={<RefreshCw />} onClick={() => void load()} variant="primary">
-            Retry
-          </DashboardButton>
-        </section>
       ) : (
         <section className="billing-overview-grid" aria-label="Billing overview">
           <article className="billing-current-card">
@@ -590,19 +579,12 @@ function BillingSettingsContent() {
                   <span className="billing-usage-icon">{item.icon}</span>
                   <div>
                     <strong>{item.label}</strong>
-                    <small>
-                      {usageDetail(item.detailLabel, item.meter)}
-                      {hasMeterLimit(item.meter) ? (
-                        <span className="billing-meter-percent"> · {meterPercentLabel(item.meter)}</span>
-                      ) : null}
-                    </small>
+                    <small>{usageDetail(item.detailLabel, item.meter)}</small>
                   </div>
                   <span className="billing-usage-value">{formatUsageMeter(item.meter)}</span>
                   {hasMeterLimit(item.meter) ? (
-                    <div className="billing-meter-progress">
-                      <div className="billing-meter-track" aria-hidden="true">
-                        <span style={{ width: `${meterPercent(item.meter)}%` }} />
-                      </div>
+                    <div className="billing-meter-track" aria-label={`${Math.round(meterPercent(item.meter))}% used`}>
+                      <span style={{ width: `${meterPercent(item.meter)}%` }} />
                     </div>
                   ) : null}
                 </div>
@@ -652,7 +634,7 @@ function BillingSettingsContent() {
                   </ul>
                   {isCurrent ? (
                     <span className="billing-plan-current-label">Current plan</span>
-                  ) : canChangeToPlan && plan.selfServe ? (
+                  ) : canChangeToPlan ? (
                     <DashboardButton
                       type="button"
                       className="billing-plan-btn"
@@ -661,16 +643,8 @@ function BillingSettingsContent() {
                       disabled={loading || checkoutBusy}
                       loading={checkoutPlanCode === plan.code}
                     >
-                      {checkoutPlanCode === plan.code ? "Opening checkout" : `Upgrade to ${plan.name}`}
+                      {plan.selfServe ? (checkoutBusy ? "Opening..." : `Upgrade to ${plan.name}`) : "Contact sales"}
                     </DashboardButton>
-                  ) : canChangeToPlan ? (
-                    <DashboardButtonLink
-                      className="billing-plan-btn"
-                      href="/contact?subject=enterprise-plan"
-                      variant="primary"
-                    >
-                      Contact sales
-                    </DashboardButtonLink>
                   ) : null}
                 </div>
               );

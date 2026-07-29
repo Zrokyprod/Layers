@@ -64,11 +64,29 @@ def delete(key: str) -> None:
 
 
 def revoke_all_user_tokens(user_id: str) -> None:
-    """Blacklist marker for a user — downstream token validation checks this key."""
-    _cache.set(f"jwt_blacklisted_user:{user_id}", str(time.time()), ttl_seconds=86400 * 30)
+    """Blacklist marker for a user session generation."""
+    generation_key = f"jwt_revocation_generation:{user_id}"
+    try:
+        generation = int(_cache.get(generation_key) or "0") + 1
+    except (TypeError, ValueError):
+        generation = 1
+    _cache.set(generation_key, str(generation), ttl_seconds=86400 * 30)
+    _cache.set(f"jwt_blacklisted_user:{user_id}", str(int(time.time())), ttl_seconds=86400 * 30)
 
 
-def is_user_token_revoked(user_id: str, issued_at: object) -> bool:
+def revocation_generation(user_id: str) -> int:
+    try:
+        return int(_cache.get(f"jwt_revocation_generation:{user_id}") or "0")
+    except (TypeError, ValueError):
+        return 0
+
+
+def is_user_token_revoked(user_id: str, issued_at: object, token_generation: object = None) -> bool:
+    if token_generation is not None:
+        try:
+            return int(token_generation) != revocation_generation(user_id)
+        except (TypeError, ValueError):
+            return True
     revoked_at_raw = _cache.get(f"jwt_blacklisted_user:{user_id}")
     if not revoked_at_raw:
         return False

@@ -102,7 +102,7 @@ def _plan_contract(plan_code: str | None) -> tuple[str, bool, int]:
         return selected, False, 0
     enabled = bool(entry.compatibility.get("pilot.autopilot_enabled"))
     limit = int(entry.compatibility.get("replay.monthly_runs") or 0)
-    return entry.plan_code, enabled, limit
+    return selected, enabled, limit
 
 
 def _plan_event_limit(plan_code: str | None) -> int | None:

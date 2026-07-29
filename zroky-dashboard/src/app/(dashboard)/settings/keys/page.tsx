@@ -32,11 +32,6 @@ const defaultKeyName = "Production verified-action key";
 const keyExpiryWarningDays = 14;
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
-function keyAccessLabel(scopes: string[] | null | undefined): string {
-  if (!scopes?.length || scopes.includes("project:member")) return "Full runtime access";
-  return scopes.join(", ");
-}
-
 function keyStatus(key: ApiKeyResponse): "revoked" | "expired" | "active" {
   if (key.revoked) return "revoked";
   if (key.expired) return "expired";
@@ -62,6 +57,11 @@ function daysUntilExpiry(expiresAt: string | null): number | null {
   const expires = new Date(expiresAt).getTime();
   if (!Number.isFinite(expires)) return null;
   return Math.ceil((expires - Date.now()) / millisecondsPerDay);
+}
+
+function keyAccessLabel(scopes: string[] | null | undefined): string {
+  if (!scopes?.length || scopes.includes("project:member")) return "Full runtime access";
+  return scopes.join(", ");
 }
 
 function expiryWarningLabel(key: ApiKeyResponse): string | null {
@@ -280,7 +280,7 @@ function ApiKeysContent() {
           <header className="panel-header">
             <div>
               <h2>Create key</h2>
-              <p>Create one credential for one agent runtime.</p>
+              <p>Use it for SDK, Gateway, and verified-action calls.</p>
             </div>
           </header>
 
@@ -322,7 +322,7 @@ function ApiKeysContent() {
 
           <p className="keys-simple-note">
             <KeyRound aria-hidden="true" />
-            This key has full project runtime access for SDK, Gateway, and verified-action calls. The secret is shown once.
+            Full secret is shown once. Store it in your agent runtime. Blank expiry means no automatic expiry.
           </p>
         </article>
 
@@ -343,29 +343,9 @@ function ApiKeysContent() {
                 {copied ? "Copied" : "Copy"}
               </DashboardButton>
             </div>
-            <label className="keys-secret-confirm">
-              <input
-                type="checkbox"
-                checked={secretStored}
-                onChange={(event) => setSecretStored(event.target.checked)}
-              />
-              <span>
-                <strong>I stored this key securely</strong>
-                <small>After closing this panel, the full secret cannot be recovered.</small>
-              </span>
-            </label>
             <div className="keys-copy-actions">
-              <DashboardButton
-                type="button"
-                variant="soft"
-                disabled={!secretStored}
-                onClick={() => {
-                  setNewKey(null);
-                  setCopied(false);
-                  setSecretStored(false);
-                }}
-              >
-                Finish
+              <DashboardButton type="button" variant="soft" onClick={() => setNewKey(null)}>
+                Done
               </DashboardButton>
             </div>
           </section>

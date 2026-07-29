@@ -350,7 +350,6 @@ VALIDATORS = {
     "dashboard": validate_dashboard,
     "admin": validate_admin,
     "gateway": validate_gateway,
-    "replay-worker": validate_replay_worker,
 }
 
 DEFAULT_FILES = {
@@ -358,7 +357,6 @@ DEFAULT_FILES = {
     "dashboard": "zroky-dashboard/.env.production",
     "admin": "zroky-admin/.env.local",
     "gateway": "zroky-gateway/.env",
-    "replay-worker": "zroky-replay-worker/.env",
 }
 
 

@@ -18,7 +18,7 @@ export function FleetContextLine({ fleet, loading }: FleetContextLineProps) {
 
   return (
     <section className="mc-fleet-line" aria-label="Agent fleet context">
-      <Link href="/agents" className="mc-fleet-link">
+      <Link href="/operations" className="mc-fleet-link">
         <Bot aria-hidden="true" size={15} />
         <strong>{formatCount(fleet.totals.managedProfiles)}</strong>
         <span>managed agents</span>
@@ -28,7 +28,7 @@ export function FleetContextLine({ fleet, loading }: FleetContextLineProps) {
         <strong>{formatCount(fleet.totals.held)}</strong>
         <span>held actions</span>
       </Link>
-      <Link href="/agents" className="mc-fleet-link" data-tone={fleet.runners.online > 0 ? "success" : "warning"}>
+      <Link href="/operations" className="mc-fleet-link" data-tone={fleet.runners.online > 0 ? "success" : "warning"}>
         <CheckCircle2 aria-hidden="true" size={15} />
         <strong>{formatCount(fleet.runners.online)} / {formatCount(fleet.runners.total)}</strong>
         <span>runners online</span>

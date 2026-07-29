@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     DATABASE_URL: str = "sqlite:///./.data/zroky.db"
+    REQUIRE_POSTGRES_RLS: bool = False
     REDIS_URL: str = "redis://localhost:6379/0"
     RATE_LIMIT_STORAGE_URI: Optional[str] = None
 
@@ -148,6 +149,7 @@ class Settings(BaseSettings):
     OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS: bool = False
     OUTCOME_CONNECTOR_TIMEOUT_SECONDS: float = 5.0
     OUTCOME_CONNECTOR_MAX_ATTEMPTS: int = 2
+    WEBHOOK_CALLBACK_SIGNING_SECRET: Optional[str] = None
     # New receipts use Ed25519 so customers and auditors can verify signatures
     # with only the published public key. The old HMAC secret is retained only
     # for legacy receipt verification.
@@ -178,6 +180,8 @@ class Settings(BaseSettings):
     PRIVATE_RUNNER_VERIFICATION_STALE_SECONDS: int = 300
     PRIVATE_RUNNER_VERIFICATION_SWEEP_INTERVAL_SECONDS: int = 60
     PRIVATE_RUNNER_VERIFICATION_SWEEP_LIMIT: int = 100
+    FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS: int = 300
+    FINAL_OUTCOME_GRAPH_RECHECK_LIMIT: int = 100
     SOURCE_MUTATION_POLLER_ENABLED: bool = False
     SOURCE_MUTATION_POLLER_INTERVAL_SECONDS: int = 60
     SOURCE_MUTATION_POLLER_PROJECT_LIMIT: int = 100
@@ -269,33 +273,8 @@ class Settings(BaseSettings):
     # Identifier recorded in `provider_keys_vault.kms_key_id` so periodic
     # re-wrap rotation can find rows still encrypted under the previous KEK.
     PROVIDER_KEY_VAULT_KEY_ID: str = "local-dev-kek-v1"
-
-    # MCP-native interception (Gap 1: distribution). When enabled, the
-    # /v1/mcp/{project_id} ingress proxies an agent's MCP traffic through the
-    # runtime-policy gate. Default OFF so the route is inert (404) until an
-    # operator opts a deployment in. MCP_UPSTREAM_URL is the real MCP server
-    # that allowed tool calls are forwarded to (per-project override lands in
-    # a later slice; this is the deployment-wide default).
-    MCP_INTERCEPTION_ENABLED: bool = False
-    MCP_UPSTREAM_URL: Optional[str] = None
-    MCP_UPSTREAM_TIMEOUT_SECONDS: float = 30.0
-    # Compatibility-only bridge for the existing single upstream canary. New
-    # enterprise projects must use a tested mcp_upstream_bindings row; this
-    # remains True for one release so the deployed canary is not interrupted.
-    MCP_LEGACY_UPSTREAM_FALLBACK_ENABLED: bool = True
-    # Gateway sessions pin a project binding and its version. They are distinct
-    # from the upstream MCP session and invalidate when the binding changes.
-    MCP_GATEWAY_SESSION_TTL_SECONDS: int = 86400
-    # Browser-originated MCP calls are rejected unless their exact Origin is
-    # listed here. Non-browser agent requests normally omit Origin.
-    MCP_ALLOWED_ORIGINS: str = ""
-    # Optional comma-separated project allowlist for production canaries.
-    # When non-empty, /v1/mcp/{project_id} stays inert (404) for every other
-    # project even if MCP_INTERCEPTION_ENABLED is true.
-    MCP_INTERCEPTION_PROJECT_ALLOWLIST: str = ""
-    # Synthetic no-side-effect MCP server used only for production smoke tests.
-    # Default OFF so the public route is inert unless an operator opts in.
-    MCP_CANARY_UPSTREAM_ENABLED: bool = False
+    CUSTOMER_LOCAL_SECRETS_MODE: bool = False
+    CUSTOMER_LOCAL_SECRET_REF_PREFIXES: str = "vault://,openbao://,bao://"
 
     # Approval adaptation converts only owner-approved, evidence-backed action
     # patterns into temporary auto-allow rules. Default OFF: creating a rule
@@ -492,14 +471,9 @@ class Settings(BaseSettings):
     # evidence. Internal dependencies that still feed the control plane
     # (calls/traces and alerts/notifications) remain mounted separately.
     FEATURE_LEGACY_OWNER: bool = True              # Customer production env sets False. Admin-only deployments may enable for zroky-admin.
-    FEATURE_LEGACY_OBSERVABILITY_API: bool = False
-    FEATURE_LEGACY_REPLAY_API: bool = False
-    FEATURE_LEGACY_DIAGNOSIS_API: bool = False
-    FEATURE_LEGACY_ISSUES_API: bool = False
     # FEATURE_LEGACY_BILLING removed after M12; deprecated /plans and
     # GET/PUT /subscription routes are deleted.
     FEATURE_LEGACY_INVITATIONS: bool = True        # M8 will reduce. Replacement: /v1/invitations/accept only.
-    FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = False
 
     # â”€â”€ Calibrated Judge (Wedge 3 â€” judge calibration + auto-downgrade) â”€â”€â”€â”€â”€
     # Master switch for the daily golden-set calibration runner.

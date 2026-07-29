@@ -66,8 +66,18 @@ def _find_job_for_call(*, db: Session, tenant_id: str, call: Call) -> DiagnosisJ
     ).scalar_one_or_none()
 
 
+def _safe_json_object(raw: str | None) -> dict[str, object]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _enqueue_diagnosis_job(job: DiagnosisJob) -> None:
-    process_diagnosis.delay(job.tenant_id, job.diagnosis_id, None if job.call_id else {})
+    process_diagnosis.delay(job.tenant_id, job.diagnosis_id, None if job.call_id else _safe_json_object(job.payload_json))
 
 
 def _retry_enqueue_for_existing_call(*, db: Session, tenant_id: str, call: Call) -> str:

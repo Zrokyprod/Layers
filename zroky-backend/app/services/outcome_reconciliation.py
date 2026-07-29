@@ -194,6 +194,22 @@ def _as_dict(value: Mapping[str, Any] | dict[str, Any] | None) -> dict[str, Any]
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _proof_status_for_new_check(verdict: str, metadata_payload: Mapping[str, Any]) -> str:
+    if verdict == VERDICT_MATCHED:
+        return VERDICT_MATCHED
+    if verdict == VERDICT_MISMATCHED:
+        return VERDICT_MISMATCHED
+    connector = _as_dict(metadata_payload.get("connector"))
+    status_code = connector.get("http_status")
+    try:
+        status_code_int = int(status_code)
+    except (TypeError, ValueError):
+        status_code_int = None
+    if connector.get("retryable") is True or (status_code_int is not None and status_code_int >= 500):
+        return VERIFICATION_PENDING
+    return VERIFICATION_UNVERIFIABLE
+
+
 def _flatten(record: Mapping[str, Any], *, prefix: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {}
     for raw_key, value in record.items():
@@ -765,7 +781,7 @@ def list_pending_reconciliations_due(
 ) -> list[OutcomeReconciliationCheck]:
     current = now or _now()
     query = select(OutcomeReconciliationCheck).where(
-        OutcomeReconciliationCheck.proof_status == PROOF_PENDING,
+        OutcomeReconciliationCheck.proof_status == VERIFICATION_PENDING,
         OutcomeReconciliationCheck.proof_next_check_at.is_not(None),
         OutcomeReconciliationCheck.proof_next_check_at <= current,
         OutcomeReconciliationCheck.connector_type.in_(REVERIFY_CONNECTORS),
@@ -795,7 +811,7 @@ def sweep_pending_reconciliation_checks(
 ) -> PendingProofSweepResult:
     current = now or _now()
     expired_query = select(OutcomeReconciliationCheck).where(
-        OutcomeReconciliationCheck.proof_status == PROOF_PENDING,
+        OutcomeReconciliationCheck.proof_status == VERIFICATION_PENDING,
         OutcomeReconciliationCheck.proof_deadline_at.is_not(None),
         OutcomeReconciliationCheck.proof_deadline_at < current,
     )
@@ -812,16 +828,15 @@ def sweep_pending_reconciliation_checks(
 
     expired_ids: list[str] = []
     for row in expired_rows:
-        reason = proof_reason_code_for_check(row) or PROOF_REASON_NO_SOR_TRACE
-        if reason in _PENDING_EXPIRE_AS_UNVERIFIABLE:
-            row.proof_status = PROOF_UNVERIFIABLE
+        reason = _bounded(row.proof_reason_code or row.reason or "no_sor_trace", max_length=64) or "no_sor_trace"
+        if reason in {"sor_unreachable", "no_connector", "runner_offline"}:
+            row.proof_status = VERIFICATION_UNVERIFIABLE
             row.verdict = VERDICT_NOT_VERIFIED
-            row.reason = _bounded(reason, max_length=255)
         else:
-            row.proof_status = PROOF_MISMATCHED
+            row.proof_status = VERIFICATION_MISMATCHED
             row.verdict = VERDICT_MISMATCHED
-            row.reason = _bounded(reason, max_length=255)
-        row.proof_reason_code = _bounded(reason, max_length=64)
+        row.reason = _bounded(reason, max_length=255)
+        row.proof_reason_code = reason
         row.proof_next_check_at = None
         row.checked_at = current
         metadata = _json_loads(row.metadata_json, {}) or {}
@@ -842,16 +857,13 @@ def sweep_pending_reconciliation_checks(
         row.metadata_json = _json_dumps(metadata_payload)
         db.add(row)
         expired_ids.append(row.id)
+        if row.verdict == VERDICT_MISMATCHED:
+            from app.services.outcome_mismatch_response import create_or_get_mismatch_response
+
+            create_or_get_mismatch_response(db, check=row, action_intent_id=row.action_intent_id)
+
     if expired_ids:
         db.commit()
-        from app.services.outcome_mismatch_response import create_or_get_mismatch_response
-
-        for row in expired_rows:
-            create_or_get_mismatch_response(
-                db,
-                check=row,
-                action_intent_id=row.action_intent_id,
-            )
 
     due_rows = list_pending_reconciliations_due(
         db,

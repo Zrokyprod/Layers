@@ -96,7 +96,6 @@ SCAN_ROOTS = [
     "README.md",
     "api-contracts",
     "chaos-tests",
-    "clickhouse",
     "demos",
     "eval",
     "grafana",
@@ -108,23 +107,23 @@ SCAN_ROOTS = [
     "zroky-gateway",
     "zroky-landing",
     "zroky-regression-ci-action",
-    "zroky-replay-worker",
     "zroky-sdk",
     "zroky-sdk-js",
 ]
 
 EXPECTED_DASHBOARD_ROUTE_DIRS = [
     "account",
-    "actions",
-    "agents",
     "approvals",
     "evidence",
     "home",
+    "incidents",
     "integrations",
+    "operations",
     "outcomes",
     "policies",
     "projects",
     "settings",
+    "workflows",
 ]
 
 REQUIRED_OPENAPI_SURFACES = {

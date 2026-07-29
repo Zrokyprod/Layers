@@ -1,7 +1,7 @@
 import { RefreshCw } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
-import { DashboardMetricStrip, DashboardVerdictHero } from "@/components/dashboard-scaffold";
+import { DashboardMetricStrip } from "@/components/dashboard-scaffold";
 import type { EvidenceProofMetric } from "./EvidenceProofStrip";
 
 type EvidenceVerdictHeroProps = {
@@ -13,13 +13,14 @@ type EvidenceVerdictHeroProps = {
   metrics: EvidenceProofMetric[];
   onMetricClick?: (href: string) => void;
   onRefresh: () => void;
+  summaryDetail: string;
+  summaryTitle: string;
   title: string;
   tone: "danger" | "neutral" | "success" | "warning";
   updatedLabel: string;
 };
 
 export function EvidenceVerdictHero({
-  badge,
   copy,
   ctaHref,
   ctaLabel,
@@ -27,36 +28,43 @@ export function EvidenceVerdictHero({
   metrics,
   onMetricClick,
   onRefresh,
+  summaryDetail,
+  summaryTitle,
   title,
-  tone,
-  updatedLabel,
 }: EvidenceVerdictHeroProps) {
   return (
     <>
-      <DashboardVerdictHero
-        ariaLabel="Evidence command center"
-        className="ev-command-hero"
-        copy={copy}
-        eyebrow="Evidence"
-        pill={badge}
-        title={title}
-        tone={tone}
-        updatedLabel={updatedLabel}
-        actions={(
-          <>
-            <DashboardButton icon={<RefreshCw />} onClick={onRefresh} disabled={isRefreshing} variant="soft">
-              {isRefreshing ? "Refreshing" : "Refresh"}
-            </DashboardButton>
-            <DashboardButtonLink href={ctaHref} variant="primary">
-              {ctaLabel}
-            </DashboardButtonLink>
-          </>
-        )}
-      />
+      <section className="ev-operator-hero" aria-label="Evidence command center">
+        <div className="ev-operator-hero-top">
+          <div>
+            <span className="ev-operator-kicker">Evidence</span>
+            <h1>{title}</h1>
+            <p>{copy}</p>
+          </div>
+          <div className="ev-operator-summary" aria-label="Evidence summary">
+            <strong>{summaryTitle}</strong>
+            <span>{summaryDetail}</span>
+          </div>
+        </div>
+        <div className="ev-operator-actions">
+          <DashboardButtonLink href={ctaHref} variant="primary">
+            {ctaLabel}
+          </DashboardButtonLink>
+          <DashboardButton
+            aria-label={isRefreshing ? "Refreshing evidence" : "Refresh evidence"}
+            icon={<RefreshCw />}
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            size="icon"
+            title={isRefreshing ? "Refreshing" : "Refresh"}
+            variant="soft"
+          />
+        </div>
+      </section>
       <DashboardMetricStrip
         ariaLabel="Evidence proof summary"
         className="ev-proof-summary-strip"
-        columns={4}
+        columns={metrics.length}
         metrics={metrics.map((metric) => ({
           helper: metric.detail,
           href: metric.href,

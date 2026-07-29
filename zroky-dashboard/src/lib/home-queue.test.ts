@@ -176,7 +176,7 @@ describe("buildDecisionQueue", () => {
     expect(rows[0]).toMatchObject({
       kind: "guard_approval",
       priority: "P1",
-      href: "/approvals?decision_id=guard_decision",
+      href: "/operations?decision_id=guard_decision",
     });
   });
 
@@ -227,6 +227,6 @@ describe("home queue summary helpers", () => {
       tone: "danger",
     });
     expect(queueCounts(rows)).toEqual({ all: 1, needsDecision: 0, bypass: 1 });
-    expect(homeVerdictForQueue([], false).title).toBe("Setup required");
+    expect(homeVerdictForQueue([], false).title).toBe("Your agent control center");
   });
 });

@@ -1,0 +1,720 @@
+.workflowsDashboard {
+  --bg: var(--zk-bg);
+  --surface: var(--zk-surface);
+  --surface-2: var(--zk-surface-2);
+  --surface-3: var(--zk-surface-3);
+  --border: var(--zk-border);
+  --border-strong: var(--zk-border-strong);
+  --text: var(--zk-text);
+  --muted: var(--zk-muted);
+  --faint: var(--zk-faint);
+  --accent: var(--zk-accent);
+  --accent-hover: var(--zk-accent-hover);
+  --success: var(--zk-success);
+  --success-bg: var(--zk-success-bg);
+  --success-border: var(--zk-success-border);
+  --warning: var(--zk-warning);
+  --warning-bg: var(--zk-warning-bg);
+  --warning-border: var(--zk-warning-border);
+  --danger: var(--zk-danger);
+  --danger-bg: var(--zk-danger-bg);
+  --danger-border: var(--zk-danger-border);
+  --mono: var(--zk-mono);
+
+  display: grid;
+  gap: 12px;
+  min-height: calc(100vh - 78px);
+  max-width: 1600px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--zk-radius-card);
+  padding: 14px;
+}
+
+.workflowsDashboard * {
+  box-sizing: border-box;
+}
+
+.workflowsDashboard :global(.dashboard-button-primary) {
+  color: #fff;
+  background: #09090b;
+  border-color: #09090b;
+}
+
+.workflowsDashboard :global(.dashboard-button-primary:hover:not(:disabled)) {
+  background: #27272a;
+  border-color: #27272a;
+}
+
+.workflowsDashboard .blackButton,
+:global(.app-shell[data-dashboard-system="control-v1"]) .workflowsDashboard .blackButton,
+.workflowsDashboard .blackButton:hover:not(:disabled),
+:global(.app-shell[data-dashboard-system="control-v1"]) .workflowsDashboard .blackButton:hover:not(:disabled) {
+  color: #fff !important;
+  background: #09090b !important;
+  border-color: #09090b !important;
+}
+
+.pageTitle {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.pageTitle h1,
+.hero h2,
+.panelHeader h2 {
+  margin: 0;
+  color: var(--text);
+  letter-spacing: -0.03em;
+}
+
+.pageTitle h1 {
+  font-size: 22px;
+  font-weight: 760;
+  line-height: 1.05;
+}
+
+.pageTitle p,
+.hero p,
+.panelHeader p,
+.readinessRow small,
+.resultMessage,
+.contractList,
+.selectField span {
+  color: var(--muted);
+}
+
+.pageTitle p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.hero,
+.card,
+.metricStrip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--zk-radius-card);
+  box-shadow: none;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 156px;
+  border-color: var(--border-strong);
+  padding: 18px;
+}
+
+.hero[data-tone="critical"] {
+  border-color: var(--danger-border);
+}
+
+.hero[data-tone="ready"] {
+  border-color: var(--border-strong);
+}
+
+.hero[data-tone="warning"] {
+  border-color: var(--border-strong);
+}
+
+.heroCopy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.heroCopy p:not(.kicker) {
+  max-width: 760px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.heroTitleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.heroTitleLine h2 {
+  overflow: hidden;
+  font-size: 30px;
+  font-weight: 760;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kicker {
+  margin: 0;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.denominator,
+.metricCell strong,
+.statusBadge,
+.editor,
+.resultPre {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.denominator {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricStrip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.metricCell {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-height: 106px;
+  padding: 12px 14px;
+  border-right: 1px solid var(--border);
+}
+
+.metricCell:last-child {
+  border-right: 0;
+}
+
+.metricCell span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricCell strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 760;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sparkline {
+  width: 100%;
+  height: 22px;
+}
+
+.sparkline polyline {
+  fill: none;
+  stroke: var(--faint);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.sparkline[data-tone="ready"] polyline {
+  stroke: var(--success);
+}
+
+.sparkline[data-tone="warning"] polyline {
+  stroke: var(--warning);
+}
+
+.sparkline[data-tone="critical"] polyline {
+  stroke: var(--danger);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(340px, 4fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.packManager {
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(340px, 4fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.editorCard {
+  min-height: 0;
+}
+
+.contractCard {
+  min-height: 360px;
+}
+
+.packListCard,
+.governanceCard {
+  min-height: 282px;
+}
+
+.packTable {
+  display: grid;
+}
+
+.packTableHead,
+.packRow {
+  display: grid;
+  grid-template-columns: minmax(145px, 1.3fr) 128px minmax(96px, 0.85fr) minmax(82px, 0.72fr) 58px 32px;
+  gap: 10px;
+  align-items: center;
+}
+
+.packTableHead {
+  min-height: 38px;
+  padding: 0 14px;
+  color: var(--faint);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.packRow {
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+}
+
+.packRow:last-child {
+  border-bottom: 0;
+}
+
+.packRow:hover,
+.packRow[data-selected="true"] {
+  background: var(--surface-2);
+}
+
+.packRow[data-selected="true"] {
+  box-shadow: inset 3px 0 0 var(--text);
+}
+
+.packName {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.packRow strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.packRow small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.packRow > span:not(.packName),
+.packRow code,
+.packAction {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.packRow code {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.packAction {
+  justify-self: center;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.bindingGrid {
+  display: grid;
+}
+
+.bindingGrid div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.bindingGrid div:first-child {
+  border-top: 0;
+}
+
+.bindingGrid span {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bindingGrid strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contractTable {
+  display: grid;
+}
+
+.contractRow {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  align-items: center;
+  min-height: 42px;
+  border-top: 1px solid var(--border);
+}
+
+.contractRow:first-child {
+  border-top: 0;
+}
+
+.contractRow > span {
+  padding: 0 16px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.contractRow div {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 16px;
+  border-left: 1px solid var(--border);
+}
+
+.contractRow strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contractRow strong[data-tone="warning"],
+.contractRow strong[data-tone="critical"] {
+  color: var(--danger);
+}
+
+.statusCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 62px;
+  padding: 12px 16px;
+}
+
+.statusCard h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+.statusCard p {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelHeader h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.panelHeader p:not(.kicker) {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
+.selectField {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.selectField span {
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.selectField select {
+  height: 34px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--zk-radius-control);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor {
+  display: block;
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  padding: 10px 16px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--zk-radius-control);
+  font-size: 11.5px;
+  line-height: 1.35;
+  outline: 0;
+  overflow: hidden;
+  resize: none;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.editorCard .editor {
+  width: calc(100% - 32px);
+  margin: 12px 16px 14px;
+}
+
+.editor:focus {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.sideStack {
+  display: grid;
+  gap: 12px;
+}
+
+.readinessList {
+  display: grid;
+}
+
+.readinessRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.readinessRow:first-child {
+  border-top: 0;
+}
+
+.readinessRow div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.readinessRow strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readinessRow small {
+  overflow: hidden;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.statusBadge[data-tone="ready"] {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.statusBadge[data-tone="warning"] {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.statusBadge[data-tone="critical"] {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.statusBadge[data-tone="neutral"] {
+  color: var(--muted);
+  background: var(--surface-3);
+  border-color: var(--border);
+}
+
+.resultMessage {
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.resultPre {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.contractList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px 16px 32px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1279px) {
+  .hero,
+  .packManager,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .heroActions {
+    justify-content: flex-start;
+  }
+
+  .metricStrip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metricCell:nth-child(3n) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .workflowsDashboard {
+    padding: 10px;
+  }
+
+  .heroTitleLine,
+  .panelHeader,
+  .heroActions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .metricStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metricCell:nth-child(3n) {
+    border-right: 1px solid var(--border);
+  }
+
+  .metricCell:nth-child(2n) {
+    border-right: 0;
+  }
+}

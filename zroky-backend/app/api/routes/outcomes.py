@@ -747,7 +747,6 @@ def get_reconciliation_kpis(
 def list_mismatch_response_cases(
     request: Request,
     response_status: str | None = Query(default=None, alias="status"),
-    days: int | None = Query(default=None, ge=1, le=365),
     limit: int = Query(default=50, ge=1, le=100),
     context: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
@@ -758,7 +757,6 @@ def list_mismatch_response_cases(
             db,
             project_id=context.tenant_id,
             status=response_status,
-            since=datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None,
             limit=limit,
         )
     except ValueError as exc:

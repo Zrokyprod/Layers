@@ -257,6 +257,94 @@ export interface RuntimePolicyRuleUpdatePayload {
   is_enabled?: boolean;
 }
 
+export type AssurancePackJson = Record<string, unknown>;
+
+export interface AssurancePackValidatePayload {
+  pack: AssurancePackJson;
+}
+
+export interface AssurancePackValidateResponse {
+  valid: boolean;
+  schema_version: string;
+  workflow_key: string;
+  version: string;
+}
+
+export interface AssurancePackCreatePayload {
+  environment: string;
+  pack: AssurancePackJson;
+}
+
+export interface AssurancePackResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  workflow_key: string;
+  version: string;
+  pack_digest: string;
+  status: string;
+  pack: AssurancePackJson;
+  created_at: string;
+}
+
+export interface FinalRunResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  idempotency_key: string;
+  external_run_id: string | null;
+  intent_id: string | null;
+  workflow_key: string | null;
+  agent_ref: string | null;
+  status: string;
+  run_digest: string;
+  run: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface FinalRunListResponse {
+  items: FinalRunResponse[];
+}
+
+export interface FinalIncidentResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  outcome_graph_id: string;
+  severity: string;
+  status: string;
+  incident: Record<string, unknown>;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface FinalIncidentRecoveryExecutionResponse {
+  incident: FinalIncidentResponse;
+  recovery_plan_id: string;
+  execution_status: string;
+  outbox_job_id: string;
+  idempotency_key: string;
+}
+
+export interface FinalApprovalRequirementResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  intent_id: string;
+  policy_decision_id: string;
+  required_role: string;
+  binding_digest: string;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface FinalApprovalRequirementListResponse {
+  items: FinalApprovalRequirementResponse[];
+}
+
 export interface RuntimePolicyResolvePreviewPayload {
   agent_id?: string | null;
   action_type?: string | null;
@@ -417,11 +505,11 @@ export interface EvidenceLedgerResponse {
     decision_id: string | null;
     detail: string;
     digest: string | null;
-    export_kind: "receipt" | "evidence_pack" | null;
+    export_kind: "receipt" | "evidence_pack" | "final_bundle" | null;
     exportable: boolean;
     href: string;
     id: string;
-    kind: "action_receipt" | "orphan_decision" | "unlinked_outcome";
+    kind: "action_receipt" | "orphan_decision" | "unlinked_outcome" | "final_bundle";
     outcome_id: string | null;
     source_label: string;
     status: string;
@@ -434,6 +522,38 @@ export interface EvidenceLedgerResponse {
   total_in_scope: number;
   total_matching: number;
   window_days: number;
+}
+
+export interface FinalEvidenceBundleResponse {
+  id: string;
+  project_id: string;
+  environment: string;
+  subject_type: string;
+  subject_id: string;
+  bundle_digest: string;
+  bundle: Record<string, unknown>;
+  signature: {
+    schema_version: string;
+    envelope: string;
+    payload_type: string;
+    payload_digest: string;
+    algorithm: string;
+    key_id: string;
+    public_key: string;
+    signature: string;
+    signed_payload: string;
+  } | null;
+  created_at: string;
+}
+
+export interface FinalEvidenceBundleVerificationResponse {
+  bundle_id: string;
+  bundle_digest: string;
+  verification_status: "pass" | "fail" | string;
+  digest_valid: boolean;
+  signature_valid: boolean;
+  algorithm: string | null;
+  key_id: string | null;
 }
 
 export type ActionIntentStatus =
@@ -602,6 +722,7 @@ export type AgentVerificationConnectorType =
   | "zoho_crm"
   | "zendesk_ticket"
   | "jira_issue"
+  | "servicenow_change"
   | "ticket_status"
   | "email_delivery"
   | "github_ci";
@@ -771,6 +892,7 @@ export interface ToolRegistryItemResponse {
   requires_customer_credentials: boolean;
   dashboard_href: string | null;
   backend_capability: string | null;
+  manifest_id?: string | null;
   availability_notes: string | null;
 }
 
@@ -1024,6 +1146,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (options.body != null) {
       headers["content-type"] = "application/json";
     }
+    Object.assign(headers, options.headers);
     if (typeof window !== "undefined") {
       const selectedProject =
         options.projectIdOverride === undefined
@@ -1117,6 +1240,105 @@ export function verifyEmail(token: string): Promise<{ detail: string }> {
 export function resendVerification(): Promise<{ detail: string }> {
   return request<{ detail: string }>("/v1/auth/resend-verification", {
     method: "POST",
+  });
+}
+
+export function validateAssurancePack(pack: AssurancePackJson): Promise<AssurancePackValidateResponse> {
+  return request<AssurancePackValidateResponse>("/v1/assurance-packs/validate", {
+    method: "POST",
+    body: { pack } satisfies AssurancePackValidatePayload,
+  });
+}
+
+export function publishAssurancePack(
+  pack: AssurancePackJson,
+  environment: string,
+): Promise<AssurancePackResponse> {
+  return request<AssurancePackResponse>("/v1/assurance-packs", {
+    method: "POST",
+    body: { pack, environment } satisfies AssurancePackCreatePayload,
+  });
+}
+
+export function listFinalRuns(signal?: AbortSignal): Promise<FinalRunListResponse> {
+  return request<FinalRunListResponse>("/v1/runs", { signal });
+}
+
+export function listFinalIncidents(signal?: AbortSignal): Promise<FinalIncidentResponse[]> {
+  return request<FinalIncidentResponse[]>("/v1/incidents", { signal });
+}
+
+export function assignFinalIncident(incidentId: string, owner: string): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/assign`, {
+    method: "POST",
+    body: { owner },
+  });
+}
+
+export function containFinalIncident(incidentId: string, reason: string): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/contain`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+export function snoozeFinalIncident(incidentId: string, reason: string, expiresAt: string): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/snooze`, {
+    method: "POST",
+    body: { reason, expires_at: expiresAt },
+  });
+}
+
+export function executeFinalIncidentRecovery(
+  incidentId: string,
+  executorRef: string,
+  idempotencyKey: string,
+  plan: Record<string, unknown> = {},
+): Promise<FinalIncidentRecoveryExecutionResponse> {
+  return request<FinalIncidentRecoveryExecutionResponse>(
+    `/v1/incidents/${encodeURIComponent(incidentId)}/execute-recovery`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: { executor_ref: executorRef, plan },
+    },
+  );
+}
+
+export function resolveFinalIncidentManually(
+  incidentId: string,
+  verifiedOutcomeGraphId: string,
+  note = "",
+): Promise<FinalIncidentResponse> {
+  return request<FinalIncidentResponse>(`/v1/incidents/${encodeURIComponent(incidentId)}/resolve-manually`, {
+    method: "POST",
+    body: { verified_outcome_graph_id: verifiedOutcomeGraphId, note },
+  });
+}
+
+export function listFinalApprovalRequirements(signal?: AbortSignal): Promise<FinalApprovalRequirementListResponse> {
+  return request<FinalApprovalRequirementListResponse>("/v1/policy/approval-requirements", { signal });
+}
+
+export function approveFinalApprovalRequirement(
+  approvalId: string,
+  bindingDigest: string,
+  reason = "Approved from Operations.",
+): Promise<FinalApprovalRequirementResponse> {
+  return request<FinalApprovalRequirementResponse>(`/v1/approvals/${encodeURIComponent(approvalId)}/approve`, {
+    method: "POST",
+    body: { binding_digest: bindingDigest, reason },
+  });
+}
+
+export function denyFinalApprovalRequirement(
+  approvalId: string,
+  bindingDigest: string,
+  reason = "Denied from Operations.",
+): Promise<FinalApprovalRequirementResponse> {
+  return request<FinalApprovalRequirementResponse>(`/v1/approvals/${encodeURIComponent(approvalId)}/deny`, {
+    method: "POST",
+    body: { binding_digest: bindingDigest, reason },
   });
 }
 
@@ -5299,6 +5521,20 @@ export function getEvidenceLedger(
     query,
     signal,
   });
+}
+
+export function getFinalEvidenceBundle(
+  bundleId: string,
+  signal?: AbortSignal,
+): Promise<FinalEvidenceBundleResponse> {
+  return request<FinalEvidenceBundleResponse>(`/v1/evidence/bundles/${encodeURIComponent(bundleId)}`, { signal });
+}
+
+export function verifyFinalEvidenceBundle(
+  bundleId: string,
+  signal?: AbortSignal,
+): Promise<FinalEvidenceBundleVerificationResponse> {
+  return request<FinalEvidenceBundleVerificationResponse>(`/v1/evidence/bundles/${encodeURIComponent(bundleId)}/verify`, { signal });
 }
 
 export function approveRuntimePolicyDecision(

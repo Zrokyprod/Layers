@@ -199,7 +199,6 @@ def list_mismatch_responses(
     *,
     project_id: str,
     status: str | None = None,
-    since: datetime | None = None,
     limit: int = 50,
 ) -> list[OutcomeMismatchResponse]:
     query = select(OutcomeMismatchResponse).where(OutcomeMismatchResponse.project_id == project_id)
@@ -208,8 +207,6 @@ def list_mismatch_responses(
         if normalized not in {MISMATCH_RESPONSE_OPEN, MISMATCH_RESPONSE_ACKNOWLEDGED, MISMATCH_RESPONSE_RESOLVED}:
             raise ValueError("status must be one of: OPEN, ACKNOWLEDGED, RESOLVED")
         query = query.where(OutcomeMismatchResponse.status == normalized)
-    if since is not None:
-        query = query.where(OutcomeMismatchResponse.created_at >= since)
     return list(
         db.execute(
             query.order_by(OutcomeMismatchResponse.created_at.desc(), OutcomeMismatchResponse.id.desc()).limit(limit)

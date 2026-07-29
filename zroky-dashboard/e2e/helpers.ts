@@ -60,7 +60,7 @@ export async function expectDashboardShell(page: Page): Promise<void> {
     await expect(page.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
   } else {
     await expect(page.getByRole("button", { name: "Open dashboard navigation menu" })).toBeVisible();
-    await expect(page.locator("img[alt='Zroky']")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Zroky dashboard home" })).toBeVisible();
   }
   await expectHealthyPage(page);
 }

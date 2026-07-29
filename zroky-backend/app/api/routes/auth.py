@@ -434,7 +434,7 @@ def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token user is no longer active.",
         )
-    if token_store.is_user_token_revoked(user.id, claims.get("iat")):
+    if token_store.is_user_token_revoked(user.id, claims.get("iat"), claims.get("rev")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="All sessions for this user have been revoked.",

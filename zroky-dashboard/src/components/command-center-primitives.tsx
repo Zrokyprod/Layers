@@ -207,7 +207,7 @@ export function FirstRunOnboarding({
   const proofPathReady = hasCapture && replayUnlocked;
   const nextAction = !hasProjectKey
     ? {
-        href: "/agents/setup",
+        href: "/workflows",
         label: "Start setup",
         title: "Map first protected agent",
         detail: "Define product context, risky tool calls, runner, verifier, and approval policy before issuing production keys.",
@@ -215,14 +215,14 @@ export function FirstRunOnboarding({
       }
     : !hasCapture
       ? {
-          href: "/agents",
+          href: "/operations",
           label: "Open agents",
           title: "Confirm first agent capture",
           detail: "Run one agent call and confirm the first protected action lands in Zroky.",
           icon: <Send aria-hidden="true" />,
         }
       : {
-          href: "/agents",
+          href: "/operations",
           label: "Review agent",
           title: "First agent action is captured",
           detail: "When Zroky sees risk, this page turns the action into a decision, outcome check, and Evidence Pack.",
@@ -357,21 +357,21 @@ export function FirstRunOnboarding({
       <div className="fi-setup-action-grid" aria-label="Setup options">
         {[
           {
-            href: "/agents/setup",
+            href: "/workflows",
             icon: <Terminal aria-hidden="true" />,
             label: "Configure SDK",
             detail: "Choose the guarded SDK path and copy the starter snippet.",
             action: "Open setup",
           },
           {
-            href: "/agents/setup",
+            href: "/workflows",
             icon: <Route aria-hidden="true" />,
             label: "Configure Gateway",
             detail: "Select the gateway path for protected tool execution.",
             action: "Open setup",
           },
           {
-            href: "/agents",
+            href: "/operations",
             icon: <Send aria-hidden="true" />,
             label: "Open agents",
             detail: "Verify setup with one protected action.",

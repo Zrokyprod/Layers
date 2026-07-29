@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
@@ -473,6 +474,46 @@ class TestPolicyServices:
         first = get_or_create_policy(db_session, project_id="proj-1")
         second = get_or_create_policy(db_session, project_id="proj-1")
         assert first.id == second.id
+
+    def test_get_or_create_returns_policy_after_unique_race(self) -> None:
+        existing = PilotPolicy(
+            id="policy-race-winner",
+            project_id="proj-race",
+            policy_json=json.dumps(DEFAULT_POLICY, separators=(",", ":")),
+            updated_by=None,
+        )
+
+        class _Result:
+            def __init__(self, value):
+                self._value = value
+
+            def scalar_one_or_none(self):
+                return self._value
+
+        class _RaceSession:
+            def __init__(self):
+                self.execute_calls = 0
+                self.rollback_called = False
+
+            def execute(self, _statement):
+                self.execute_calls += 1
+                return _Result(None if self.execute_calls == 1 else existing)
+
+            def add(self, _policy):
+                return None
+
+            def commit(self):
+                raise IntegrityError("insert", {}, Exception("unique project_id"))
+
+            def rollback(self):
+                self.rollback_called = True
+
+        db = _RaceSession()
+        policy = get_or_create_policy(db, project_id="proj-race")  # type: ignore[arg-type]
+
+        assert policy is existing
+        assert db.rollback_called is True
+        assert db.execute_calls == 2
 
     def test_get_or_create_tenant_isolation(self, db_session) -> None:
         a = get_or_create_policy(db_session, project_id="proj-A")

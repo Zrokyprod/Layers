@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 const protectedSetupHref = "/signup?source=pilot&intent=protect-agent&plan=pro";
-const dashboardSetupHref = "/agents/setup?intent=protect-agent&source=pilot&plan=pro";
+const dashboardSetupHref = "/workflows?intent=protect-agent&source=pilot&plan=pro";
 
 const proofCards = [
   {

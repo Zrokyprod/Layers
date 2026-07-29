@@ -346,12 +346,6 @@ if (Test-ReadinessPhase "packages") {
     -Arguments @("test", "./...")
 
   Invoke-ReadinessStep `
-    -Name "Replay worker trust" `
-    -WorkingDirectory (Join-Path $RootDir "zroky-replay-worker") `
-    -Command "python" `
-    -Arguments @("-m", "pytest")
-
-  Invoke-ReadinessStep `
     -Name "Python SDK capture" `
     -WorkingDirectory (Join-Path $RootDir "zroky-sdk") `
     -Command "python" `

@@ -107,11 +107,9 @@ describe("ApiKeysPage", () => {
   it("renders a minimal API key management page and empty state", () => {
     render(<ApiKeysPage />);
 
-    expect(hooks.useListProjectApiKeys).toHaveBeenCalledWith("proj_1");
-
     expect(screen.getByRole("heading", { name: "API keys" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create key" })).toBeInTheDocument();
-    expect(screen.getByText("This key has full project runtime access for SDK, Gateway, and verified-action calls. The secret is shown once.")).toBeInTheDocument();
+    expect(screen.getByText("Full secret is shown once. Store it in your agent runtime. Blank expiry means no automatic expiry.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to run your first verified action.")).toBeInTheDocument();
     expect(screen.queryByText("Runtime access command center")).not.toBeInTheDocument();
     expect(screen.queryByText("Key posture")).not.toBeInTheDocument();
@@ -172,16 +170,8 @@ describe("ApiKeysPage", () => {
     expect(screen.queryByText((content) => content.includes("ZROKY_INGEST_URL"))).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
 
-    const finishButton = screen.getByRole("button", { name: "Finish" }) as HTMLButtonElement;
-    expect(finishButton.disabled).toBe(true);
-
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));
-
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(finishButton.disabled).toBe(false);
-    fireEvent.click(finishButton);
-    expect(screen.queryByRole("heading", { name: "Key created" })).not.toBeInTheDocument();
   });
 
   it("blocks invalid expiry values before creating a key", async () => {

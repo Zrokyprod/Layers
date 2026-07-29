@@ -268,7 +268,7 @@ describe("buildApprovalQueue", () => {
       hrefs: {
         approvals: "/approvals?decision_id=dual_hold",
         evidence: "/evidence?decision_id=dual_hold",
-        action: "/actions?action_id=act_1",
+        action: "/operations?action_id=act_1",
       },
     });
   });
