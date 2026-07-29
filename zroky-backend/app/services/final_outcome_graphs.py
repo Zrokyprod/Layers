@@ -60,19 +60,20 @@ def recheck_due_outcome_graphs(
     *,
     now: datetime | None = None,
     limit: int = 100,
+    project_id: str | None = None,
     verification_window_seconds: int,
 ) -> dict[str, Any]:
     current = now or datetime.now(timezone.utc)
+    query = select(FinalOutcomeGraph).where(
+        FinalOutcomeGraph.classification.in_(("pending", "unknown")),
+        FinalOutcomeGraph.next_check_at.is_not(None),
+        FinalOutcomeGraph.next_check_at <= current,
+    )
+    if project_id is not None:
+        query = query.where(FinalOutcomeGraph.project_id == project_id)
     rows = list(
         db.execute(
-            select(FinalOutcomeGraph)
-            .where(
-                FinalOutcomeGraph.classification.in_(("pending", "unknown")),
-                FinalOutcomeGraph.next_check_at.is_not(None),
-                FinalOutcomeGraph.next_check_at <= current,
-            )
-            .order_by(FinalOutcomeGraph.next_check_at, FinalOutcomeGraph.id)
-            .limit(max(1, min(int(limit), 100)))
+            query.order_by(FinalOutcomeGraph.next_check_at, FinalOutcomeGraph.id).limit(max(1, min(int(limit), 100)))
         ).scalars()
     )
     updated = 0

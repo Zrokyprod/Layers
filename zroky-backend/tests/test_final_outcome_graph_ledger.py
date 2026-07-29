@@ -171,6 +171,7 @@ def test_recheck_sweep_drains_pending_graph_to_verified(client: TestClient) -> N
 
 def test_outcome_graph_recheck_due_endpoint_drains_pending_graph(client: TestClient) -> None:
     now = datetime.now(timezone.utc)
+    other_tenant_graph_id = str(uuid4())
     with client.session_local() as session:
         intent = _intent(intent_json={"refund_id": "rf_endpoint"})
         pack = _pack()
@@ -194,6 +195,17 @@ def test_outcome_graph_recheck_due_endpoint_drains_pending_graph(client: TestCli
             verification_status="pending",
             next_check_at=now - timedelta(seconds=1),
         )
+        other_tenant_row = FinalOutcomeGraph(
+            id=other_tenant_graph_id,
+            project_id="proj_other",
+            environment="production",
+            intent_id=intent.id,
+            graph_digest="pending-other-tenant",
+            graph_json=json.dumps({"observation_count": 0}, separators=(",", ":")),
+            classification="pending",
+            verification_status="pending",
+            next_check_at=now - timedelta(seconds=1),
+        )
         observation = FinalObservation(
             project_id="proj_test",
             environment="production",
@@ -211,12 +223,14 @@ def test_outcome_graph_recheck_due_endpoint_drains_pending_graph(client: TestCli
             ),
             observed_at=now,
         )
-        session.add_all([row, observation])
+        session.add_all([row, other_tenant_row, observation])
         session.commit()
 
     triggered = client.post("/v1/outcome-graphs/recheck-due")
     assert triggered.status_code == 200, triggered.text
     assert triggered.json() == {"checked": 1, "updated": 1}
+    with client.session_local() as session:
+        assert session.get(FinalOutcomeGraph, other_tenant_graph_id).classification == "pending"
 
 
 def test_outcome_graph_ledger_endpoints_filter_and_count_verified_only(client: TestClient) -> None:
