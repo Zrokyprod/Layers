@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
+import { Geist, JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import "./dashboard-redesign.css";
 
@@ -24,6 +24,12 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   display: "swap",
   weight: ["400", "500", "600", "700"],
+});
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -51,7 +57,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${jetbrainsMono.variable} ${manrope.variable} ${spaceGrotesk.variable}`}
+      className={`${jetbrainsMono.variable} ${manrope.variable} ${spaceGrotesk.variable} ${geist.variable}`}
     >
       <body>
         <Providers>{children}</Providers>

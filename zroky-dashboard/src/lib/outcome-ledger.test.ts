@@ -120,6 +120,32 @@ describe("outcome-ledger", () => {
     });
   });
 
+  it("derives truthful differences and labels when a missing record has an empty mismatch array", () => {
+    const ledger = buildOutcomeLedger({
+      checks: [check({
+        actual: {},
+        comparison: { mismatches: [] },
+        metadata: null,
+        runtime_policy_decision_id: null,
+        verdict: "mismatched",
+        reason: "system_of_record_record_missing",
+        claimed: {
+          issue_key: "ZERO-123",
+          jira_issue_key: "ZERO-123",
+          record_ref: "jira:issue:zero-123",
+          status: "Done",
+        },
+      })],
+    });
+
+    expect(ledger.rows[0]).toMatchObject({
+      agentLabel: "Unidentified runtime",
+      detail: "4 field differences",
+      mismatchCount: 4,
+      reasonLabel: "System of record missing",
+    });
+  });
+
   it("filters by verdict and search", () => {
     const ledger = buildOutcomeLedger({
       checks: [

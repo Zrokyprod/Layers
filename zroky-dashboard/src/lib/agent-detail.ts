@@ -10,6 +10,7 @@ import type {
   ToolRegistryResponse,
 } from "@/lib/api";
 import {
+  agentIdentityKnown,
   buildFleetView,
   type AgentFleetAttemptSummary,
   type AgentFleetRow,
@@ -87,6 +88,7 @@ export type BuildAgentDetailInput = {
   runners?: ActionRunnerResponse[];
   attempts?: ActionExecutionAttemptResponse[];
   staleAttemptIds?: string[];
+  bypassCoverageAvailable?: boolean;
   toolRegistry?: ToolRegistryResponse | null;
 };
 
@@ -184,11 +186,12 @@ function buildToolPlan(registry: ToolRegistryResponse | null | undefined): Agent
   };
 }
 
-function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
+function fallbackRow(profile: AgentProfileResponse, bypassCoverageAvailable: boolean): AgentFleetRow {
   return {
     id: `profile:${profile.id}`,
     kind: "profile",
     agentName: profile.display_name,
+    identityKnown: agentIdentityKnown(profile.display_name),
     profile,
     telemetryNames: [],
     aliases: [profile.id, profile.slug, profile.display_name],
@@ -200,6 +203,7 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
       protectedActions: 0,
       bypassed: 0,
       held: 0,
+      awaitingRunner: 0,
       executing: 0,
       stalled: 0,
       matched: 0,
@@ -209,23 +213,29 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
       receiptsMissing: 0,
     },
     coverage: {
+      available: bypassCoverageAvailable,
       configured: profile.allowed_action_types.length,
       protectedObserved: 0,
       bypassedObserved: 0,
       observed: 0,
       percent: null,
-      label: profile.allowed_action_types.length > 0 ? `${profile.allowed_action_types.length} mandated` : "No coverage yet",
-      detail: profile.allowed_action_types.length > 0
+      label: bypassCoverageAvailable
+        ? profile.allowed_action_types.length > 0 ? `${profile.allowed_action_types.length} mandated` : "No coverage yet"
+        : "Not covered",
+      detail: !bypassCoverageAvailable
+        ? "Connect a source mutation feed to measure actions that bypass Zroky."
+        : profile.allowed_action_types.length > 0
         ? `${profile.allowed_action_types.length} protected action ${profile.allowed_action_types.length === 1 ? "type" : "types"} configured`
         : "No protected action mandate configured",
-      tone: profile.allowed_action_types.length > 0 ? "neutral" : "warning",
+      tone: bypassCoverageAvailable && profile.allowed_action_types.length > 0 ? "neutral" : "warning",
     },
     riskSignals: {
+      coverageAvailable: bypassCoverageAvailable,
       bypassed: 0,
       sequenceRisk: 0,
       mismatched: 0,
-      label: "No risky drift",
-      tone: "success",
+      label: bypassCoverageAvailable ? "No risky drift" : "Bypass feed not connected",
+      tone: bypassCoverageAvailable ? "success" : "warning",
     },
     mandate: {
       label: profile.allowed_action_types.length > 0
@@ -238,6 +248,7 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
       runnerMode: null,
     },
     runnerCount: 0,
+    onlineRunnerCount: 0,
     runners: [],
     attemptSummary: emptyAttemptSummary(),
     latestActivityAt: profile.updated_at,
@@ -254,6 +265,7 @@ export function buildAgentDetail({
   runners = [],
   attempts = [],
   staleAttemptIds = [],
+  bypassCoverageAvailable = false,
   toolRegistry = null,
 }: BuildAgentDetailInput): AgentDetailView {
   const fleet = buildFleetView({
@@ -264,8 +276,10 @@ export function buildAgentDetail({
     runners,
     attempts,
     staleAttemptIds,
+    bypassCoverageAvailable,
   });
-  const row = fleet.rows.find((item) => item.profile?.id === profile.id) ?? fallbackRow(profile);
+  const row = fleet.rows.find((item) => item.profile?.id === profile.id)
+    ?? fallbackRow(profile, bypassCoverageAvailable);
   const latestAction = row.actionRows[0] ?? null;
   const actionIds = new Set(row.actionRows.map((action) => action.actionId).filter(Boolean));
   const linkedAttempts = attempts.filter((attempt) => actionIds.has(attempt.action_id));

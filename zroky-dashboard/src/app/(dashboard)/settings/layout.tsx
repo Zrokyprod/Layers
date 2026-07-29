@@ -7,7 +7,6 @@ import {
   CreditCard,
   FolderOpen,
   KeyRound,
-  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -32,19 +31,6 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="settings-shell">
-      <section className="module-hero settings-hero">
-        <div className="module-hero-header">
-          <div>
-            <span className="module-eyebrow">
-              <ShieldCheck aria-hidden="true" />
-              Settings
-            </span>
-            <h1>Workspace control plane</h1>
-            <p>Manage API access, members, billing, and workspace identity for the control plane.</p>
-          </div>
-        </div>
-      </section>
-
       <nav aria-label="Settings sections" className="settings-tabs-nav">
         {SETTINGS_PRIMARY_TABS.map((tab) => {
           const TabIcon = tab.icon;

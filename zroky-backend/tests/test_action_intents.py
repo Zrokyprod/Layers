@@ -483,6 +483,25 @@ def test_action_intent_create_is_digest_bound_and_idempotent(client: TestClient)
     assert second.json()["intent_digest"] == body["intent_digest"]
 
 
+def test_action_contract_list_is_active_and_project_scoped(client: TestClient) -> None:
+    project_id = "proj_action_contract_catalog"
+    other_project_id = "proj_action_contract_catalog_other"
+    _seed_project(client, project_id)
+    _seed_project(client, other_project_id)
+    expected = _register_contract(client, project_id)
+    _register_contract(client, other_project_id)
+
+    listed = client.get(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+    )
+
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["total_in_page"] == 1
+    assert [item["id"] for item in listed.json()["items"]] == [expected["id"]]
+    assert listed.json()["items"][0]["contract_version"] == "customer.refund.transfer/1.0"
+
+
 def test_action_intent_list_filters_and_paginates(client: TestClient) -> None:
     project_id = "proj_action_kernel_list"
     _seed_project(client, project_id)
@@ -2194,7 +2213,13 @@ def test_post_execution_worker_verifies_generic_rest_action_and_generates_receip
     def fake_fetch(self: GenericRestApiConnector) -> SourceRecord:
         assert self.record_ref == "wf_123"
         return SourceRecord(
-            record={"record_ref": "wf_123", "status": "completed"},
+            record={
+                "record_ref": "wf_123",
+                "status": "completed",
+                "updated_at": "2026-07-09T12:00:10+00:00",
+                "updated_by": "zroky-runner",
+                "request_id": "req_workflow_1",
+            },
             record_found=True,
             metadata={
                 "connector_type": "generic_rest_api",
@@ -2230,8 +2255,30 @@ def test_post_execution_worker_verifies_generic_rest_action_and_generates_receip
                 "verification": {
                     "connector": "generic_rest_api",
                     "record_ref": "wf_123",
-                    "claimed": {"record_ref": "wf_123", "status": "completed"},
+                    "claimed": {
+                        "record_ref": "wf_123",
+                        "status": "completed",
+                        "correlation_id": "req_workflow_1",
+                    },
                     "match_fields": ["record_ref", "status"],
+                    "proof_manifest": {
+                        "schema_version": "zroky.proof_connector.v0",
+                        "connector_type": "generic_rest_api",
+                        "capability": "workflow.execution.proof",
+                        "tier": "declarative",
+                        "match_fields": ["record_ref", "status"],
+                        "temporal": {
+                            "action_time": "2026-07-09T12:00:00+00:00",
+                            "observed_at_field": "updated_at",
+                            "window_seconds": 60,
+                        },
+                        "causal": {
+                            "actor_field": "updated_by",
+                            "expected_actor": "zroky-runner",
+                            "correlation_field": "request_id",
+                            "expected_correlation_claim_field": "correlation_id",
+                        },
+                    },
                 },
             },
         },
@@ -2256,6 +2303,7 @@ def test_post_execution_worker_verifies_generic_rest_action_and_generates_receip
         assert outcome.verdict == "matched"
         assert outcome.connector_type == "generic_rest_api"
         assert outcome.action_type == "internal.workflow.execute"
+        assert "workflow.execution.proof" in outcome.metadata_json
         receipt = session.query(ActionReceipt).filter_by(
             project_id=project_id,
             action_intent_id=intent["action_id"],

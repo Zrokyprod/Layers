@@ -4,7 +4,7 @@ This folder runs a local Python agent against the real Zroky control plane. It d
 
 ## 1. Create dashboard state
 
-In `app.zroky.com`:
+In `zroky.com`:
 
 1. Go to `Settings -> API Keys` and create/copy a project key.
 2. Go to `Agents -> Setup`.
@@ -54,7 +54,7 @@ zroky health
 zroky ingest --test
 ```
 
-Then refresh `app.zroky.com/home`. The first smoke event should unlock the first-run dashboard path if the backend accepts it.
+Then refresh `zroky.com/home`. The first smoke event should unlock the first-run dashboard path if the backend accepts it.
 
 ## 5. Run scenarios one by one
 

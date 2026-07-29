@@ -174,6 +174,11 @@ def main() -> int:
     os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-for-schema-export")
     os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key-for-schema-export")
     os.environ.setdefault("PII_ENCRYPTION_KEY", "test-pii-key-for-schema-export")
+    os.environ.setdefault("FEATURE_LEGACY_OBSERVABILITY_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_REPLAY_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_DIAGNOSIS_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_ISSUES_API", "true")
+    os.environ.setdefault("FEATURE_LEGACY_DIAGNOSIS_ALIAS", "true")
     _patch_heavy_deps()
 
     backend_root = Path(__file__).resolve().parent.parent

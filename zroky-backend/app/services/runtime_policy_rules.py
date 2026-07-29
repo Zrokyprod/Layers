@@ -307,13 +307,17 @@ def resolve_runtime_policy(
     )
 
     matched_rules: list[dict[str, Any]] = []
+    action_decision_source_rule_id: str | None = None
     for row in matches:
         patch = _json_loads(row.policy_patch_json, {})
         policy = _apply_patch(policy, patch)
+        if "runtime_action_decision" in patch:
+            action_decision_source_rule_id = row.id
         matched_rules.append(_rule_summary(row))
 
     policy["_runtime_policy_resolution"] = {
         "source": "project_policy+scoped_rules" if matched_rules else "project_policy",
         "matched_rules": matched_rules,
+        "action_decision_source_rule_id": action_decision_source_rule_id,
     }
     return ResolvedRuntimePolicy(policy=policy, matched_rules=matched_rules)

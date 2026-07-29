@@ -257,7 +257,12 @@ function formatUsageMeter(meter: BillingUsageMeter | null | undefined): string {
 
 function usageDetail(label: string, meter: BillingUsageMeter | null | undefined): string {
   if (!meter) return `${label} usage is loading.`;
-  if (meter.state === "exceeded") return `${label} limit exceeded by ${(meter.overage ?? 0).toLocaleString()}.`;
+  if (meter.state === "exceeded") {
+    const overage = meter.overage ?? 0;
+    if (overage > 0) return `${label} limit exceeded by ${overage.toLocaleString()}.`;
+    if (!meter.unlimited && meter.limit != null && meter.used >= meter.limit) return `${label} limit reached.`;
+    return `${label} is over its plan limit.`;
+  }
   if (meter.state === "near_limit") return `${label} is near its plan limit.`;
   if (meter.state === "blocked") return `${label} is blocked on this plan.`;
   if (meter.unlimited) return `${label} is unlimited on this plan.`;
@@ -274,6 +279,13 @@ function meterTone(meter: BillingUsageMeter | null | undefined): "success" | "wa
 function meterPercent(meter: BillingUsageMeter | null | undefined): number {
   if (!meter || meter.unlimited || meter.limit == null || meter.limit <= 0) return 0;
   return Math.min(100, Math.max(0, (meter.used / meter.limit) * 100));
+}
+
+function meterPercentLabel(meter: BillingUsageMeter | null | undefined): string {
+  const percent = meterPercent(meter);
+  if (percent === 0) return "0% used";
+  if (percent < 1) return "<1% used";
+  return `${Number(percent.toFixed(1))}% used`;
 }
 
 function hasMeterLimit(meter: BillingUsageMeter | null | undefined): boolean {
@@ -320,6 +332,9 @@ function paymentStatusLabel(billing: BillingMeResponse | null): { label: string;
   if (billing?.payment_request_ref) {
     return { label: "Pending", detail: "Razorpay payment request is waiting for confirmation." };
   }
+  if ((billing.plan_code ?? "").trim().toLowerCase() === "free") {
+    return { label: "Free plan", detail: "No payment method is required on the Free plan." };
+  }
   return { label: "Not requested", detail: "Start a paid plan to create a Razorpay checkout order." };
 }
 
@@ -329,7 +344,7 @@ function BillingSettingsContent() {
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
   const [billingUsage, setBillingUsage] = useState<BillingUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutPlanCode, setCheckoutPlanCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState("");
 
@@ -373,10 +388,10 @@ function BillingSettingsContent() {
         setActionMsg("Razorpay key is not configured for this dashboard environment.");
         return;
       }
-      setCheckoutBusy(true);
+      setCheckoutPlanCode(planCode);
       const loaded = await loadRazorpayCheckout();
       if (!loaded || !window.Razorpay) {
-        setCheckoutBusy(false);
+        setCheckoutPlanCode(null);
         setActionMsg("Razorpay checkout script failed to load.");
         return;
       }
@@ -398,13 +413,13 @@ function BillingSettingsContent() {
             } catch (e: unknown) {
               setActionMsg(e instanceof Error ? e.message : "Payment verification failed.");
             } finally {
-              setCheckoutBusy(false);
+              setCheckoutPlanCode(null);
             }
           })();
         },
         modal: {
           ondismiss: () => {
-            setCheckoutBusy(false);
+            setCheckoutPlanCode(null);
             setActionMsg("Razorpay checkout was closed before payment.");
           },
         },
@@ -413,7 +428,7 @@ function BillingSettingsContent() {
         },
       });
       checkout.on("payment.failed", (response) => {
-        setCheckoutBusy(false);
+        setCheckoutPlanCode(null);
         setActionMsg(response.error?.description || "Razorpay payment failed.");
       });
       setActionMsg(`Opening Razorpay checkout for ${plan.name} (${formatRazorpayAmount(order.amount, order.currency)}).`);
@@ -421,10 +436,12 @@ function BillingSettingsContent() {
       checkout.open();
     } catch (e: unknown) {
       setActionMsg(e instanceof Error ? e.message : "Failed to update plan.");
-      setCheckoutBusy(false);
+      setCheckoutPlanCode(null);
     }
   }
 
+  const checkoutBusy = checkoutPlanCode != null;
+  const billingRecordUnavailable = !loading && !billingMe;
   const currentPlanCode = billingMe?.plan_code ?? "free";
   const currentCatalogCode = catalogPlanCode(currentPlanCode);
   const currentPlanAlias = currentPlanCode.trim().toLowerCase();
@@ -589,7 +606,7 @@ function BillingSettingsContent() {
           <div className="billing-plans-grid">
             {visiblePlans.map((plan) => {
               const isCurrent = plan.code === currentCatalogCode;
-              const canChangeToPlan = !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
+              const canChangeToPlan = Boolean(billingMe) && !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
               return (
                 <div
                   key={plan.code}
@@ -624,6 +641,7 @@ function BillingSettingsContent() {
                       variant="primary"
                       onClick={() => void changePlan(plan.code)}
                       disabled={loading || checkoutBusy}
+                      loading={checkoutPlanCode === plan.code}
                     >
                       {plan.selfServe ? (checkoutBusy ? "Opening..." : `Upgrade to ${plan.name}`) : "Contact sales"}
                     </DashboardButton>

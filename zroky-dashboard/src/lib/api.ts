@@ -102,6 +102,7 @@ type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
 type RequestOptions = {
   method?: Method;
+  headers?: Record<string, string>;
   query?: Record<string, string | number | undefined | null>;
   body?: unknown;
   headers?: Record<string, string>;
@@ -782,6 +783,28 @@ export interface ActionContractResponse {
   created_at: string;
 }
 
+export interface ActionContractListResponse {
+  items: ActionContractResponse[];
+  total_in_page: number;
+}
+
+export interface ActionIntentCreatePayload {
+  agent_id?: string | null;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  environment?: string;
+  principal?: Record<string, unknown>;
+  actor_chain?: Array<Record<string, unknown>>;
+  purpose?: Record<string, unknown>;
+  resource?: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
+  execution_request?: Record<string, unknown> | null;
+  verification_profile?: string | null;
+  deadline?: string | null;
+  trace_context?: Record<string, unknown> | null;
+}
+
 export interface AgentProfileCreatePayload {
   display_name: string;
   description?: string | null;
@@ -884,6 +907,7 @@ export interface PilotPolicyPayload {
   runtime_production_deploys_require_approval: boolean;
   runtime_changed_recipient_deny: boolean;
   runtime_sequence_risk_enabled: boolean;
+  runtime_action_decision?: "inherit" | "allow" | "require_approval" | "require_two_approvals" | "deny";
 }
 
 export interface PilotPolicyResponse {
@@ -1083,7 +1107,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const performRequest = async (): Promise<Response> => {
     const requestSignal = createRequestSignal(options.signal, options.timeoutMs);
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...(options.headers ?? {}) };
     if (options.body != null) {
       headers["content-type"] = "application/json";
     }
@@ -2461,6 +2485,8 @@ export interface JiraIssueConnectorStatusResponse {
   readiness?: SystemOfRecordConnectorReadiness;
   created_at: string | null;
   updated_at: string | null;
+  has_oauth_refresh_token?: boolean;
+  oauth_refresh_token_last4?: string | null;
 }
 
 export interface JiraIssueConnectorConfigPayload {
@@ -2545,6 +2571,69 @@ export interface PostgresReadConnectorTestResponse {
   ok: boolean;
   check: OutcomeReconciliationView;
   connector: PostgresReadConnectorStatusResponse;
+}
+
+export interface McpUpstreamBindingResponse {
+  endpoint_url: string;
+  protocol_version: string;
+  credential_configured: boolean;
+  allowed_tools: string[];
+  status: "draft" | "active" | "disabled" | string;
+  test_status: "not_tested" | "succeeded" | "failed" | string;
+  tested_at: string | null;
+  last_test_error: string | null;
+  activated_at: string | null;
+  version: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface McpUpstreamDraftPayload {
+  endpoint_url: string;
+  protocol_version?: string;
+  bearer_credential_id?: string | null;
+  allowed_tools: string[];
+}
+
+export interface McpUpstreamPreflightResponse {
+  binding: McpUpstreamBindingResponse;
+  discovered_tools: string[];
+}
+
+export async function getMcpUpstreamBinding(): Promise<McpUpstreamBindingResponse | null> {
+  try {
+    return await request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export function saveMcpUpstreamDraft(
+  body: McpUpstreamDraftPayload,
+): Promise<McpUpstreamBindingResponse> {
+  return request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream", {
+    method: "PUT",
+    body,
+  });
+}
+
+export function preflightMcpUpstream(): Promise<McpUpstreamPreflightResponse> {
+  return request<McpUpstreamPreflightResponse>("/v1/mcp-config/upstream/preflight", {
+    method: "POST",
+  });
+}
+
+export function activateMcpUpstream(): Promise<McpUpstreamBindingResponse> {
+  return request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream/activate", {
+    method: "POST",
+  });
+}
+
+export function disableMcpUpstream(): Promise<McpUpstreamBindingResponse> {
+  return request<McpUpstreamBindingResponse>("/v1/mcp-config/upstream/disable", {
+    method: "POST",
+  });
 }
 
 export function getLedgerRefundConnectorStatus(
@@ -2973,6 +3062,12 @@ export function getJiraIssueConnectorStatus(
   );
 }
 
+export function startJiraIssueOAuth(): Promise<OAuthStartResponse> {
+  return request<OAuthStartResponse>(
+    "/v1/integrations/system-of-record/jira-issue/oauth/start",
+  );
+}
+
 export function saveJiraIssueConnectorConfig(
   body: JiraIssueConnectorConfigPayload,
 ): Promise<JiraIssueConnectorStatusResponse> {
@@ -3326,6 +3421,13 @@ export function revokeProjectInvitation(projectId: string, invitationId: string)
   return request<void>(`/v1/invitations/projects/${encodeURIComponent(projectId)}/invitations/${encodeURIComponent(invitationId)}`, {
     method: "DELETE",
   });
+}
+
+export function resendProjectInvitation(projectId: string, invitationId: string): Promise<ProjectInvitationItem> {
+  return request<ProjectInvitationItem>(
+    `/v1/invitations/projects/${encodeURIComponent(projectId)}/invitations/${encodeURIComponent(invitationId)}/resend`,
+    { method: "POST" },
+  );
 }
 
 export function acceptInvitation(token: string): Promise<AcceptInvitationResponse> {
@@ -3820,6 +3922,40 @@ export interface OutcomeReconciliationListResponse {
   total_in_page: number;
 }
 
+export type OutcomeMismatchResponseStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
+
+export interface OutcomeMismatchResponseView {
+  id: string;
+  project_id: string;
+  reconciliation_check_id: string;
+  action_intent_id: string | null;
+  action_receipt_id: string | null;
+  receipt_digest: string | null;
+  alert_id: string | null;
+  status: OutcomeMismatchResponseStatus;
+  resolution_code: string | null;
+  resolution_note: string | null;
+  remediation: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  acknowledged_by_subject: string | null;
+  acknowledged_at: string | null;
+  resolved_by_subject: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutcomeMismatchResponseListResponse {
+  items: OutcomeMismatchResponseView[];
+  total_in_page: number;
+}
+
+export type OutcomeMismatchResolutionCode =
+  | "confirmed_mismatch"
+  | "expected_change"
+  | "false_positive"
+  | "unresolved";
+
 export interface OutcomeReconciliationSummaryResponse {
   window_days: number;
   total: number;
@@ -3829,6 +3965,7 @@ export interface OutcomeReconciliationSummaryResponse {
   verified?: number;
   pending?: number;
   unverifiable?: number;
+  partial?: number;
   cancelled?: number;
 }
 
@@ -3921,6 +4058,18 @@ export interface HomeSummaryResponse {
     action_runners: ActionRunnerResponse[];
     api_keys: ApiKeyResponse[];
     billing_usage: BillingUsageResponse | null;
+    control_health?: {
+      active_agents: number;
+      policy_enforced_agents: number;
+      configured_action_packs: number;
+      online_runners: number;
+      active_sor_connectors: number;
+      tested_sor_connectors: number;
+      mcp_gateway_status: string;
+      mcp_gateway_test_status: string;
+      runtime_enabled: boolean;
+      kill_switch_enabled: boolean;
+    } | null;
   };
 }
 
@@ -3935,6 +4084,7 @@ export interface ActionsLifecycleSummaryResponse {
     approvals: number;
     outcomes: number;
     mutations: number;
+    attempts?: number;
     stale_attempts: number;
   };
   truncated: boolean;
@@ -3955,6 +4105,7 @@ export interface ActionsLifecycleSummaryResponse {
     outcome_summary: boolean;
     source_summary: boolean;
     mutations: boolean;
+    attempts?: boolean;
     stale_attempts: boolean;
     billing_usage: boolean;
   };
@@ -3965,6 +4116,7 @@ export interface ActionsLifecycleSummaryResponse {
     outcome_summary: OutcomeReconciliationSummaryResponse | null;
     source_summary: SourceMutationSummaryResponse | null;
     mutations: SourceMutationView[];
+    attempts?: ActionExecutionAttemptResponse[];
     stale_attempts: ActionExecutionAttemptResponse[];
     billing_usage: BillingUsageResponse | null;
   };
@@ -4139,6 +4291,7 @@ export function getActionsLifecycleSummary(
 export function listOutcomeReconciliations(
   params: {
     verdict?: OutcomeReconciliationVerdict | "all";
+    days?: number;
     limit?: number;
   } = {},
   signal?: AbortSignal,
@@ -4147,10 +4300,71 @@ export function listOutcomeReconciliations(
   return request<OutcomeReconciliationListResponse>("/v1/outcomes/reconciliation", {
     query: {
       ...(verdict ? { verdict } : {}),
+      days: params.days == null ? undefined : String(params.days),
       limit: String(params.limit ?? 50),
     },
     signal,
   });
+}
+
+export function listOutcomeMismatchResponses(
+  status: OutcomeMismatchResponseStatus | "all" = "all",
+  limit = 100,
+  days?: number,
+  signal?: AbortSignal,
+): Promise<OutcomeMismatchResponseListResponse> {
+  return request<OutcomeMismatchResponseListResponse>("/v1/outcomes/reconciliation/mismatch-responses", {
+    query: {
+      status: status === "all" ? undefined : status,
+      limit: String(limit),
+      days: days == null ? undefined : String(days),
+    },
+    signal,
+  });
+}
+
+export function getOutcomeMismatchResponse(
+  responseId: string,
+  signal?: AbortSignal,
+): Promise<OutcomeMismatchResponseView> {
+  return request<OutcomeMismatchResponseView>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}`,
+    { signal },
+  );
+}
+
+export function createOutcomeCorrectiveAction(
+  responseId: string,
+  payload: ActionIntentCreatePayload,
+  idempotencyKey: string,
+): Promise<ActionIntentDecisionResponse> {
+  return request<ActionIntentDecisionResponse>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}/corrective-action`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: payload,
+    },
+  );
+}
+
+export function acknowledgeOutcomeMismatchResponse(
+  responseId: string,
+): Promise<OutcomeMismatchResponseView> {
+  return request<OutcomeMismatchResponseView>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}/acknowledge`,
+    { method: "POST" },
+  );
+}
+
+export function resolveOutcomeMismatchResponse(
+  responseId: string,
+  body: { resolution_code: OutcomeMismatchResolutionCode; resolution_note?: string | null },
+): Promise<OutcomeMismatchResponseView> {
+  return request<OutcomeMismatchResponseView>(
+    `/v1/outcomes/reconciliation/mismatch-responses/${encodeURIComponent(responseId)}/resolve`,
+    { method: "POST", body },
+  );
 }
 
 export function getOutcomeReconciliation(
@@ -5057,6 +5271,27 @@ export function updatePilotPolicy(policy: PilotPolicyUpdatePayload): Promise<Pil
 
 // ── Verified Action Control Plane ───────────────────────────────────────────
 
+export function listActionContracts(
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<ActionContractListResponse> {
+  return request<ActionContractListResponse>("/v1/action-contracts", {
+    query: { limit },
+    signal,
+  });
+}
+
+export function createActionIntent(
+  payload: ActionIntentCreatePayload,
+  idempotencyKey: string,
+): Promise<ActionIntentResponse> {
+  return request<ActionIntentResponse>("/v1/action-intents", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: payload,
+  });
+}
+
 export function listActionIntents(
   query: {
     status?: ActionIntentStatus | "all" | string | null;
@@ -5150,7 +5385,7 @@ export function listRuntimePolicyApprovals(
   signal?: AbortSignal,
 ): Promise<RuntimePolicyListResponse> {
   return request<RuntimePolicyListResponse>("/v1/runtime-policy/approvals", {
-    query: { status },
+    query: { status, limit: 100 },
     signal,
   });
 }
@@ -5227,6 +5462,7 @@ export function getEvidenceManifest(
     start_date?: string;
     end_date?: string;
     dashboard_origin?: string;
+    days?: number;
   } = {},
   signal?: AbortSignal,
 ): Promise<EvidenceManifestResponse> {

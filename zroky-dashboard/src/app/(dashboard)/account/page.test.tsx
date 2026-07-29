@@ -151,7 +151,9 @@ describe("AccountPage", () => {
     render(<AccountPage />);
 
     expect(screen.getByDisplayValue("Sanket K.")).toBeInTheDocument();
+    expect((screen.getByRole("button", { name: "Save profile" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Sanket Team" } });
+    expect((screen.getByRole("button", { name: "Save profile" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
 
     await waitFor(() => expect(hooks.updateMeMutateAsync).toHaveBeenCalledWith({ displayName: "Sanket Team" }));
@@ -201,5 +203,26 @@ describe("AccountPage", () => {
 
     expect(await screen.findAllByText("Unavailable")).not.toHaveLength(0);
     expect((screen.getByRole("button", { name: /Log out all sessions/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("requires confirmation before revoking every session", async () => {
+    api.logoutAllSessions.mockResolvedValue({ detail: "Sessions revoked." });
+    render(<AccountPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Log out all sessions" }));
+
+    expect(api.logoutAllSessions).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Log out all sessions" })).toBeInTheDocument();
+    expect(screen.getByText(/including this browser/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Log out all sessions" })).not.toBeInTheDocument();
+    expect(api.logoutAllSessions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Log out all sessions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, log out everywhere" }));
+
+    await waitFor(() => expect(api.logoutAllSessions).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/login"));
   });
 });

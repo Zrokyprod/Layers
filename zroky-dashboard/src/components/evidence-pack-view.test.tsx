@@ -216,6 +216,26 @@ function mismatchedReceipt(): ActionReceiptResponse {
 }
 
 describe("EvidencePackView", () => {
+  it.each(["blocked", "rejected", "expired"] as const)(
+    "shows verification as not required when a %s decision prevented execution",
+    (status) => {
+      const preventedPack = pack();
+      preventedPack.decision = {
+        ...preventedPack.decision,
+        status,
+        decision: status === "blocked" ? "block" : "requires_approval",
+        allowed: false,
+      };
+      preventedPack.verification_status = "not_verified";
+      preventedPack.outcome_reconciliation = [];
+
+      render(<EvidencePackView pack={preventedPack} />);
+
+      expect(screen.getByText("Verification not required")).toBeInTheDocument();
+      expect(screen.queryByText("Not verified")).not.toBeInTheDocument();
+    },
+  );
+
   it("renders runtime policy evidence pack details", () => {
     render(<EvidencePackView pack={pack()} />);
 

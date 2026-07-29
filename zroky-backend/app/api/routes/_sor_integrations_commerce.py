@@ -182,7 +182,7 @@ def test_stripe_payment_connector(
     claimed.setdefault("payment_id", payment_id)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_stripe_payment_connector(
             config,
             payment_id=payment_id,
@@ -295,7 +295,7 @@ def test_shopify_connector(
     claimed.setdefault("record_ref", record_ref)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_shopify_admin_connector(
             config,
             record_ref=record_ref,

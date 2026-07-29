@@ -137,6 +137,39 @@ def sweep_stale_action_execution_attempts(
 
 
 @celery_app.task(
+    name="app.worker.tasks.sweep_pending_proof_reconciliations",
+    queue="verification_sweep",
+)
+def sweep_pending_proof_reconciliations(limit: int | None = None) -> dict:
+    """Expire overdue pending proof rows and report rows ready for reverify."""
+    from dataclasses import asdict
+
+    from app.services.outcome_reconciliation import sweep_pending_reconciliation_checks
+
+    settings = get_settings()
+    if not settings.PROOF_PENDING_SWEEP_ENABLED:
+        logger.info(
+            "sweep_pending_proof_reconciliations: PROOF_PENDING_SWEEP_ENABLED=false - skipping"
+        )
+        return {
+            "skipped": True,
+            "reason": "PROOF_PENDING_SWEEP_ENABLED=false",
+        }
+
+    effective_limit = (
+        int(limit)
+        if limit is not None and limit > 0
+        else int(settings.PROOF_PENDING_SWEEP_LIMIT)
+    )
+    session = SessionLocal()
+    try:
+        result = sweep_pending_reconciliation_checks(session, limit=effective_limit)
+        return asdict(result)
+    finally:
+        session.close()
+
+
+@celery_app.task(
     name="app.worker.tasks.sweep_stale_private_runner_verifications",
     queue="verification_sweep",
 )

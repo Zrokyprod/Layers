@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BillingPage from "./page";
@@ -39,6 +39,8 @@ vi.mock("@/lib/api", async () => {
 });
 
 describe("BillingPage", () => {
+  const originalRazorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
   beforeEach(() => {
     vi.clearAllMocks();
     navigation.query = "upgrade_hint=replay.monthly_runs";
@@ -79,7 +81,7 @@ describe("BillingPage", () => {
       replay: usageMeter(0, 0, "blocked"),
       goldens: { ...usageMeter(0, 0, "blocked"), resets_at: null },
       golden_sets: { ...usageMeter(0, 0, "blocked"), resets_at: null },
-      protected_actions: usageMeter(7, 500),
+      protected_actions: usageMeter(2, 500),
       policy_checks: usageMeter(18, 1000),
       runner_executions: usageMeter(4, 500),
       action_receipts: usageMeter(4, 500),
@@ -92,6 +94,23 @@ describe("BillingPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID = originalRazorpayKey;
+    delete window.Razorpay;
+  });
+
+  it("does not assume the Free plan when the billing record cannot be loaded", async () => {
+    api.getBillingMe.mockRejectedValue(new Error("Billing service unavailable."));
+    api.getBillingUsage.mockRejectedValue(new Error("Billing service unavailable."));
+
+    render(<BillingPage />);
+
+    expect(await screen.findByRole("region", { name: "Billing unavailable" })).toBeInTheDocument();
+    expect(screen.getByText("No fallback plan has been assumed.", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Billing overview" })).not.toBeInTheDocument();
+    expect(screen.queryByText("FREE")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(api.getBillingMe).toHaveBeenCalledTimes(2));
   });
 
   it("renders targeted upgrade_hint banners from module links", async () => {
@@ -129,6 +148,77 @@ describe("BillingPage", () => {
     expect(within(teamCard).queryByText(/Bypass detection/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upgrade to Team" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
+  });
+
+  it("opens and verifies Razorpay checkout for only the selected plan", async () => {
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID = "rzp_test_key";
+    const checkoutOpen = vi.fn();
+    const checkoutOn = vi.fn();
+    let paymentHandler: ((response: {
+      razorpay_payment_id: string;
+      razorpay_order_id: string;
+      razorpay_signature: string;
+    }) => void) | null = null;
+    window.Razorpay = function Razorpay(
+      options: ConstructorParameters<NonNullable<typeof window.Razorpay>>[0],
+    ) {
+      paymentHandler = options.handler;
+      return { open: checkoutOpen, on: checkoutOn };
+    } as unknown as typeof window.Razorpay;
+    api.createRazorpayOrder.mockResolvedValue({
+      order_id: "order_team_1",
+      amount: 19_900,
+      currency: "INR",
+      receipt: "receipt_team_1",
+      plan_code: "team",
+      org_id: "org_1",
+      payment_provider: "razorpay",
+      amount_usd: 199,
+    });
+    api.verifyRazorpayPayment.mockResolvedValue({
+      success: true,
+      order_id: "order_team_1",
+      payment_id: "payment_team_1",
+      org_id: "org_1",
+      plan_code: "team",
+    });
+
+    render(<BillingPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Upgrade to Team" }));
+
+    await waitFor(() => expect(api.createRazorpayOrder).toHaveBeenCalledWith({ plan_code: "team" }));
+    expect(checkoutOpen).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Opening checkout" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade to Starter" })).toBeInTheDocument();
+
+    await act(async () => {
+      paymentHandler?.({
+        razorpay_payment_id: "payment_team_1",
+        razorpay_order_id: "order_team_1",
+        razorpay_signature: "signature_team_1",
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(api.verifyRazorpayPayment).toHaveBeenCalledWith({
+      razorpay_payment_id: "payment_team_1",
+      razorpay_order_id: "order_team_1",
+      razorpay_signature: "signature_team_1",
+    }));
+    expect(await screen.findByText("Payment verified for Team. Your plan is active.")).toBeInTheDocument();
+  });
+
+  it("describes an exact connector cap as reached instead of exceeded by zero", async () => {
+    api.getBillingUsage.mockResolvedValue({
+      ...(await api.getBillingUsage()),
+      active_connectors: usageMeter(1, 1, "exceeded"),
+    });
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText("System-of-record connectors limit reached.")).toBeInTheDocument();
+    expect(screen.queryByText("System-of-record connectors limit exceeded by 0.")).not.toBeInTheDocument();
   });
 
   it("maps legacy Plus subscriptions to the Scale catalog card", async () => {

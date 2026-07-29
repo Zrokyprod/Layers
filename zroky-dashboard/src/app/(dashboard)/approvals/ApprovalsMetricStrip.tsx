@@ -3,11 +3,12 @@
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
   Clock3,
-  ShieldAlert,
+  ListChecks,
 } from "lucide-react";
 
-import { DashboardMetricStrip, type DashboardMetric } from "@/components/dashboard-scaffold";
+import type { ApprovalQueueFilter } from "@/lib/approval-queue";
 import type { StatusTone } from "@/lib/action-status";
 import { formatCount } from "@/lib/format";
 
@@ -17,63 +18,85 @@ type Metric = {
   helper: string;
   tone: StatusTone;
   Icon: ComponentType<{ size?: number; className?: string }>;
+  filter: ApprovalQueueFilter;
 };
 
 type ApprovalsMetricStripProps = {
   pending: number;
-  damageStopped: number;
+  approved: number;
   expiringSoon: number;
-  sequenceRisk: number;
+  stopped: number;
+  total: number;
+  activeFilter: ApprovalQueueFilter;
+  onFilterChange: (filter: ApprovalQueueFilter) => void;
 };
 
 export function ApprovalsMetricStrip({
-  damageStopped,
+  approved,
+  activeFilter,
   expiringSoon,
+  onFilterChange,
   pending,
-  sequenceRisk,
+  stopped,
+  total,
 }: ApprovalsMetricStripProps) {
   const metrics: Metric[] = [
     {
-      label: "Pending holds",
+      label: "Pending",
       value: pending,
-      helper: "Actions waiting at the approval gate.",
+      helper: expiringSoon > 0
+        ? `${formatCount(expiringSoon)} ${expiringSoon === 1 ? "hold expires" : "holds expire"} soon.`
+        : "Actions waiting at the approval gate.",
       tone: pending > 0 ? "warning" : "success",
       Icon: Clock3,
+      filter: "pending",
     },
     {
-      label: "Expiring soon",
-      value: expiringSoon,
-      helper: "Pending holds near their approval deadline.",
-      tone: expiringSoon > 0 ? "warning" : "success",
-      Icon: Clock3,
+      label: "Approved",
+      value: approved,
+      helper: "Actions released by a completed human decision.",
+      tone: approved > 0 ? "success" : "neutral",
+      Icon: CheckCircle2,
+      filter: "approved",
     },
     {
-      label: "Sequence risk",
-      value: sequenceRisk,
-      helper: "Cross-action patterns held before execution.",
-      tone: sequenceRisk > 0 ? "warning" : "neutral",
-      Icon: ShieldAlert,
-    },
-    {
-      label: "Damage stopped",
-      value: damageStopped,
-      helper: "Blocked or rejected actions preserved for audit.",
-      tone: damageStopped > 0 ? "danger" : "neutral",
+      label: "Stopped",
+      value: stopped,
+      helper: "Blocked, rejected, or expired actions that never ran.",
+      tone: stopped > 0 ? "danger" : "neutral",
       Icon: AlertTriangle,
+      filter: "stopped",
+    },
+    {
+      label: "All decisions",
+      value: total,
+      helper: "Complete approval and policy decision history.",
+      tone: "neutral",
+      Icon: ListChecks,
+      filter: "all",
     },
   ];
 
   return (
-    <DashboardMetricStrip
-      ariaLabel="Approval control metrics"
-      columns={4}
-      metrics={metrics.map<DashboardMetric>(({ Icon, helper, label, tone, value }) => ({
-        helper,
-        icon: <Icon aria-hidden="true" size={16} />,
-        label,
-        tone,
-        value: formatCount(value),
-      }))}
-    />
+    <section className="dashboard-metric-strip approval-v2-metric-filters" aria-label="Approval control filters">
+      {metrics.map(({ Icon, filter, helper, label, tone, value }) => (
+        <button
+          key={filter}
+          type="button"
+          className={`dashboard-metric-card approval-v2-metric-filter${activeFilter === filter ? " is-active" : ""}`}
+          data-tone={tone}
+          aria-label={label}
+          aria-pressed={activeFilter === filter}
+          onClick={() => onFilterChange(filter)}
+        >
+          <span className="dashboard-metric-head">
+            <span className="dashboard-metric-icon"><Icon aria-hidden="true" size={16} /></span>
+            {label}
+          </span>
+          <strong>{formatCount(value)}</strong>
+          <p>{helper}</p>
+        </button>
+      ))}
+    </section>
   );
 }

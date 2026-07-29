@@ -14,6 +14,7 @@ class ActionsLifecycleSources(BaseModel):
     outcome_summary: bool = True
     source_summary: bool = True
     mutations: bool = True
+    attempts: bool = True
     stale_attempts: bool = True
     billing_usage: bool = True
 
@@ -32,6 +33,7 @@ class ActionsLifecycleSourceTotals(BaseModel):
     approvals: int = Field(ge=0)
     outcomes: int = Field(ge=0)
     mutations: int = Field(ge=0)
+    attempts: int = Field(ge=0)
     stale_attempts: int = Field(ge=0)
 
 
@@ -42,6 +44,7 @@ class ActionsLifecycleData(BaseModel):
     outcome_summary: dict[str, Any] | None = None
     source_summary: dict[str, Any] | None = None
     mutations: list[dict[str, Any]] = Field(default_factory=list)
+    attempts: list[dict[str, Any]] = Field(default_factory=list)
     stale_attempts: list[dict[str, Any]] = Field(default_factory=list)
     billing_usage: dict[str, Any] | None = None
 

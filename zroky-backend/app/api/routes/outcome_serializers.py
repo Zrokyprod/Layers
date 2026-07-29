@@ -64,5 +64,3 @@ def _serialize_reconciliation(row) -> OutcomeReconciliationView:
 
 def _serialize_source_mutation(row) -> SourceMutationView:
     return SourceMutationView(**source_mutation_to_dict(row))
-
-

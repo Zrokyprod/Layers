@@ -671,6 +671,45 @@ export interface AdminFeatureDetailResponse {
   next_cursor: string | null;
 }
 
+export type OwnerToolRegistryKind = "runtime_path" | "verification_connector" | "native_tool_family";
+export type OwnerToolImplementationStatus = "available" | "template" | "planned";
+
+export interface OwnerToolRegistryItem {
+  id: string;
+  kind: OwnerToolRegistryKind;
+  label: string;
+  description: string;
+  category: string;
+  phase: "phase1" | string;
+  implementation_status: OwnerToolImplementationStatus | string;
+  launch_tier: "p0" | "p1" | "p2" | string;
+  supported_action_types: string[];
+  recommended_for_action_types: string[];
+  requires_customer_credentials: boolean;
+  dashboard_href: string | null;
+  backend_capability: string | null;
+  availability_notes: string | null;
+}
+
+export interface OwnerToolRegistryRecommendation {
+  action_types: string[];
+  runtime_path_ids: string[];
+  verification_connector_ids: string[];
+  native_tool_family_ids: string[];
+  next_steps: string[];
+}
+
+export interface OwnerToolRegistryResponse {
+  schema_version: string;
+  project_id: string;
+  agent_id: string | null;
+  action_type: string | null;
+  runtime_paths: OwnerToolRegistryItem[];
+  verification_connectors: OwnerToolRegistryItem[];
+  native_tool_families: OwnerToolRegistryItem[];
+  recommended: OwnerToolRegistryRecommendation;
+}
+
 export function fetchOwnerStats(signal?: AbortSignal): Promise<OwnerStats> {
   return ownerRequest<OwnerStats>("/v1/owner/stats", { signal });
 }
@@ -693,6 +732,10 @@ export function fetchOwnerLaunchReadiness(signal?: AbortSignal): Promise<OwnerLa
 
 export function fetchOwnerProductionReadiness(signal?: AbortSignal): Promise<OwnerProductionReadiness> {
   return ownerRequest<OwnerProductionReadiness>("/v1/owner/production-readiness", { signal });
+}
+
+export function fetchOwnerToolRegistry(signal?: AbortSignal): Promise<OwnerToolRegistryResponse> {
+  return ownerRequest<OwnerToolRegistryResponse>("/v1/tools/registry", { signal });
 }
 
 export function fetchOwnerUsers(

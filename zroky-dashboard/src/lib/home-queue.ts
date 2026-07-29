@@ -255,7 +255,11 @@ export function buildDecisionQueue({
   });
 }
 
-export function homeVerdictForQueue(rows: HomeQueueRow[], hasSetup: boolean): {
+export function homeVerdictForQueue(
+  rows: HomeQueueRow[],
+  hasSetup: boolean,
+  missingControl?: { detail: string; href: string },
+): {
   title: string;
   detail: string;
   tone: StatusTone;
@@ -273,6 +277,15 @@ export function homeVerdictForQueue(rows: HomeQueueRow[], hasSetup: boolean): {
   }
   const first = rows[0];
   if (!first) {
+    if (missingControl) {
+      return {
+        title: "Control coverage incomplete",
+        detail: missingControl.detail,
+        tone: "warning",
+        ctaLabel: "Complete control",
+        ctaHref: missingControl.href,
+      };
+    }
     return {
       title: "Protected",
       detail: "No agent action needs your decision right now.",

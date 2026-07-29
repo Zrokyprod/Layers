@@ -5,6 +5,7 @@ const defaultTimeoutMs = 10_000;
 const OWNER_TOKEN_COOKIE = "zroky_owner_token";
 const OWNER_PROXY_ALLOWED_PREFIXES = [
   "v1/owner",
+  "v1/tools/registry",
   "v1/feature-flags/admin",
   "v1/admin/feature-interest",
 ] as const;

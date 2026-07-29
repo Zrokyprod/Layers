@@ -158,7 +158,7 @@ def test_ledger_refund_connector(
     claimed.setdefault("refund_id", refund_id)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_ledger_refund_connector(
             config,
             refund_id=refund_id,
@@ -292,7 +292,7 @@ def test_stripe_refund_connector(
     claimed.setdefault("stripe_refund_id", refund_id)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_stripe_refund_connector(
             config,
             refund_id=refund_id,
@@ -426,7 +426,7 @@ def test_razorpay_refund_connector(
     claimed.setdefault("razorpay_refund_id", refund_id)
     settings = get_settings()
     try:
-        key_secret = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        key_secret = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_razorpay_refund_connector(
             config,
             refund_id=refund_id,
@@ -475,4 +475,3 @@ def test_razorpay_refund_connector(
         check=reconciliation_to_dict(row),
         connector=_razorpay_status_response(updated_config, db=db, project_id=tenant_id),
     )
-

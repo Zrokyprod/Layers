@@ -19,7 +19,11 @@ import { DashboardMetricStrip, DashboardVerdictHero, DashboardWorkspace, type Da
 import { StatusPill } from "@/components/status-pill";
 import { statusLabel, type StatusTone } from "@/lib/action-status";
 import {
+  acknowledgeOutcomeMismatchResponse,
   reconcileSavedConnector,
+  resolveOutcomeMismatchResponse,
+  type OutcomeMismatchResolutionCode,
+  type OutcomeMismatchResponseView,
   type OutcomeReconciliationView,
   type SavedConnectorReconciliationConnector,
   type SavedConnectorReconciliationPayload,
@@ -36,9 +40,14 @@ import {
 import {
   useOutcomeReconciliationSummary,
   useOutcomeReconciliations,
+  useOutcomeMismatchResponses,
+  useMyProjects,
   useSourceMutationSummary,
   useUnreceiptedSourceMutations,
 } from "@/lib/hooks";
+import { useDashboardStore } from "@/lib/store";
+
+import { MismatchCasePanel, type OutcomeMismatchCaseNotice } from "./mismatch-case-panel";
 
 const FILTERS: Array<{ id: OutcomeLedgerFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -138,8 +147,9 @@ function verdictFor({
     };
   }
   if (mismatched > 0) {
+    const checkedLabel = `${formatCount(total)} action${total === 1 ? "" : "s"} checked`;
     return {
-      copy: `${formatCount(total)} actions checked, ${formatCount(mismatched)} mismatched against the real system. Inspect the selected diff before trusting the action.`,
+      copy: `${checkedLabel}, ${formatCount(mismatched)} mismatched against the real system. Inspect the selected diff before trusting the action.`,
       pill: `${formatCount(mismatched)} mismatch${mismatched === 1 ? "" : "es"}`,
       title: "Verified action mismatch",
       tone: "danger",
@@ -177,7 +187,7 @@ function verdictFor({
   };
 }
 
-function metricsFor(ledger: OutcomeLedger): DashboardMetric[] {
+function metricsFor(ledger: OutcomeLedger, mutationCoverageAvailable: boolean): DashboardMetric[] {
   return [
     {
       helper: "Claim equals actual record",
@@ -204,12 +214,16 @@ function metricsFor(ledger: OutcomeLedger): DashboardMetric[] {
       value: formatCount(ledger.counts.notVerified),
     },
     {
-      helper: "System changes with no receipt",
+      helper: mutationCoverageAvailable
+        ? "System changes with no receipt"
+        : "A successful source mutation sync is required before bypass risk can be ruled out.",
       icon: <ShieldAlert size={16} />,
       id: "bypass",
       label: "Bypass risk",
-      tone: ledger.counts.bypass > 0 ? "danger" : "neutral",
-      value: formatCount(ledger.counts.bypass),
+      tone: ledger.counts.bypass > 0 ? "danger" : mutationCoverageAvailable ? "neutral" : "warning",
+      value: ledger.counts.bypass > 0 || mutationCoverageAvailable
+        ? formatCount(ledger.counts.bypass)
+        : "Not covered",
     },
     {
       helper: "Matched / total checks",
@@ -289,16 +303,16 @@ function OutcomeFeed({
               type="button"
               onClick={() => onSelect(row)}
             >
-              <span className="outcomes-row-status">
-                <StatusPill value={row.verdict} />
-              </span>
               <span className="outcomes-row-main">
                 <strong>{row.title}</strong>
                 <small>{row.agentLabel} / {row.actionType}</small>
                 <em>{row.detail}</em>
               </span>
               <span className="outcomes-row-side">
-                <span>{row.amountLabel}</span>
+                <span className="outcomes-row-status">
+                  <StatusPill value={row.verdict} />
+                </span>
+                {row.check.amount_usd != null ? <span>{row.amountLabel}</span> : null}
                 <small>{timeSince(row.checkedAt)}</small>
               </span>
             </button>
@@ -340,12 +354,30 @@ function DiffTable({ rows }: { rows: OutcomeDiffRow[] }) {
 }
 
 function OutcomeInspector({
+  caseBusy,
+  caseNotice,
+  canAcknowledgeCase,
+  canResolveCase,
+  mismatchCase,
+  onAcknowledgeCase,
   onReverify,
+  onResolveCase,
   reverifyLoadingId,
   reverifyNotice,
   row,
 }: {
+  caseBusy: boolean;
+  caseNotice: OutcomeMismatchCaseNotice | null;
+  canAcknowledgeCase: boolean;
+  canResolveCase: boolean;
+  mismatchCase: OutcomeMismatchResponseView | null;
+  onAcknowledgeCase: (responseCase: OutcomeMismatchResponseView) => void;
   onReverify: (row: OutcomeLedgerRow) => void;
+  onResolveCase: (
+    responseCase: OutcomeMismatchResponseView,
+    resolutionCode: OutcomeMismatchResolutionCode,
+    resolutionNote: string,
+  ) => void;
   reverifyLoadingId: string | null;
   reverifyNotice: ReverifyNotice | null;
   row: OutcomeLedgerRow | null;
@@ -388,7 +420,7 @@ function OutcomeInspector({
                 : "The connector confirmed the claim against the actual record."}
           </p>
         </div>
-        <strong>{row.amountLabel}</strong>
+        {check.amount_usd != null ? <strong>{row.amountLabel}</strong> : null}
       </div>
 
       <dl className="outcomes-fact-grid">
@@ -438,7 +470,9 @@ function OutcomeInspector({
           </strong>
           <p>
             {row.verdict === "mismatched"
-              ? "Compare the field diff, open signed evidence, then re-check the saved connector before escalating."
+              ? row.evidenceHref
+                ? "Compare the field diff, open signed evidence, then re-check the saved connector before escalating."
+                : "Compare the field diff, re-check the saved connector, and link future checks to a protected action before escalating."
               : row.verdict === "not_verified"
                 ? canReverify
                   ? "Retry the source-of-record verifier after connector credentials, scope, or record availability recover."
@@ -460,6 +494,18 @@ function OutcomeInspector({
           {rowNotice ? <small data-tone={rowNotice.tone}>{rowNotice.text}</small> : null}
         </div>
       </section>
+
+      {row.verdict === "mismatched" ? (
+        <MismatchCasePanel
+          busy={caseBusy}
+          canAcknowledge={canAcknowledgeCase}
+          canResolve={canResolveCase}
+          notice={caseNotice}
+          onAcknowledge={onAcknowledgeCase}
+          onResolve={onResolveCase}
+          responseCase={mismatchCase}
+        />
+      ) : null}
 
       <div className="outcomes-inspector-actions">
         {row.evidenceHref ? (
@@ -539,8 +585,10 @@ function BypassStrip({
         </div>
       ) : (
         <div className="outcomes-bypass-clear">
-          <StatusPill value="clear" />
-          <span>All observed protected mutations are receipted or authorized.</span>
+          <DashboardButtonLink href="/integrations" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
+            Connect mutation feed
+          </DashboardButtonLink>
+          <StatusPill value="not_verified" label="coverage unknown" tone="warning" />
         </div>
       )}
     </section>
@@ -548,14 +596,20 @@ function BypassStrip({
 }
 
 export default function OutcomesPage() {
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
+  const windowDays = useMemo(() => dashboardWindowDays(dateRange, 30), [dateRange]);
+  const [caseNotice, setCaseNotice] = useState<OutcomeMismatchCaseNotice | null>(null);
   const [filter, setFilter] = useState<OutcomeLedgerFilter>("all");
   const [reverifyLoadingId, setReverifyLoadingId] = useState<string | null>(null);
   const [reverifyNotice, setReverifyNotice] = useState<ReverifyNotice | null>(null);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => initialCheckId());
 
-  const summaryQuery = useOutcomeReconciliationSummary(30);
-  const checksQuery = useOutcomeReconciliations("all", RECONCILIATION_CHECK_LIMIT);
+  const summaryQuery = useOutcomeReconciliationSummary(windowDays);
+  const checksQuery = useOutcomeReconciliations("all", RECONCILIATION_CHECK_LIMIT, windowDays);
+  const mismatchCasesQuery = useOutcomeMismatchResponses("all", RECONCILIATION_CHECK_LIMIT, windowDays);
+  const projectsQuery = useMyProjects();
   const sourceMutationSummaryQuery = useSourceMutationSummary();
   const unreceiptedMutationsQuery = useUnreceiptedSourceMutations(50);
 
@@ -564,6 +618,21 @@ export default function OutcomesPage() {
     () => unreceiptedMutationsQuery.data?.items ?? [],
     [unreceiptedMutationsQuery.data?.items],
   );
+  const mismatchCasesByCheckId = useMemo(
+    () => new Map(
+      (mismatchCasesQuery.data?.items ?? []).map((item) => [item.reconciliation_check_id, item]),
+    ),
+    [mismatchCasesQuery.data?.items],
+  );
+  const currentMembership = useMemo(
+    () => (projectsQuery.data ?? []).find((item) => item.project_id === selectedProject)
+      ?? (projectsQuery.data ?? []).find((item) => item.is_active)
+      ?? null,
+    [projectsQuery.data, selectedProject],
+  );
+  const currentRole = currentMembership?.role?.trim().toLowerCase() ?? "viewer";
+  const canAcknowledgeCase = currentRole === "member" || currentRole === "admin" || currentRole === "owner";
+  const canResolveCase = currentRole === "owner";
   const ledger = useMemo(
     () => buildOutcomeLedger({
       checks,
@@ -592,17 +661,21 @@ export default function OutcomesPage() {
   const summaryTotal = summaryQuery.data?.total ?? ledger.counts.total;
   const verifiedRate = summaryTotal > 0 ? Math.round((summaryMatched / summaryTotal) * 100) : 0;
   const bypassCount = sourceMutationSummaryQuery.data?.unreceipted ?? ledger.counts.bypass;
+  const mutationCoverageAvailable =
+    (sourceMutationSummaryQuery.data?.successful_pollers ?? 0) > 0;
   const loading = checksQuery.isLoading || summaryQuery.isLoading;
   const fetching =
     checksQuery.isFetching ||
     summaryQuery.isFetching ||
     sourceMutationSummaryQuery.isFetching ||
-    unreceiptedMutationsQuery.isFetching;
+    unreceiptedMutationsQuery.isFetching ||
+    mismatchCasesQuery.isFetching;
   const isError =
     checksQuery.isError ||
     summaryQuery.isError ||
     sourceMutationSummaryQuery.isError ||
-    unreceiptedMutationsQuery.isError;
+    unreceiptedMutationsQuery.isError ||
+    mismatchCasesQuery.isError;
   const verdict = verdictFor({
     bypass: bypassCount,
     isError,
@@ -617,6 +690,7 @@ export default function OutcomesPage() {
     void summaryQuery.refetch();
     void sourceMutationSummaryQuery.refetch();
     void unreceiptedMutationsQuery.refetch();
+    void mismatchCasesQuery.refetch();
   }
 
   const reverifyMutation = useMutation({
@@ -641,7 +715,41 @@ export default function OutcomesPage() {
         text: `Re-check created: ${statusLabel(result.verdict, "proof")}.`,
         tone: "success",
       });
+      setSelectedId(result.id);
       refresh();
+    },
+  });
+
+  const acknowledgeCaseMutation = useMutation({
+    mutationFn: (responseCase: OutcomeMismatchResponseView) => acknowledgeOutcomeMismatchResponse(responseCase.id),
+    onError: (error, responseCase) => {
+      setCaseNotice({ caseId: responseCase.id, text: mutationMessage(error), tone: "danger" });
+    },
+    onSuccess: (result) => {
+      setCaseNotice({ caseId: result.id, text: "Case acknowledged. Investigation ownership is recorded.", tone: "success" });
+      void mismatchCasesQuery.refetch();
+    },
+  });
+
+  const resolveCaseMutation = useMutation({
+    mutationFn: ({
+      responseCase,
+      resolutionCode,
+      resolutionNote,
+    }: {
+      responseCase: OutcomeMismatchResponseView;
+      resolutionCode: OutcomeMismatchResolutionCode;
+      resolutionNote: string;
+    }) => resolveOutcomeMismatchResponse(responseCase.id, {
+      resolution_code: resolutionCode,
+      resolution_note: resolutionNote,
+    }),
+    onError: (error, variables) => {
+      setCaseNotice({ caseId: variables.responseCase.id, text: mutationMessage(error), tone: "danger" });
+    },
+    onSuccess: (result) => {
+      setCaseNotice({ caseId: result.id, text: "Case resolution recorded in the audit trail.", tone: "success" });
+      void mismatchCasesQuery.refetch();
     },
   });
 
@@ -682,7 +790,7 @@ export default function OutcomesPage() {
             total: summaryTotal,
             verifiedRate,
           },
-        })}
+        }, mutationCoverageAvailable)}
         onMetricClick={(metric) => {
           if (metric.id === "matched" || metric.id === "mismatched" || metric.id === "not_verified") {
             setFilter(metric.id);
@@ -718,7 +826,19 @@ export default function OutcomesPage() {
         }
         right={
           <OutcomeInspector
+            key={selectedRow?.id ?? "empty"}
+            caseBusy={acknowledgeCaseMutation.isPending || resolveCaseMutation.isPending}
+            caseNotice={caseNotice}
+            canAcknowledgeCase={canAcknowledgeCase}
+            canResolveCase={canResolveCase}
+            mismatchCase={selectedMismatchCase}
+            onAcknowledgeCase={(responseCase) => acknowledgeCaseMutation.mutate(responseCase)}
             onReverify={(row) => reverifyMutation.mutate(row)}
+            onResolveCase={(responseCase, resolutionCode, resolutionNote) => resolveCaseMutation.mutate({
+              responseCase,
+              resolutionCode,
+              resolutionNote,
+            })}
             reverifyLoadingId={reverifyLoadingId}
             reverifyNotice={reverifyNotice}
             row={selectedRow}

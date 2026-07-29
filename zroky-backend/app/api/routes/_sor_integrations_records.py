@@ -162,7 +162,7 @@ def test_customer_record_connector(
     claimed.setdefault("customer_id", customer_id)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_customer_record_connector(
             config,
             customer_id=customer_id,
@@ -294,7 +294,7 @@ def test_generic_rest_connector(
     claimed.setdefault("record_ref", record_ref)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_generic_rest_connector(
             config,
             record_ref=record_ref,

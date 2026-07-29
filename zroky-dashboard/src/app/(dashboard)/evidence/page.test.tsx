@@ -13,9 +13,11 @@ import type {
   RuntimePolicyDecisionResponse,
   RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
+import { buildEvidenceLedger, evidenceLedgerCounts } from "@/lib/evidence-ledger";
 
 const api = vi.hoisted(() => ({
   getActionIntentReceipt: vi.fn(),
+  getEvidenceLedger: vi.fn(),
   getEvidenceManifest: vi.fn(),
   getFinalEvidenceBundle: vi.fn(),
   getRuntimePolicyEvidencePack: vi.fn(),
@@ -358,9 +360,7 @@ describe("EvidencePage", () => {
       value: vi.fn(),
     });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    api.listActionIntents.mockResolvedValue({ total_in_page: 1, limit: 100, offset: 0, items: [actionIntent()] });
-    api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 1, items: [runtimeDecision()] });
-    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 1, items: [outcome()] });
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse());
     api.getActionIntentReceipt.mockResolvedValue(receipt());
     api.getFinalEvidenceBundle.mockResolvedValue(finalBundle());
     api.getEvidenceManifest.mockResolvedValue({
@@ -421,6 +421,7 @@ describe("EvidencePage", () => {
     expect(within(row).getByText("sha256:intent_1")).toBeInTheDocument();
     expect(within(row).getByText("ticket:T-1001")).toBeInTheDocument();
     expect(within(row).getByText("Matched")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Open receipt" })).toBeInTheDocument();
 
     const panel = await screen.findByLabelText("Focused proof panel");
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
@@ -440,8 +441,63 @@ describe("EvidencePage", () => {
     expect(api.getRuntimePolicyEvidencePack).not.toHaveBeenCalled();
   });
 
+  it("loads additional server pages without changing the evidence scope", async () => {
+    const first = ledgerResponse({
+      decisions: [],
+      outcomes: [],
+      intents: [actionIntent({
+        action_id: "act_page_1",
+        intent_digest: "sha256:page-1",
+        runtime_policy_decision_id: null,
+        canonical_intent: {
+          principal: { id: "support-agent" },
+          purpose: { summary: "Page one proof" },
+          resource: { id: "T-1001" },
+          trace_context: { agent_name: "Support agent" },
+        },
+      })],
+    });
+    const second = ledgerResponse({
+      decisions: [],
+      outcomes: [],
+      intents: [actionIntent({
+        action_id: "act_page_2",
+        intent_digest: "sha256:page-2",
+        runtime_policy_decision_id: null,
+        canonical_intent: {
+          principal: { id: "support-agent" },
+          purpose: { summary: "Page two proof" },
+          resource: { id: "T-1002" },
+          trace_context: { agent_name: "Support agent" },
+        },
+      })],
+    });
+    first.has_more = true;
+    first.total_in_scope = 2;
+    first.total_matching = 2;
+    first.counts.total = 2;
+    first.counts.export_ready = 2;
+    second.offset = 1;
+    second.total_in_scope = 2;
+    second.total_matching = 2;
+    second.counts.total = 2;
+    second.counts.export_ready = 2;
+    api.getEvidenceLedger.mockImplementation(({ offset }: { offset?: number }) => Promise.resolve(offset ? second : first));
+
+    renderEvidencePage();
+
+    expect(await screen.findByText("Page one proof")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more proof records" }));
+    expect(await screen.findByText("Page two proof")).toBeInTheDocument();
+    expect(api.getEvidenceLedger).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ days: 7, offset: 1 }),
+      expect.any(AbortSignal),
+    );
+  });
+
   it("shows guard-only runtime decisions as secondary full Evidence Packs", async () => {
-    api.listActionIntents.mockResolvedValue({ total_in_page: 0, limit: 100, offset: 0, items: [] });
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({ intents: [] }));
 
     renderEvidencePage();
 
@@ -515,15 +571,9 @@ describe("EvidencePage", () => {
   });
 
   it("filters exception rows and keeps unlinked outcomes visible but non-exportable", async () => {
-    api.listActionIntents.mockResolvedValue({
-      total_in_page: 1,
-      limit: 100,
-      offset: 0,
-      items: [actionIntent({ action_id: "act_bad", proof_status: "mismatched", intent_digest: "sha256:mismatch" })],
-    });
-    api.listOutcomeReconciliations.mockResolvedValue({
-      total_in_page: 2,
-      items: [
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      intents: [actionIntent({ action_id: "act_bad", proof_status: "mismatched", intent_digest: "sha256:mismatch" })],
+      outcomes: [
         outcome({ id: "check_bad", verdict: "mismatched", reason: "status mismatch", idempotency_key: "idem_act_1" }),
         outcome({
           id: "check_unlinked",
@@ -535,7 +585,7 @@ describe("EvidencePage", () => {
           verdict: "not_verified",
         }),
       ],
-    });
+    }));
 
     renderEvidencePage();
 
@@ -548,8 +598,51 @@ describe("EvidencePage", () => {
     const unlinkedRow = (await screen.findAllByText("crm:CUS-1001"))[0]?.closest(".ev-ledger-row") as HTMLElement;
     expect(within(unlinkedRow).getByText("Unlinked outcome")).toBeInTheDocument();
     expect(within(unlinkedRow).getByText("not linked / not exportable")).toBeInTheDocument();
-    fireEvent.click(within(unlinkedRow).getByRole("button", { name: "Not exportable" }));
+    fireEvent.click(within(unlinkedRow).getByRole("button", { name: "Review mismatch" }));
     expect(await screen.findByText("Not linked / not exportable")).toBeInTheDocument();
+  });
+
+  it("explains that denied actions do not require receipt proof", async () => {
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      intents: [actionIntent({ status: "denied", proof_status: "not_started", receipt_status: "missing" })],
+      decisions: [runtimeDecision({ status: "blocked", decision: "block", allowed: false })],
+      outcomes: [],
+    }));
+
+    renderEvidencePage();
+
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    expect(await within(ledger).findByText("Blocked action audit")).toBeInTheDocument();
+    expect(within(ledger).getByText("not required")).toBeInTheDocument();
+    expect(await screen.findByText("Receipt not expected")).toBeInTheDocument();
+    expect(screen.getByText("Policy stopped execution; receipt and outcome proof are not expected.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review 1 pending" })).not.toBeInTheDocument();
+  });
+
+  it("presents a missing receipt as an intent record without overstating its proof", async () => {
+    api.getEvidenceLedger.mockResolvedValue(ledgerResponse({
+      intents: [actionIntent({ proof_status: "not_verified", receipt_status: "missing" })],
+      outcomes: [],
+    }));
+
+    renderEvidencePage();
+
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
+    expect(within(row).getByText("Protected action record")).toBeInTheDocument();
+    expect(within(row).queryByText("Intent digest")).not.toBeInTheDocument();
+    expect(within(row).getByText("receipt not available")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Review" })).toBeInTheDocument();
+
+    const panel = screen.getByLabelText("Focused proof panel");
+    expect(within(panel).getByText("Protected action record / Ticket.close")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("Recorded intent fingerprint")).toBeInTheDocument();
+    expect(within(panel).getByText("Intent fingerprint only")).toBeInTheDocument();
+    expect(within(panel).getByText("Action intent / sha256")).toBeInTheDocument();
+    expect(within(panel).getByText("not available")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Export unavailable" }).hasAttribute("disabled")).toBe(true);
+    expect(within(panel).getByText("Receipt unavailable")).toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Independent verification material")).not.toBeInTheDocument();
   });
 
   it("resolves action deep links to the matching ledger row", async () => {

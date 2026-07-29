@@ -395,28 +395,28 @@ export default function Hero() {
       <BifrostRingScene progress={progress} />
 
       <div className="relative z-10 mx-auto min-w-0 max-w-[1260px]">
-        <div className="mx-auto min-w-0 max-w-[860px] text-center">
+        <div className="mx-auto min-w-0 max-w-[1040px] text-center">
           <Reveal>
             <div className="inline-flex max-w-full items-center justify-center border border-[#ded9cf] bg-[#fbfaf6]/86 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.11em] text-[#3f433d] shadow-[0_1px_2px_rgba(17,20,15,0.04)] backdrop-blur sm:text-[11px] sm:tracking-[0.14em]">
-              All your agents, one control layer
+              Enterprise AI agent action control plane
             </div>
           </Reveal>
 
           <Reveal delay={0.04}>
-            <p className="mt-7 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[#3a747c]">[ Policy. Approval. Proof. ]</p>
+            <p className="mt-7 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[#3a747c]">[ Intercept. Authorize. Verify. ]</p>
           </Reveal>
 
           <Reveal delay={0.07}>
-            <h1 className="mx-auto mt-3 max-w-[670px] text-[1.92rem] font-semibold leading-[1.03] tracking-[-0.02em] text-[#090b08] min-[380px]:text-[2.22rem] sm:text-[2.68rem] md:text-[3.12rem] lg:text-[3.5rem] lg:tracking-[-0.03em]">
-              <span className="block">Deploy AI agents at scale</span>
+            <h1 className="mx-auto mt-3 max-w-[980px] text-[1.56rem] font-semibold leading-[1.08] text-[#090b08] min-[380px]:text-[1.72rem] sm:text-[2.28rem] md:text-[2.68rem] lg:text-[3.08rem] xl:text-[3.28rem]">
+              <span className="block">Scale AI agents across your enterprise.</span>
               {' '}
-              <span className="block">without losing control</span>
+              <span className="block">Control every action they take.</span>
             </h1>
           </Reveal>
 
           <Reveal delay={0.13}>
-            <p className="mx-auto mt-4 max-w-[610px] text-balance text-[0.84rem] leading-[1.58] text-[#5f635b] sm:text-[0.9rem] md:text-[0.94rem]">
-              Zroky sits between agents and business systems to enforce approvals, scoped permissions, policy checks, and signed audit trails for every action.
+            <p className="mx-auto mt-4 max-w-[780px] text-balance text-[0.82rem] leading-[1.6] text-[#5f635b] sm:text-[0.86rem] md:text-[0.9rem]">
+              Zroky intercepts agent tool calls before they reach business systems, enforces policy and approvals, verifies outcomes in systems of record, and issues a signed receipt for every protected action.
             </p>
           </Reveal>
 
@@ -426,7 +426,7 @@ export default function Hero() {
                 href={SIGN_UP_URL}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#3a747c,#2f5f66)] px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_30px_-18px_rgba(47,95,102,0.66)] transition hover:-translate-y-px active:scale-[0.98] sm:w-auto"
               >
-                Get started <ArrowRight size={14} />
+                Protect your first agent <ArrowRight size={14} />
               </a>
             </div>
           </Reveal>

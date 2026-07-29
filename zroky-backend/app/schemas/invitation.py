@@ -15,11 +15,29 @@ class ProjectInvitationResponse(BaseModel):
     accepted_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
+    email_sent: bool | None = None
 
 
 class ProjectInvitationCreateRequest(BaseModel):
     email: str
     role: str = "member"
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        local, separator, domain = normalized.partition("@")
+        if (
+            not separator
+            or not local
+            or not domain
+            or "." not in domain
+            or any(char.isspace() for char in normalized)
+        ):
+            raise ValueError("email must be a valid email address")
+        if len(normalized) > 320:
+            raise ValueError("email must be at most 320 characters")
+        return normalized
 
     @field_validator("role")
     @classmethod

@@ -8,12 +8,10 @@ import {
   Clock3,
   LockKeyhole,
   PlayCircle,
-  Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   SlidersHorizontal,
-  Trash2,
 } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
@@ -26,6 +24,7 @@ import {
 import { StatusPill } from "@/components/status-pill";
 import {
   getPilotPolicy,
+  getBillingMe,
   createRuntimePolicyRule,
   disableRuntimePolicyRule,
   dryRunRuntimePolicy,
@@ -42,15 +41,16 @@ import {
   type RuntimePolicyDryRunResponse,
   type RuntimePolicyDecisionResponse,
   type RuntimePolicyRulePayload,
-  type RuntimePolicyRuleResponse,
 } from "@/lib/api";
 import type { StatusTone } from "@/lib/action-status";
+import { hasFeatureAccess } from "@/components/feature-gate";
 import { formatDateTime } from "@/lib/format";
 import {
   POLICY_ACTION_OPTIONS,
   buildPolicyRulesView,
-  describePolicyPatch,
 } from "@/lib/policy-rules-view";
+import { PolicyGenerator } from "./policy-generator";
+import { PolicyRuleBuilder } from "./policy-rule-builder";
 
 const DASH = "-";
 const GUARDRAIL_FIELDS: Array<keyof PilotPolicyPayload> = [
@@ -62,44 +62,6 @@ const GUARDRAIL_FIELDS: Array<keyof PilotPolicyPayload> = [
   "runtime_sequence_risk_enabled",
 ];
 const ENVIRONMENT_OPTIONS = ["production", "staging", "development"];
-
-type PolicyRuleForm = {
-  name: string;
-  description: string;
-  agentId: string;
-  actionType: AgentRiskActionType | "";
-  environment: string;
-  priority: string;
-  isEnabled: boolean;
-  runtimeEnabled: "inherit" | "enabled" | "disabled";
-  sensitiveApproval: "inherit" | "enabled" | "disabled";
-  approvalThreshold: string;
-  denyThreshold: string;
-  maxCost: string;
-  approvalTtl: string;
-  allowedTools: string;
-  sensitiveTools: string;
-};
-
-function blankRuleForm(): PolicyRuleForm {
-  return {
-    name: "",
-    description: "",
-    agentId: "",
-    actionType: "",
-    environment: "",
-    priority: "0",
-    isEnabled: true,
-    runtimeEnabled: "inherit",
-    sensitiveApproval: "inherit",
-    approvalThreshold: "",
-    denyThreshold: "",
-    maxCost: "",
-    approvalTtl: "",
-    allowedTools: "",
-    sensitiveTools: "",
-  };
-}
 
 function listToText(values: string[]): string {
   return values.join(", ");
@@ -116,92 +78,6 @@ function optionalNumber(value: string): number | undefined {
   if (value.trim() === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function triStateBoolean(value: "inherit" | "enabled" | "disabled"): boolean | undefined {
-  if (value === "inherit") return undefined;
-  return value === "enabled";
-}
-
-function ruleFormFromRule(rule: RuntimePolicyRuleResponse | null): PolicyRuleForm {
-  if (!rule) return blankRuleForm();
-  return {
-    name: rule.name,
-    description: rule.description ?? "",
-    agentId: rule.agent_id ?? "",
-    actionType: (rule.action_type as AgentRiskActionType | null) ?? "",
-    environment: rule.environment ?? "",
-    priority: String(rule.priority ?? 0),
-    isEnabled: rule.is_enabled,
-    runtimeEnabled:
-      rule.policy_patch.runtime_enabled == null
-        ? "inherit"
-        : rule.policy_patch.runtime_enabled
-          ? "enabled"
-          : "disabled",
-    sensitiveApproval:
-      rule.policy_patch.runtime_sensitive_actions_require_approval == null
-        ? "inherit"
-        : rule.policy_patch.runtime_sensitive_actions_require_approval
-          ? "enabled"
-          : "disabled",
-    approvalThreshold: rule.policy_patch.runtime_amount_approval_threshold_usd?.toString() ?? "",
-    denyThreshold: rule.policy_patch.runtime_amount_deny_threshold_usd?.toString() ?? "",
-    maxCost: rule.policy_patch.runtime_max_cost_usd?.toString() ?? "",
-    approvalTtl: rule.policy_patch.runtime_approval_ttl_minutes?.toString() ?? "",
-    allowedTools: listToText(rule.policy_patch.runtime_allowed_tools ?? []),
-    sensitiveTools: listToText(rule.policy_patch.runtime_sensitive_tools ?? []),
-  };
-}
-
-function hasPolicyField(policy: Partial<PilotPolicyPayload> | null | undefined, key: keyof PilotPolicyPayload): boolean {
-  return Object.prototype.hasOwnProperty.call(policy ?? {}, key);
-}
-
-function patchFromRuleForm(
-  form: PolicyRuleForm,
-  existingPatch: Partial<PilotPolicyPayload> | null = null,
-): Partial<PilotPolicyPayload> {
-  const patch: Partial<PilotPolicyPayload> = {};
-  const runtimeEnabled = triStateBoolean(form.runtimeEnabled);
-  const sensitiveApproval = triStateBoolean(form.sensitiveApproval);
-  const approvalThreshold = optionalNumber(form.approvalThreshold);
-  const denyThreshold = optionalNumber(form.denyThreshold);
-  const maxCost = optionalNumber(form.maxCost);
-  const approvalTtl = optionalNumber(form.approvalTtl);
-  const allowedTools = textToList(form.allowedTools);
-  const sensitiveTools = textToList(form.sensitiveTools);
-
-  if (runtimeEnabled != null) patch.runtime_enabled = runtimeEnabled;
-  if (sensitiveApproval != null) patch.runtime_sensitive_actions_require_approval = sensitiveApproval;
-  if (approvalThreshold != null) patch.runtime_amount_approval_threshold_usd = approvalThreshold;
-  if (denyThreshold != null) patch.runtime_amount_deny_threshold_usd = denyThreshold;
-  if (maxCost != null) patch.runtime_max_cost_usd = maxCost;
-  if (approvalTtl != null) patch.runtime_approval_ttl_minutes = approvalTtl;
-  if (allowedTools.length > 0 || hasPolicyField(existingPatch, "runtime_allowed_tools")) {
-    patch.runtime_allowed_tools = allowedTools;
-  }
-  if (sensitiveTools.length > 0 || hasPolicyField(existingPatch, "runtime_sensitive_tools")) {
-    patch.runtime_sensitive_tools = sensitiveTools;
-  }
-
-  return patch;
-}
-
-function rulePayloadFromForm(
-  form: PolicyRuleForm,
-  existingPatch: Partial<PilotPolicyPayload> | null = null,
-): RuntimePolicyRulePayload {
-  return {
-    name: form.name.trim(),
-    description: form.description.trim() || null,
-    agent_id: form.agentId || null,
-    action_type: form.actionType || null,
-    environment: form.environment || null,
-    priority: Number(form.priority || 0),
-    is_enabled: form.isEnabled,
-    policy_patch: patchFromRuleForm(form, existingPatch),
-  };
 }
 
 function agentOptionLabel(agent: AgentProfileResponse): string {
@@ -291,11 +167,15 @@ function policyReadiness(policy: PilotPolicyPayload | null): {
 function policyVerdict({
   activeGuardrails,
   blockedActions,
+  error,
+  loading,
   pendingApprovals,
   policy,
 }: {
   activeGuardrails: number;
   blockedActions: number;
+  error: unknown;
+  loading: boolean;
   pendingApprovals: number;
   policy: PilotPolicyPayload | null;
 }): {
@@ -304,7 +184,19 @@ function policyVerdict({
   title: string;
   tone: StatusTone;
 } {
-  if (!policy) {
+  if (error) {
+    const message = error instanceof Error ? error.message : "";
+    const planLimited = message.toLowerCase().includes("plan does not include");
+    return {
+      badge: planLimited ? "Plan limited" : "Unavailable",
+      copy: planLimited
+        ? "This plan cannot configure Runtime Action Control. Existing policy decisions remain visible in the audit trail."
+        : "The saved runtime policy could not be loaded, so the current action boundary cannot be confirmed.",
+      title: planLimited ? "Policy upgrade required" : "Policy status unavailable",
+      tone: "warning",
+    };
+  }
+  if (loading || !policy) {
     return {
       badge: "Loading",
       copy: "Loading the saved runtime policy and latest decisions before showing the current action boundary.",
@@ -450,8 +342,6 @@ export default function PoliciesPage() {
   const [allowedTools, setAllowedTools] = useState("");
   const [sensitiveTools, setSensitiveTools] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
-  const [ruleForm, setRuleForm] = useState<PolicyRuleForm>(() => blankRuleForm());
   const [previewAgentId, setPreviewAgentId] = useState("");
   const [previewActionType, setPreviewActionType] = useState<AgentRiskActionType | "">("refund");
   const [previewEnvironment, setPreviewEnvironment] = useState("production");
@@ -463,6 +353,13 @@ export default function PoliciesPage() {
     queryKey: ["pilot-policy"],
     queryFn: ({ signal }) => getPilotPolicy(signal),
     staleTime: 30_000,
+    retry: false,
+  });
+
+  const billingQuery = useQuery({
+    queryKey: ["billing", "me"],
+    queryFn: ({ signal }) => getBillingMe(signal),
+    staleTime: 60_000,
     retry: false,
   });
 
@@ -533,14 +430,10 @@ export default function PoliciesPage() {
   });
 
   const saveRuleMutation = useMutation({
-    mutationFn: (payload: RuntimePolicyRulePayload) =>
-      selectedRuleId
-        ? updateRuntimePolicyRule(selectedRuleId, payload)
-        : createRuntimePolicyRule(payload),
-    onSuccess: (rule) => {
-      setSelectedRuleId(rule.id);
-      setRuleForm(ruleFormFromRule(rule));
-      setMessage(selectedRuleId ? "Scoped rule updated." : "Scoped rule created.");
+    mutationFn: ({ ruleId, payload }: { ruleId: string | null; payload: RuntimePolicyRulePayload }) =>
+      ruleId ? updateRuntimePolicyRule(ruleId, payload) : createRuntimePolicyRule(payload),
+    onSuccess: (_rule, variables) => {
+      setMessage(variables.ruleId ? "Agent policy updated." : "Agent policy created.");
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "rules"] });
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "resolve-preview"] });
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
@@ -553,9 +446,8 @@ export default function PoliciesPage() {
 
   const disableRuleMutation = useMutation({
     mutationFn: disableRuntimePolicyRule,
-    onSuccess: (rule) => {
-      setRuleForm(ruleFormFromRule(rule));
-      setMessage("Scoped rule disabled.");
+    onSuccess: () => {
+      setMessage("Agent policy disabled.");
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "rules"] });
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "resolve-preview"] });
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
@@ -583,17 +475,6 @@ export default function PoliciesPage() {
     setSensitiveTools(listToText(policyQuery.data.policy.runtime_sensitive_tools));
   }, [policyQuery.data]);
 
-  useEffect(() => {
-    if (!selectedRuleId) {
-      setRuleForm(blankRuleForm());
-      return;
-    }
-    const selected = rulesQuery.data?.items.find((item) => item.id === selectedRuleId) ?? null;
-    if (selected) {
-      setRuleForm(ruleFormFromRule(selected));
-    }
-  }, [rulesQuery.data, selectedRuleId]);
-
   const readiness = useMemo(() => policyReadiness(policy), [policy]);
   const approvals = approvalsQuery.data?.items ?? [];
   const agents = useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data?.items]);
@@ -609,15 +490,11 @@ export default function PoliciesPage() {
     [agents, previewQuery.data, rules],
   );
   const selectedAgent = agents.find((agent) => agent.id === previewAgentId) ?? null;
-  const selectedRule = rules.find((rule) => rule.id === selectedRuleId) ?? null;
-  const rulePatch = useMemo(
-    () => patchFromRuleForm(ruleForm, selectedRule?.policy_patch ?? null),
-    [ruleForm, selectedRule?.policy_patch],
-  );
-  const ruleConditions = useMemo(() => describePolicyPatch(rulePatch), [rulePatch]);
   const heroVerdict = policyVerdict({
     activeGuardrails,
     blockedActions,
+    error: policyQuery.error,
+    loading: policyQuery.isLoading,
     pendingApprovals,
     policy,
   });
@@ -626,17 +503,17 @@ export default function PoliciesPage() {
     {
       id: "readiness",
       label: "Runtime action control",
-      value: readiness.label,
-      helper: readiness.helper,
-      tone: readiness.tone,
+      value: policyQuery.isError ? "Unavailable" : readiness.label,
+      helper: policyQuery.isError ? "Current policy configuration could not be loaded." : readiness.helper,
+      tone: policyQuery.isError ? "warning" : readiness.tone,
       icon: <CheckCircle2 size={16} />,
     },
     {
       id: "gate",
       label: "Policy gate",
-      value: policy?.runtime_enabled ? "Enabled" : "Disabled",
+      value: policyQuery.isError ? "Unknown" : policy?.runtime_enabled ? "Enabled" : "Disabled",
       helper: "Applies limits before risky autonomous actions continue.",
-      tone: policy?.runtime_enabled ? "success" : "warning",
+      tone: policyQuery.isError ? "warning" : policy?.runtime_enabled ? "success" : "warning",
       icon: <SlidersHorizontal size={16} />,
     },
     {
@@ -663,10 +540,6 @@ export default function PoliciesPage() {
     setPolicy((current) => (current ? { ...current, [key]: value } : current));
   }
 
-  function updateRuleForm<Key extends keyof PolicyRuleForm>(key: Key, value: PolicyRuleForm[Key]) {
-    setRuleForm((current) => ({ ...current, [key]: value }));
-  }
-
   function savePolicy() {
     if (!policy) return;
     setMessage(null);
@@ -678,18 +551,17 @@ export default function PoliciesPage() {
     });
   }
 
-  function saveRule() {
-    const payload = rulePayloadFromForm(ruleForm, selectedRule?.policy_patch ?? null);
-    if (!payload.name) {
-      setMessage("Rule name is required.");
-      return;
-    }
-    if (Object.keys(payload.policy_patch).length === 0) {
-      setMessage("Add at least one condition before saving a scoped rule.");
-      return;
-    }
+  function applyGeneratedPolicy(generatedPolicy: PilotPolicyPayload) {
     setMessage(null);
-    saveRuleMutation.mutate(payload);
+    savePolicyMutation.mutate({
+      ...generatedPolicy,
+      expected_updated_at: policyQuery.data?.updated_at ?? null,
+    });
+  }
+
+  function saveRule(ruleId: string | null, payload: RuntimePolicyRulePayload) {
+    setMessage(null);
+    saveRuleMutation.mutate({ ruleId, payload });
   }
 
   function runDryRun() {
@@ -720,6 +592,11 @@ export default function PoliciesPage() {
   }
 
   const killSwitchActive = policy?.kill_switch === true;
+  const canConfigurePolicy = hasFeatureAccess(
+    billingQuery.data?.plan_template,
+    billingQuery.data?.plan_code,
+    "pilot.autopilot_enabled",
+  );
   const killSwitchConfirmationActive = killSwitchTarget !== null;
   const killSwitchActionLabel =
     killSwitchTarget === true
@@ -742,17 +619,6 @@ export default function PoliciesPage() {
 
   const heroActions = (
     <>
-      <DashboardButton
-        icon={<RefreshCw size={16} />}
-        onClick={() => {
-          setMessage(null);
-          void Promise.all([policyQuery.refetch(), approvalsQuery.refetch()]);
-        }}
-        disabled={policyQuery.isFetching || approvalsQuery.isFetching}
-        variant="soft"
-      >
-        Refresh
-      </DashboardButton>
       {killSwitchConfirmationActive && (
         <DashboardButton
           onClick={() => setKillSwitchTarget(null)}
@@ -764,21 +630,12 @@ export default function PoliciesPage() {
       )}
       <DashboardButton
         icon={killSwitchActionIcon}
-        disabled={killSwitchMutation.isPending || !policy}
+        disabled={killSwitchMutation.isPending || !policy || !canConfigurePolicy}
         loading={killSwitchMutation.isPending}
         onClick={() => requestKillSwitchChange(killSwitchActive ? false : true)}
         variant={killSwitchActionVariant}
       >
         {killSwitchActionLabel}
-      </DashboardButton>
-      <DashboardButton
-        icon={<Save size={16} />}
-        disabled={!policy}
-        loading={savePolicyMutation.isPending}
-        onClick={savePolicy}
-        variant="primary"
-      >
-        Save policy
       </DashboardButton>
     </>
   );
@@ -809,243 +666,46 @@ export default function PoliciesPage() {
         </div>
       ) : null}
 
+      {policy && !canConfigurePolicy ? (
+        <div className="policies-read-only-banner" role="status">
+          <LockKeyhole size={16} aria-hidden="true" />
+          <span>Read-only policy view. Upgrade to change guardrails, scoped rules, kill switch, or run dry-runs.</span>
+          <DashboardButtonLink href="/settings/billing" size="sm" variant="soft">
+            Upgrade plan
+          </DashboardButtonLink>
+        </div>
+      ) : null}
+
       {policy ? (
+        <fieldset className="policies-configuration-scope" disabled={!canConfigurePolicy}>
+        <PolicyGenerator
+          disabled={!canConfigurePolicy}
+          onApply={applyGeneratedPolicy}
+          policy={policy}
+          saving={savePolicyMutation.isPending}
+        />
+        <PolicyRuleBuilder
+          agents={agents}
+          disabled={!canConfigurePolicy}
+          disabling={disableRuleMutation.isPending}
+          onDisable={(ruleId) => disableRuleMutation.mutate(ruleId)}
+          onSave={saveRule}
+          rules={rules}
+          saving={saveRuleMutation.isPending}
+        />
+        <details className="policy-advanced-shell">
+          <summary>
+            <span>
+              <strong>Advanced controls</strong>
+              <small>Scoped rules, exact limits, tool lists and policy testing</small>
+            </span>
+            <span>Open</span>
+          </summary>
+          <div className="policy-advanced-body">
         <DashboardWorkspace
           className="policies-workspace"
           left={
             <>
-              <section className="panel settings-control-panel" aria-label="Scoped policy rules">
-                <header className="panel-header">
-                  <div>
-                    <h2>Scoped policy rules</h2>
-                    <p>Layer per-agent, action-type, and environment rules over the project baseline.</p>
-                  </div>
-                  <DashboardButton
-                    icon={<Plus size={16} />}
-                    onClick={() => {
-                      setSelectedRuleId(null);
-                      setRuleForm(blankRuleForm());
-                    }}
-                    size="sm"
-                    variant="soft"
-                  >
-                    New rule
-                  </DashboardButton>
-                </header>
-                {rulesQuery.isLoading ? <div className="policy-empty-state">Loading scoped rules...</div> : null}
-                {rulesQuery.isError ? (
-                  <div className="policy-empty-state">
-                    {rulesQuery.error instanceof Error ? rulesQuery.error.message : "Scoped rules could not load."}
-                  </div>
-                ) : null}
-                {rulesView.cards.length > 0 ? (
-                  <div className="policy-rule-list">
-                    {rulesView.cards.map((rule) => (
-                      <button
-                        key={rule.id}
-                        className="policy-rule-card"
-                        data-selected={rule.id === selectedRuleId}
-                        data-tone={rule.tone}
-                        onClick={() => setSelectedRuleId(rule.id)}
-                        type="button"
-                      >
-                        <span className="policy-rule-card-kicker">
-                          {rule.enabled ? "Rule" : "Disabled"} · priority {rule.priority}
-                          {rule.matchIndex ? ` · match #${rule.matchIndex}` : ""}
-                        </span>
-                        <strong>{rule.name}</strong>
-                        <span>{rule.scopeLabel}</span>
-                        <p>{rule.conditionSummary}</p>
-                      </button>
-                    ))}
-                  </div>
-                ) : !rulesQuery.isLoading ? (
-                  <div className="policy-empty-state">
-                    No scoped rules yet. Project default policy applies to every agent.
-                  </div>
-                ) : null}
-              </section>
-
-              <section className="panel settings-control-panel" aria-label="Scoped rule editor">
-                <header className="panel-header">
-                  <div>
-                    <h2>{selectedRule ? "Edit scoped rule" : "Create scoped rule"}</h2>
-                    <p>Rules are partial patches. Empty fields inherit from the broader policy layer.</p>
-                  </div>
-                  <StatusPill
-                    value={ruleForm.isEnabled ? "enabled" : "disabled"}
-                    label={ruleForm.isEnabled ? "Enabled" : "Disabled"}
-                    tone={ruleForm.isEnabled ? "success" : "neutral"}
-                  />
-                </header>
-                <div className="settings-form-grid">
-                  <label>
-                    <span>Rule name</span>
-                    <input
-                      value={ruleForm.name}
-                      onChange={(event) => updateRuleForm("name", event.target.value)}
-                      placeholder="Refund agent approval threshold"
-                    />
-                  </label>
-                  <label>
-                    <span>Agent scope</span>
-                    <select
-                      value={ruleForm.agentId}
-                      onChange={(event) => updateRuleForm("agentId", event.target.value)}
-                    >
-                      <option value="">All agents</option>
-                      {agents.map((agent) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agentOptionLabel(agent)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Action type</span>
-                    <select
-                      value={ruleForm.actionType}
-                      onChange={(event) => updateRuleForm("actionType", event.target.value as AgentRiskActionType | "")}
-                    >
-                      <option value="">All action types</option>
-                      {POLICY_ACTION_OPTIONS.map((action) => (
-                        <option key={action.id} value={action.id}>
-                          {action.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Environment</span>
-                    <select
-                      value={ruleForm.environment}
-                      onChange={(event) => updateRuleForm("environment", event.target.value)}
-                    >
-                      <option value="">All environments</option>
-                      {ENVIRONMENT_OPTIONS.map((env) => (
-                        <option key={env} value={env}>
-                          {env}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <NumberField
-                    label="Priority"
-                    value={ruleForm.priority}
-                    onChange={(value) => updateRuleForm("priority", value)}
-                  />
-                  <ToggleRow
-                    label="Rule enabled"
-                    description="Disabled rules stay visible but do not affect runtime decisions."
-                    checked={ruleForm.isEnabled}
-                    onChange={(checked) => updateRuleForm("isEnabled", checked)}
-                  />
-                </div>
-                <div className="settings-form-grid">
-                  <label>
-                    <span>Runtime gate</span>
-                    <select
-                      value={ruleForm.runtimeEnabled}
-                      onChange={(event) => updateRuleForm("runtimeEnabled", event.target.value as PolicyRuleForm["runtimeEnabled"])}
-                    >
-                      <option value="inherit">Inherit</option>
-                      <option value="enabled">Enabled</option>
-                      <option value="disabled">Disabled</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Sensitive approval</span>
-                    <select
-                      value={ruleForm.sensitiveApproval}
-                      onChange={(event) => updateRuleForm("sensitiveApproval", event.target.value as PolicyRuleForm["sensitiveApproval"])}
-                    >
-                      <option value="inherit">Inherit</option>
-                      <option value="enabled">Required</option>
-                      <option value="disabled">Not required</option>
-                    </select>
-                  </label>
-                  <NumberField
-                    label="Approval threshold (USD)"
-                    min={0}
-                    step="0.01"
-                    value={ruleForm.approvalThreshold}
-                    onChange={(value) => updateRuleForm("approvalThreshold", value)}
-                  />
-                  <NumberField
-                    label="Deny threshold (USD)"
-                    min={0}
-                    step="0.01"
-                    value={ruleForm.denyThreshold}
-                    onChange={(value) => updateRuleForm("denyThreshold", value)}
-                  />
-                  <NumberField
-                    label="Max cost (USD)"
-                    min={0}
-                    step="0.01"
-                    value={ruleForm.maxCost}
-                    onChange={(value) => updateRuleForm("maxCost", value)}
-                  />
-                  <NumberField
-                    label="Approval TTL minutes"
-                    min={1}
-                    value={ruleForm.approvalTtl}
-                    onChange={(value) => updateRuleForm("approvalTtl", value)}
-                  />
-                </div>
-                <div className="settings-form-grid">
-                  <TextareaField
-                    label="Allowed tools override"
-                    value={ruleForm.allowedTools}
-                    onChange={(value) => updateRuleForm("allowedTools", value)}
-                    placeholder="ledger.lookup, crm.update"
-                  />
-                  <TextareaField
-                    label="Sensitive tools override"
-                    value={ruleForm.sensitiveTools}
-                    onChange={(value) => updateRuleForm("sensitiveTools", value)}
-                    placeholder="ledger.refund, email.send"
-                  />
-                  <TextareaField
-                    label="Description"
-                    value={ruleForm.description}
-                    onChange={(value) => updateRuleForm("description", value)}
-                    placeholder="Why this scoped control exists."
-                  />
-                </div>
-                <div className="policy-rule-preview">
-                  <strong>Patch preview</strong>
-                  {ruleConditions.length > 0 ? (
-                    <ul>
-                      {ruleConditions.map((condition) => (
-                        <li key={condition}>{condition}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>No conditions selected yet.</p>
-                  )}
-                </div>
-                <div className="policy-rule-actions">
-                  <DashboardButton
-                    icon={<Save size={16} />}
-                    loading={saveRuleMutation.isPending}
-                    onClick={saveRule}
-                    variant="primary"
-                  >
-                    {selectedRule ? "Save rule" : "Create rule"}
-                  </DashboardButton>
-                  {selectedRule ? (
-                    <DashboardButton
-                      icon={<Trash2 size={16} />}
-                      loading={disableRuleMutation.isPending}
-                      onClick={() => disableRuleMutation.mutate(selectedRule.id)}
-                      variant="danger"
-                    >
-                      Disable rule
-                    </DashboardButton>
-                  ) : null}
-                </div>
-              </section>
-
               <section className="panel settings-control-panel" aria-label="Runtime action control mandate">
                 <header className="panel-header">
                   <div>
@@ -1219,6 +879,17 @@ export default function PoliciesPage() {
                     placeholder="payment, refund, delete, email"
                   />
                 </div>
+                <div className="policy-rule-actions">
+                  <DashboardButton
+                    disabled={!canConfigurePolicy}
+                    icon={<Save size={16} />}
+                    loading={savePolicyMutation.isPending}
+                    onClick={savePolicy}
+                    variant="primary"
+                  >
+                    Save advanced changes
+                  </DashboardButton>
+                </div>
               </section>
             </>
           }
@@ -1343,41 +1014,6 @@ export default function PoliciesPage() {
                 </div>
               </section>
 
-              <section className="panel settings-control-panel" aria-label="Latest runtime decisions">
-                <header className="panel-header">
-                  <div>
-                    <h2>Latest runtime decisions</h2>
-                    <p>Allow, hold, and block events generated when SDK or Gateway called the runtime gate.</p>
-                  </div>
-                  <DashboardButtonLink href="/approvals" size="sm" variant="soft">
-                    Open approvals
-                  </DashboardButtonLink>
-                </header>
-                {latestDecisions.length > 0 ? (
-                  <div className="policy-decision-list">
-                    {latestDecisions.map((item) => (
-                      <article key={item.id} className="policy-decision-row" data-tone={decisionTone(item)}>
-                        <div>
-                          <strong>{decisionTitle(item)}</strong>
-                          <span>{decisionSubtitle(item)}</span>
-                        </div>
-                        <p>{decisionReason(item)}</p>
-                        <StatusPill
-                          value={item.status}
-                          kind="runtime_policy"
-                          label={decisionStatusLabel(item.status)}
-                          tone={decisionTone(item)}
-                        />
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="policy-empty-state">
-                    Runtime decisions will appear after an agent calls the policy gate.
-                  </div>
-                )}
-              </section>
-
               <section className="panel settings-control-panel" aria-label="Policy evidence path">
                 <header className="panel-header">
                   <div>
@@ -1421,6 +1057,45 @@ export default function PoliciesPage() {
             </>
           }
         />
+          </div>
+        </details>
+
+        <section className="panel settings-control-panel policy-recent-decisions" aria-label="Latest runtime decisions">
+          <header className="panel-header">
+            <div>
+              <span className="dashboard-eyebrow">Real activity</span>
+              <h2>Latest policy decisions</h2>
+              <p>What the runtime gate allowed, held, or blocked.</p>
+            </div>
+            <DashboardButtonLink href="/approvals" size="sm" variant="soft">
+              Open approvals
+            </DashboardButtonLink>
+          </header>
+          {latestDecisions.length > 0 ? (
+            <div className="policy-decision-list">
+              {latestDecisions.map((item) => (
+                <article key={item.id} className="policy-decision-row" data-tone={decisionTone(item)}>
+                  <div>
+                    <strong>{decisionTitle(item)}</strong>
+                    <span>{decisionSubtitle(item)}</span>
+                  </div>
+                  <p>{decisionReason(item)}</p>
+                  <StatusPill
+                    value={item.status}
+                    kind="runtime_policy"
+                    label={decisionStatusLabel(item.status)}
+                    tone={decisionTone(item)}
+                  />
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="policy-empty-state">
+              Runtime decisions will appear after an agent calls the policy gate.
+            </div>
+          )}
+        </section>
+        </fieldset>
       ) : null}
     </div>
   );

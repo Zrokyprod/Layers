@@ -285,6 +285,49 @@ def resolve_mismatch_response(
     return response
 
 
+def link_corrective_action(
+    db: Session,
+    *,
+    response: OutcomeMismatchResponse,
+    corrective_action_intent_id: str,
+    decision_status: str,
+    actor: str | None,
+) -> OutcomeMismatchResponse:
+    remediation = _loads(response.remediation_json, {})
+    existing_action_id = remediation.get("corrective_action_intent_id")
+    if existing_action_id and existing_action_id != corrective_action_intent_id:
+        raise ValueError("Mismatch response already has a different corrective action.")
+    changed = (
+        existing_action_id != corrective_action_intent_id
+        or remediation.get("status") != "proposed"
+        or remediation.get("decision_status") != decision_status
+    )
+    remediation.update(
+        {
+            "status": "proposed",
+            "execution_state": "not_started",
+            "corrective_action_intent_id": corrective_action_intent_id,
+            "decision_status": decision_status,
+            "proposed_by": actor,
+            "proposed_at": _now().isoformat(),
+        }
+    )
+    response.remediation_json = _dumps(remediation)
+    db.add(response)
+    if changed:
+        _record_timeline(
+            db,
+            response=response,
+            event_type="outcome_correction_proposed",
+            actor=actor,
+            extra={
+                "corrective_action_intent_id": corrective_action_intent_id,
+                "decision_status": decision_status,
+            },
+        )
+    return response
+
+
 def _update_alert_status(db: Session, *, response: OutcomeMismatchResponse, status: str) -> None:
     if not response.alert_id:
         return

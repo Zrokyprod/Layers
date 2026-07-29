@@ -208,6 +208,7 @@ def _query_mapping(row: SystemOfRecordConnectorConfig) -> dict[str, Any]:
 def _poll_http_events(
     row: SystemOfRecordConnectorConfig,
     *,
+    db: Session,
     state: SourceMutationPollState,
     limit: int,
     timeout_seconds: float,
@@ -231,7 +232,7 @@ def _poll_http_events(
     if cursor.get("last_seen_epoch") and row.connector_type in {STRIPE_REFUND_CONNECTOR_TYPE, STRIPE_PAYMENT_CONNECTOR_TYPE}:
         params.setdefault("created[gt]", int(cursor["last_seen_epoch"]))
 
-    token = decrypt_connector_bearer_token(row, project_id=row.project_id)
+    token = decrypt_connector_bearer_token(row, project_id=row.project_id, db=db)
     headers = {"Accept": "application/json"}
     auth: tuple[str, str] | None = None
     if row.connector_type == RAZORPAY_REFUND_CONNECTOR_TYPE:
@@ -269,6 +270,7 @@ def _poll_http_events(
 def _poll_postgres_events(
     row: SystemOfRecordConnectorConfig,
     *,
+    db: Session,
     state: SourceMutationPollState,
     limit: int,
     timeout_seconds: float,
@@ -278,7 +280,7 @@ def _poll_postgres_events(
     except ImportError as exc:  # pragma: no cover - optional dependency guard
         raise RuntimeError("psycopg is required for postgres source mutation polling") from exc
 
-    database_url = decrypt_connector_database_url(row, project_id=row.project_id)
+    database_url = decrypt_connector_database_url(row, project_id=row.project_id, db=db)
     if not database_url:
         raise RuntimeError("postgres connector database_url is not configured")
     query = row.read_query
@@ -318,9 +320,13 @@ def _poll_connector(
     state.last_polled_at = _now()
     try:
         if row.connector_type == POSTGRES_READ_CONNECTOR_TYPE:
-            events, cursor = _poll_postgres_events(row, state=state, limit=limit, timeout_seconds=timeout_seconds)
+            events, cursor = _poll_postgres_events(
+                row, db=db, state=state, limit=limit, timeout_seconds=timeout_seconds
+            )
         else:
-            events, cursor = _poll_http_events(row, state=state, limit=limit, timeout_seconds=timeout_seconds)
+            events, cursor = _poll_http_events(
+                row, db=db, state=state, limit=limit, timeout_seconds=timeout_seconds
+            )
         ingested = 0
         for event in events:
             payload = _mutation_payload(row.connector_type, event)

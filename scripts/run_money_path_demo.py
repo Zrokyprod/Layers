@@ -66,6 +66,11 @@ def _configure_env(db_path: Path) -> None:
             "ENABLE_READY_REDIS_CHECK": "false",
             "INGEST_ENFORCE_RATE_LIMIT": "false",
             "BILLING_ENFORCE_QUOTA": "false",
+            "FEATURE_LEGACY_OBSERVABILITY_API": "true",
+            "FEATURE_LEGACY_REPLAY_API": "true",
+            "FEATURE_LEGACY_DIAGNOSIS_API": "true",
+            "FEATURE_LEGACY_ISSUES_API": "true",
+            "FEATURE_LEGACY_DIAGNOSIS_ALIAS": "true",
             "LOG_LEVEL": "CRITICAL",
             "ZROKY_AGENT": "refund-support-agent",
         }

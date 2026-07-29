@@ -15,9 +15,11 @@ const filters: Array<{ label: string; value: EvidenceLedgerFilter }> = [
 
 type EvidenceLedgerProps = {
   filter: EvidenceLedgerFilter;
+  hasMore: boolean;
   isError: boolean;
   isExporting: boolean;
   isLoading: boolean;
+  isLoadingMore: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
   onExportManifest: () => void;
   onSearchChange: (value: string) => void;
@@ -25,26 +27,39 @@ type EvidenceLedgerProps = {
   rows: EvidenceLedgerRow[];
   search: string;
   selectedRowId: string | null;
+  totalMatching: number;
 };
 
-function rowKindLabel(kind: EvidenceLedgerRow["kind"]): string {
-  if (kind === "action_receipt") return "Action receipt";
-  if (kind === "orphan_decision") return "Guard-only evidence";
+function rowKindLabel(row: EvidenceLedgerRow): string {
+  if (row.kind === "action_receipt") {
+    if (row.sourceLabel === "Blocked action audit") return "Blocked action audit";
+    return row.exportable ? "Signed receipt" : "Protected action record";
+  }
+  if (row.kind === "orphan_decision") return "Guard-only evidence";
   return "Unlinked outcome";
 }
 
+function exportLabel(row: EvidenceLedgerRow): string {
+  if (row.exportable) return row.sourceLabel;
+  if (row.kind === "unlinked_outcome") return "not linked / not exportable";
+  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "not required";
+  return "receipt not available";
+}
+
 function actionLabel(row: EvidenceLedgerRow): string {
-  if (row.exportable) {
-    return row.exportKind === "receipt" ? "Open receipt" : "Open pack";
-  }
-  return row.kind === "unlinked_outcome" ? "Not exportable" : "Review row";
+  if (row.exportable) return row.exportKind === "receipt" ? "Open receipt" : "Open proof";
+  if (row.kind === "unlinked_outcome") return "Review mismatch";
+  if (["blocked", "denied", "rejected", "expired", "cancelled"].includes(row.status)) return "View details";
+  return "Review";
 }
 
 export function EvidenceLedger({
   filter,
+  hasMore,
   isError,
   isExporting,
   isLoading,
+  isLoadingMore,
   onFilterChange,
   onExportManifest,
   onSearchChange,
@@ -52,6 +67,7 @@ export function EvidenceLedger({
   rows,
   search,
   selectedRowId,
+  totalMatching,
 }: EvidenceLedgerProps) {
   const filteredRows = filterEvidenceLedger(rows, filter, search);
   const exportableCount = filteredRows.filter((row) => row.exportable).length;
@@ -64,7 +80,7 @@ export function EvidenceLedger({
           <h2>Proof records</h2>
           <p>Select a proof record to verify, export, or print.</p>
         </div>
-        <strong>{filteredRows.length} shown</strong>
+        <strong>{filteredRows.length} of {totalMatching} shown</strong>
       </header>
 
       <div className="ev-ledger-toolbar">

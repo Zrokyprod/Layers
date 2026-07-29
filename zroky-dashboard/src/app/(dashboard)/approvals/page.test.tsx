@@ -166,9 +166,9 @@ const hookState = vi.hoisted(() => ({
   approvalsOptions: null as Record<string, unknown> | null,
   approvalsStatus: null as string | null,
   approvalsRefetch: vi.fn(),
+  projectRole: "admin",
   approve: vi.fn(),
   reject: vi.fn(),
-  killSwitch: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -187,7 +187,21 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: (selector: (state: { dateRange: { from: Date; to: Date }; selectedProject: string }) => unknown) =>
+    selector({
+      dateRange: {
+        from: new Date("2026-06-19T00:00:00Z"),
+        to: new Date("2026-06-21T00:00:00Z"),
+      },
+      selectedProject: "proj_1",
+    }),
+}));
+
 vi.mock("@/lib/hooks", () => ({
+  useMyProjects: () => ({
+    data: [{ project_id: "proj_1", role: hookState.projectRole }],
+  }),
   useRuntimePolicyApprovals: (status: string, options?: Record<string, unknown>) => {
     hookState.approvalsStatus = status;
     hookState.approvalsOptions = options ?? null;
@@ -236,10 +250,6 @@ vi.mock("@/lib/hooks", () => ({
     isPending: false,
     mutateAsync: hookState.reject,
   }),
-  useSetRuntimePolicyKillSwitch: () => ({
-    isPending: false,
-    mutateAsync: hookState.killSwitch,
-  }),
 }));
 
 describe("RuntimeApprovalsPage evidence pack", () => {
@@ -251,10 +261,10 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     hookState.actionIntentOptions = null;
     hookState.approvalsOptions = null;
     hookState.approvalsStatus = null;
+    hookState.projectRole = "admin";
     hookState.approvalsRefetch.mockClear();
     hookState.approve.mockClear();
     hookState.reject.mockClear();
-    hookState.killSwitch.mockClear();
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: vi.fn(() => "blob:evidence-pack"),
@@ -269,31 +279,36 @@ describe("RuntimeApprovalsPage evidence pack", () => {
   it("renders the cockpit queue, selected inspector, and loaded outcome proof", () => {
     render(<RuntimeApprovalsPage />);
 
-    expect(screen.getByRole("heading", { name: "Risky actions held before commit" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Approval control" })).toBeInTheDocument();
     expect(hookState.approvalsStatus).toBe("all");
     expect(hookState.approvalsOptions?.refetchInterval).toBe(15_000);
     expect(hookState.actionIntentOptions?.refetchInterval).toBe(15_000);
-    const metrics = screen.getByRole("region", { name: "Approval control metrics" });
-    expect(within(metrics).getByText("Pending holds")).toBeInTheDocument();
-    expect(within(metrics).getByText("Expiring soon")).toBeInTheDocument();
-    expect(within(metrics).getByText("Sequence risk")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Held action queue" })).toBeInTheDocument();
+    const metrics = screen.getByRole("region", { name: "Approval control filters" });
+    expect(within(metrics).getByRole("button", { name: "Pending" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(metrics).getByRole("button", { name: "Approved" })).toBeInTheDocument();
+    expect(within(metrics).getByRole("button", { name: "Stopped" })).toBeInTheDocument();
+    expect(within(metrics).getByRole("button", { name: "All decisions" })).toBeInTheDocument();
+    expect(within(metrics).queryByText("Expiring soon")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Approval queue" })).toBeInTheDocument();
     const selected = screen.getByRole("region", { name: "Selected action control" });
     expect(screen.getByText("P0")).toBeInTheDocument();
     expect(screen.getByText(/money-touching hold/)).toBeInTheDocument();
     expect(screen.getAllByText("Action intent").length).toBeGreaterThan(0);
     expect(within(selected).getByText("Held by runtime policy")).toBeInTheDocument();
     expect(within(selected).getByText("Refund amount above runtime mandate")).toBeInTheDocument();
-    expect(within(selected).getByText("Approve releases")).toBeInTheDocument();
+    expect(within(selected).getByText("Approval will release")).toBeInTheDocument();
     expect(within(selected).getByText(/Business mutation: Refund payment rf_100/)).toBeInTheDocument();
     expect(within(selected).getByText("0/1 approvals recorded")).toBeInTheDocument();
-    expect(within(selected).getByText("No approvers recorded yet.")).toBeInTheDocument();
-    expect(within(selected).getByRole("link", { name: "Slack route" }).getAttribute("href")).toBe("/integrations/slack");
-    expect(screen.getByText("act_1")).toBeInTheDocument();
-    expect(screen.getByText("intent_digest_1")).toBeInTheDocument();
+    expect(within(selected).getByText("No approval recorded yet. The action remains held at the runtime gate.")).toBeInTheDocument();
+    expect(within(selected).getByText("Any project admin can decide")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Slack escalation" }).getAttribute("href")).toBe("/integrations/slack");
     expect(within(selected).getByRole("navigation", { name: "Proof chain" })).toBeInTheDocument();
     expect(within(selected).getByRole("tab", { name: "Decision" }).getAttribute("aria-selected")).toBe("true");
     expect(within(selected).getByText("Decision mechanism")).toBeInTheDocument();
+    expect(within(selected).queryByText("act_1")).not.toBeInTheDocument();
+    fireEvent.click(within(selected).getByRole("tab", { name: "Developer" }));
+    expect(within(selected).getByText("act_1")).toBeInTheDocument();
+    expect(within(selected).getByText("intent_digest_1")).toBeInTheDocument();
     fireEvent.click(within(selected).getByRole("tab", { name: "Evidence" }));
     expect(within(selected).getByRole("link", { name: "Open full evidence" }).getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
@@ -304,21 +319,15 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(hookState.evidenceDecisionId).toBe("decision_1");
   });
 
-  it("keeps the runtime kill switch visible when the approval queue is empty", async () => {
+  it("shows a scoped empty state when no approval decisions exist", () => {
     hookState.decisions = [];
     hookState.intents = [];
 
     render(<RuntimeApprovalsPage />);
 
-    expect(screen.getByRole("heading", { name: "Approval gate clear" })).toBeInTheDocument();
-    expect(screen.getByText("No held actions in this view")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Runtime kill switch" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
-    expect(hookState.killSwitch).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
-    await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
+    expect(screen.getByRole("heading", { name: "Approval control" })).toBeInTheDocument();
+    expect(screen.getByText("No approval decisions in this window")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Runtime safety hold" })).not.toBeInTheDocument();
   });
 
   it("opens a blocked-only approval set on the visible blocked queue", async () => {
@@ -335,14 +344,44 @@ describe("RuntimeApprovalsPage evidence pack", () => {
 
     render(<RuntimeApprovalsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Unsafe action stopped" })).toBeInTheDocument();
-    expect(screen.getByText("1 blocked or rejected decision remains preserved with audit evidence.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Blocked" }).className).toContain("is-active");
-    const queue = screen.getByRole("region", { name: "Held action queue" });
-    expect(within(queue).getByText("1 action shown")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Approval control" })).toBeInTheDocument();
+    expect(screen.getByText("1 blocked, rejected, or expired decision remains preserved with audit evidence.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stopped" }).className).toContain("is-active");
+    const queue = screen.getByRole("region", { name: "Decision history" });
+    expect(within(queue).getByText("1 decision shown")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Selected action control" })).toBeInTheDocument();
-    expect(screen.getByText("Decision already resolved")).toBeInTheDocument();
-    expect(screen.queryByText("No held actions in this view")).not.toBeInTheDocument();
+    expect(screen.getByText("Held by runtime policy")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Approval decision control" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Execution: Prevented" })).toBeInTheDocument();
+    expect(screen.queryByText("Approver chain")).not.toBeInTheDocument();
+    expect(screen.queryByText("No decisions in this view")).not.toBeInTheDocument();
+  });
+
+  it("frames approved decisions as completed releases rather than stopped or expired actions", async () => {
+    hookState.decisions = [
+      {
+        ...fixtures.decision,
+        status: "approved",
+        decision: "allow",
+        approval_count: 1,
+        required_approval_count: 1,
+        approver_subjects: ["google:114252601469329571267"],
+        expires_at: "2026-06-20T09:15:00Z",
+        resolved_at: "2026-06-20T09:05:00Z",
+        resolved_by: "google:114252601469329571267",
+        resolution_reason: "Evidence matches request",
+      },
+    ];
+    render(<RuntimeApprovalsPage />);
+    expect((await screen.findByRole("button", { name: "Approved" })).className).toContain("is-active");
+    expect(screen.getByText("Decision reason")).toBeInTheDocument();
+    expect(screen.getByText("Approved by reviewer")).toBeInTheDocument();
+    expect(screen.queryByText("Approval completed")).not.toBeInTheDocument();
+    expect(screen.getByText("Approved, waiting for a runner")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Check runner" }).getAttribute("href")).toBe("/agents");
+    expect(screen.getByText("Google account ...571267")).toBeInTheDocument();
+    expect(screen.queryByText("Why policy stopped it")).not.toBeInTheDocument();
+    expect(screen.queryByText("Expired")).not.toBeInTheDocument();
   });
 
   it("keeps the inspector empty when the selected filter has no rows", async () => {
@@ -359,19 +398,19 @@ describe("RuntimeApprovalsPage evidence pack", () => {
 
     render(<RuntimeApprovalsPage />);
 
-    expect((await screen.findByRole("button", { name: "Blocked" })).className).toContain("is-active");
+    expect((await screen.findByRole("button", { name: "Stopped" })).className).toContain("is-active");
     fireEvent.click(screen.getByRole("button", { name: "Pending" }));
 
-    expect(await screen.findByText("No held actions in this view")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Select a held action" })).toBeInTheDocument();
-    expect(screen.queryByText("Decision already resolved")).not.toBeInTheDocument();
+    expect(await screen.findByText("No pending approvals")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Select an action" })).toBeInTheDocument();
+    expect(screen.queryByText("Blocked by policy")).not.toBeInTheDocument();
   });
 
   it("requires an audit reason before approving or rejecting a held action", async () => {
     render(<RuntimeApprovalsPage />);
 
-    const approve = screen.getByRole("button", { name: "Approve" });
-    const reject = screen.getByRole("button", { name: "Reject" });
+    const approve = screen.getByRole("button", { name: "Approve action" });
+    const reject = screen.getByRole("button", { name: "Reject action" });
     expect(approve).toHaveProperty("disabled", true);
     expect(reject).toHaveProperty("disabled", true);
 
@@ -399,15 +438,13 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(screen.getByLabelText("Decision reason")).toHaveProperty("value", "Suspicious sequence");
   });
 
-  it("requires confirmation before enabling the runtime kill switch", async () => {
+  it("keeps approval evidence readable without exposing decision controls to viewers", () => {
+    hookState.projectRole = "viewer";
     render(<RuntimeApprovalsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
-    expect(hookState.killSwitch).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
-
-    await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
+    expect(screen.getByRole("note").textContent).toContain("Admin access is required");
+    expect(screen.queryByRole("button", { name: "Approve action" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject action" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Evidence" })).toBeInTheDocument();
   });
 
   it("renders compact evidence inline and links to the full evidence page", () => {

@@ -19,6 +19,7 @@ class EvidenceManifestScope(BaseModel):
     total_records: int
     exportable_records: int
     non_exportable_records: int
+    window_days: int | None = None
 
 
 class EvidenceManifestVerification(BaseModel):
@@ -51,3 +52,43 @@ class EvidenceManifestResponse(BaseModel):
     scope: EvidenceManifestScope
     verification: EvidenceManifestVerification
     records: list[EvidenceManifestRecord]
+
+
+class EvidenceLedgerCounts(BaseModel):
+    exceptions: int
+    export_ready: int
+    needs_verification: int
+    total: int
+
+
+class EvidenceLedgerRecord(BaseModel):
+    action_id: str | None
+    action_type: str
+    agent_name: str
+    call_id: str | None
+    checked_at: datetime | None
+    decision_id: str | None
+    detail: str
+    digest: str | None
+    export_kind: EvidenceManifestExportKind
+    exportable: bool
+    href: str
+    id: str
+    kind: EvidenceManifestKind
+    outcome_id: str | None
+    source_label: str
+    status: str
+    system_ref: str | None
+    title: str
+    trace_id: str | None
+
+
+class EvidenceLedgerResponse(BaseModel):
+    counts: EvidenceLedgerCounts
+    has_more: bool
+    items: list[EvidenceLedgerRecord]
+    limit: int
+    offset: int
+    total_in_scope: int
+    total_matching: int
+    window_days: int

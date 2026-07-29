@@ -6,6 +6,7 @@ import type {
   GenericRestConnectorStatusResponse,
   HubSpotCrmConnectorStatusResponse,
   JiraIssueConnectorStatusResponse,
+  McpUpstreamBindingResponse,
   NetSuiteFinanceConnectorStatusResponse,
   OutcomeReconciliationView,
   PostgresReadConnectorStatusResponse,
@@ -22,12 +23,15 @@ import { externalNavigator } from "@/lib/external-navigation";
 import IntegrationsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  activateMcpUpstream: vi.fn(),
+  disableMcpUpstream: vi.fn(),
   getCustomerRecordConnectorStatus: vi.fn(),
   getGenericRestConnectorStatus: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
   getHubSpotCrmConnectorStatus: vi.fn(),
   getJiraIssueConnectorStatus: vi.fn(),
   getLedgerRefundConnectorStatus: vi.fn(),
+  getMcpUpstreamBinding: vi.fn(),
   getNetSuiteFinanceConnectorStatus: vi.fn(),
   getPostgresReadConnectorStatus: vi.fn(),
   getRazorpayRefundConnectorStatus: vi.fn(),
@@ -40,10 +44,13 @@ const api = vi.hoisted(() => ({
   getSlackInstallStatus: vi.fn(),
   getToolRegistry: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
+  preflightMcpUpstream: vi.fn(),
   saveGenericRestConnectorConfig: vi.fn(),
   saveHubSpotCrmConnectorConfig: vi.fn(),
   saveJiraIssueConnectorConfig: vi.fn(),
+  saveMcpUpstreamDraft: vi.fn(),
   saveNetSuiteFinanceConnectorConfig: vi.fn(),
+  savePostgresReadConnectorConfig: vi.fn(),
   saveRazorpayRefundConnectorConfig: vi.fn(),
   saveSalesforceCrmConnectorConfig: vi.fn(),
   saveShopifyConnectorConfig: vi.fn(),
@@ -51,11 +58,14 @@ const api = vi.hoisted(() => ({
   saveStripeRefundConnectorConfig: vi.fn(),
   saveZendeskTicketConnectorConfig: vi.fn(),
   saveZohoCrmConnectorConfig: vi.fn(),
+  startJiraIssueOAuth: vi.fn(),
   startZohoCrmOAuth: vi.fn(),
+  startSlackInstall: vi.fn(),
   testGenericRestConnector: vi.fn(),
   testHubSpotCrmConnector: vi.fn(),
   testJiraIssueConnector: vi.fn(),
   testNetSuiteFinanceConnector: vi.fn(),
+  testPostgresReadConnector: vi.fn(),
   testRazorpayRefundConnector: vi.fn(),
   testSalesforceCrmConnector: vi.fn(),
   testShopifyConnector: vi.fn(),
@@ -87,12 +97,15 @@ vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
+    activateMcpUpstream: api.activateMcpUpstream,
+    disableMcpUpstream: api.disableMcpUpstream,
     getCustomerRecordConnectorStatus: api.getCustomerRecordConnectorStatus,
     getGenericRestConnectorStatus: api.getGenericRestConnectorStatus,
     getGithubConnectionStatus: api.getGithubConnectionStatus,
     getHubSpotCrmConnectorStatus: api.getHubSpotCrmConnectorStatus,
     getJiraIssueConnectorStatus: api.getJiraIssueConnectorStatus,
     getLedgerRefundConnectorStatus: api.getLedgerRefundConnectorStatus,
+    getMcpUpstreamBinding: api.getMcpUpstreamBinding,
     getNetSuiteFinanceConnectorStatus: api.getNetSuiteFinanceConnectorStatus,
     getPostgresReadConnectorStatus: api.getPostgresReadConnectorStatus,
     getRazorpayRefundConnectorStatus: api.getRazorpayRefundConnectorStatus,
@@ -105,10 +118,13 @@ vi.mock("@/lib/api", async () => {
     getSlackInstallStatus: api.getSlackInstallStatus,
     getToolRegistry: api.getToolRegistry,
     listOutcomeReconciliations: api.listOutcomeReconciliations,
+    preflightMcpUpstream: api.preflightMcpUpstream,
     saveGenericRestConnectorConfig: api.saveGenericRestConnectorConfig,
     saveHubSpotCrmConnectorConfig: api.saveHubSpotCrmConnectorConfig,
     saveJiraIssueConnectorConfig: api.saveJiraIssueConnectorConfig,
+    saveMcpUpstreamDraft: api.saveMcpUpstreamDraft,
     saveNetSuiteFinanceConnectorConfig: api.saveNetSuiteFinanceConnectorConfig,
+    savePostgresReadConnectorConfig: api.savePostgresReadConnectorConfig,
     saveRazorpayRefundConnectorConfig: api.saveRazorpayRefundConnectorConfig,
     saveSalesforceCrmConnectorConfig: api.saveSalesforceCrmConnectorConfig,
     saveShopifyConnectorConfig: api.saveShopifyConnectorConfig,
@@ -116,11 +132,14 @@ vi.mock("@/lib/api", async () => {
     saveStripeRefundConnectorConfig: api.saveStripeRefundConnectorConfig,
     saveZendeskTicketConnectorConfig: api.saveZendeskTicketConnectorConfig,
     saveZohoCrmConnectorConfig: api.saveZohoCrmConnectorConfig,
+    startJiraIssueOAuth: api.startJiraIssueOAuth,
     startZohoCrmOAuth: api.startZohoCrmOAuth,
+    startSlackInstall: api.startSlackInstall,
     testGenericRestConnector: api.testGenericRestConnector,
     testHubSpotCrmConnector: api.testHubSpotCrmConnector,
     testJiraIssueConnector: api.testJiraIssueConnector,
     testNetSuiteFinanceConnector: api.testNetSuiteFinanceConnector,
+    testPostgresReadConnector: api.testPostgresReadConnector,
     testRazorpayRefundConnector: api.testRazorpayRefundConnector,
     testSalesforceCrmConnector: api.testSalesforceCrmConnector,
     testShopifyConnector: api.testShopifyConnector,
@@ -658,6 +677,7 @@ describe("IntegrationsPage", () => {
       value: { writeText: clipboardWrite },
     });
     clipboardWrite.mockResolvedValue(undefined);
+    api.getMcpUpstreamBinding.mockResolvedValue(null);
     api.getGithubConnectionStatus.mockResolvedValue({
       connected: true,
       github_id: "gh_1",
@@ -739,6 +759,12 @@ describe("IntegrationsPage", () => {
     api.startZohoCrmOAuth.mockResolvedValue({
       authorization_url: "https://accounts.zoho.com/oauth/v2/auth?state=test",
     });
+    api.startJiraIssueOAuth.mockResolvedValue({
+      authorization_url: "https://auth.atlassian.com/authorize?state=test",
+    });
+    api.startSlackInstall.mockResolvedValue({
+      authorization_url: "https://slack.com/oauth/v2/authorize?state=test",
+    });
     api.getPostgresReadConnectorStatus.mockResolvedValue(postgresStatus({
       connected: true,
       has_database_url: true,
@@ -749,6 +775,31 @@ describe("IntegrationsPage", () => {
       readiness: { status: "ready" },
       last_checked_at: "2026-06-24T09:03:00Z",
     }));
+    api.savePostgresReadConnectorConfig.mockResolvedValue(postgresStatus({
+      connected: true,
+      has_database_url: true,
+      has_read_query: true,
+      read_query_digest: "sha256:replacement",
+      health_status: "not_verified",
+    }));
+    api.testPostgresReadConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "postgres_read",
+        system_ref: "record_1001",
+        action_type: "database_record_update",
+        metadata: { connector_kind: "postgres_read" },
+      }),
+      connector: postgresStatus({
+        connected: true,
+        has_database_url: true,
+        has_read_query: true,
+        read_query_digest: "sha256:replacement",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
     api.listOutcomeReconciliations.mockResolvedValue({
       items: [
         {
@@ -1143,6 +1194,27 @@ describe("IntegrationsPage", () => {
         readiness: { status: "ready" },
       }),
     });
+    api.saveMcpUpstreamDraft.mockResolvedValue(mcpStatus());
+    api.preflightMcpUpstream.mockResolvedValue({
+      binding: mcpStatus({
+        test_status: "succeeded",
+        tested_at: "2026-07-11T09:01:00Z",
+        version: 2,
+      }),
+      discovered_tools: ["refund.create", "refund.read"],
+    });
+    api.activateMcpUpstream.mockResolvedValue(mcpStatus({
+      status: "active",
+      test_status: "succeeded",
+      tested_at: "2026-07-11T09:01:00Z",
+      activated_at: "2026-07-11T09:02:00Z",
+      version: 3,
+    }));
+    api.disableMcpUpstream.mockResolvedValue(mcpStatus({
+      status: "disabled",
+      test_status: "succeeded",
+      version: 4,
+    }));
   });
 
   it("frames connectors as a simple verifier inventory with search", async () => {
@@ -1158,7 +1230,7 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("heading", { name: "Available systems" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connect a system" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Payments · Transactions · Refunds").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Missing / Not connected").length).toBeGreaterThan(0);
@@ -1189,6 +1261,13 @@ describe("IntegrationsPage", () => {
     expect(screen.getByRole("button", { name: /Stripe.*Payments.*Transactions.*Refunds/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Stripe payment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /HubSpot CRM/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "OAuth" } });
+    expect(screen.getByRole("button", { name: /GitHub.*One-click OAuth/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Slack.*One-click OAuth/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Zoho CRM.*OAuth/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Jira.*One-click OAuth/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stripe.*Restricted key/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
     expect(screen.getByText("No connectors match this search")).toBeInTheDocument();

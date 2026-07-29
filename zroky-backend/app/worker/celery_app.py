@@ -68,6 +68,13 @@ beat_schedule["stale-action-execution-attempt-sweep"] = {
     "options": {"queue": "verification_sweep"},
 }
 
+if settings.PROOF_PENDING_SWEEP_ENABLED:
+    beat_schedule["pending-proof-reconciliation-sweep"] = {
+        "task": "app.worker.tasks.sweep_pending_proof_reconciliations",
+        "schedule": max(30, int(settings.PROOF_PENDING_SWEEP_INTERVAL_SECONDS)),
+        "options": {"queue": "verification_sweep"},
+    }
+
 beat_schedule["stale-private-runner-verification-sweep"] = {
     "task": "app.worker.tasks.sweep_stale_private_runner_verifications",
     "schedule": max(30, int(settings.PRIVATE_RUNNER_VERIFICATION_SWEEP_INTERVAL_SECONDS)),
@@ -153,6 +160,7 @@ celery_app.conf.update(
         "app.worker.tasks.process_action_post_execution_jobs": {"queue": "verification_control"},
         "app.worker.tasks.execute_action_post_execution_job": {"queue": "verification_fetch"},
         "app.worker.tasks.sweep_stale_action_execution_attempts": {"queue": "verification_sweep"},
+        "app.worker.tasks.sweep_pending_proof_reconciliations": {"queue": "verification_sweep"},
         "app.worker.tasks.recheck_due_final_outcome_graphs": {"queue": "verification_sweep"},
         "app.worker.tasks.sweep_stale_private_runner_verifications": {"queue": "verification_sweep"},
     },

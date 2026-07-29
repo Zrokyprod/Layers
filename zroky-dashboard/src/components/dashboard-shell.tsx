@@ -13,7 +13,6 @@ import {
   FolderOpen,
   Gauge,
   Inbox,
-  KeyRound,
   LockKeyhole,
   LogOut,
   Menu,
@@ -289,6 +288,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const myProjects = useMemo(() => myProjectsQuery.data ?? [], [myProjectsQuery.data]);
+  const showProjectSearch = myProjects.length >= 6;
+  const filteredProjects = useMemo(() => {
+    const query = projectSearch.trim().toLocaleLowerCase();
+    if (!query) return myProjects;
+    return myProjects.filter((project) => project.project_name.toLocaleLowerCase().includes(query));
+  }, [myProjects, projectSearch]);
   const myProjectIdsKey = myProjects.map((project) => project.project_id).join("|");
   const selectedProjectMembership = selectedProject
     ? myProjects.find((project) => project.project_id === selectedProject) ?? null
@@ -379,6 +384,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     (projectSelectionRequired ? "Select project" : "ZROKY workspace");
 
   function toggleMenu(menu: ShellMenu) {
+    if (menu === "workspace" && openMenu !== "workspace") setProjectSearch("");
     setOpenMenu((current) => (current === menu ? null : menu));
   }
 
@@ -475,25 +481,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               />
             );
           })}
-          {settingsNavActive ? (
-            <div className="settings-subnav" role="group" aria-label="Settings sections">
-              {SETTINGS_CHILD_LINKS.map((item) => {
-                const Icon = item.Icon;
-                const active = item.href === "/settings" ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`settings-subnav-link${active ? " is-active" : ""}`}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon size={13} aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : null}
         </nav>
       </aside>
 

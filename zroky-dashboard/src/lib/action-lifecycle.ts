@@ -17,7 +17,14 @@ import { humanize } from "@/lib/format";
 
 export type ActionLifecycleRowKind = "action_intent" | "orphan_decision" | "bypass_mutation";
 
-export type ActionLifecycleFilter = "all" | "held" | "executing" | "mismatched" | "not_verified" | "bypassed";
+export type ActionLifecycleFilter =
+  | "all"
+  | "needs_action"
+  | "awaiting_runner"
+  | "in_progress"
+  | "completed"
+  | "stopped"
+  | "bypassed";
 
 export type ActionLifecycleStageId =
   | "proposed"
@@ -29,6 +36,7 @@ export type ActionLifecycleStageId =
   | "receipted"
   | "blocked"
   | "bypassed"
+  | "awaiting_runner"
   | "no_runner"
   | "execution_stalled"
   | "guard_only";
@@ -51,6 +59,7 @@ export type ActionLifecycleRow = {
   callId: string | null;
   title: string;
   agentName: string;
+  agentIdentityKnown: boolean;
   actionType: string;
   operationKind: string | null;
   environment: string | null;
@@ -99,8 +108,13 @@ export type ActionLifecycleCounts = {
   total: number;
   protectedActions: number;
   guardOnly: number;
+  needsAction: number;
   held: number;
+  awaitingRunner: number;
+  inProgress: number;
   executing: number;
+  completed: number;
+  stopped: number;
   mismatched: number;
   notVerified: number;
   stalled: number;
@@ -288,6 +302,23 @@ function normalized(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
 
+const UNKNOWN_AGENT_NAMES = new Set([
+  "",
+  "unknown",
+  "unknown agent",
+  "unknown-agent",
+  "unknown_agent",
+  "unidentified",
+  "unidentified runtime",
+]);
+
+function agentIdentity(value: string | null | undefined, fallback = "Unidentified runtime") {
+  const name = value?.trim() ?? "";
+  return UNKNOWN_AGENT_NAMES.has(name.toLowerCase())
+    ? { name: fallback, known: false }
+    : { name, known: true };
+}
+
 function stageForAttempt(
   view: ActionView,
   attempt: ActionExecutionAttemptResponse | null,
@@ -297,7 +328,7 @@ function stageForAttempt(
   if (!attempt) {
     if (view.status === "authorized" && ["not_started", "pending"].includes(view.proofStatus)) {
       return {
-        id: "execution",
+        id: "awaiting_runner",
         label: "Awaiting runner",
         detail: "Action is authorized, but no protected runner attempt is attached yet.",
         tone: "warning",
@@ -392,7 +423,7 @@ function isHeld(row: ActionLifecycleRow): boolean {
 }
 
 function isExecuting(row: ActionLifecycleRow): boolean {
-  return ["authorized", "execution", "no_runner", "execution_stalled"].includes(row.stage.id);
+  return ["planned", "dispatched", "running", "claimed"].includes(normalized(row.attempt?.status));
 }
 
 function isMismatched(row: ActionLifecycleRow): boolean {
@@ -400,12 +431,55 @@ function isMismatched(row: ActionLifecycleRow): boolean {
 }
 
 function isNotVerified(row: ActionLifecycleRow): boolean {
-  return ["not_verified", "pending", "missing", "not_started"].includes(row.proofStatus)
-    || ["not_verified", "pending", "missing"].includes(row.status);
+  if (row.kind !== "action_intent" || isStopped(row)) return false;
+  const executionFinished = ["succeeded", "success", "completed", "finished"].includes(normalized(row.attempt?.status));
+  const verificationExpected = executionFinished || row.outcome != null || row.stage.id === "verification";
+  return verificationExpected && ["not_verified", "pending", "missing", "not_started"].includes(row.proofStatus);
 }
 
 function isBypassed(row: ActionLifecycleRow): boolean {
   return row.kind === "bypass_mutation";
+}
+
+function isAwaitingRunner(row: ActionLifecycleRow): boolean {
+  return ["awaiting_runner", "no_runner", "execution_stalled"].includes(row.stage.id);
+}
+
+function isCompleted(row: ActionLifecycleRow): boolean {
+  return row.kind === "action_intent"
+    && row.proofStatus === "matched"
+    && row.receiptStatus === "generated";
+}
+
+function isStopped(row: ActionLifecycleRow): boolean {
+  return row.stage.id === "blocked"
+    || ["blocked", "denied", "expired", "rejected"].includes(normalized(row.status))
+    || ["failed", "ambiguous", "dead", "cancelled", "timed_out"].includes(normalized(row.attempt?.status));
+}
+
+function isInProgress(row: ActionLifecycleRow): boolean {
+  if (row.kind !== "action_intent" || isCompleted(row) || isStopped(row)) return false;
+  return [
+    "proposed",
+    "policy",
+    "approval",
+    "authorized",
+    "awaiting_runner",
+    "no_runner",
+    "execution_stalled",
+    "execution",
+    "verification",
+  ].includes(row.stage.id);
+}
+
+function isNeedsAction(row: ActionLifecycleRow): boolean {
+  return row.kind === "orphan_decision"
+    || isBypassed(row)
+    || isHeld(row)
+    || isAwaitingRunner(row)
+    || isMismatched(row)
+    || isNotVerified(row)
+    || ["failed", "ambiguous", "dead", "cancelled", "timed_out"].includes(normalized(row.attempt?.status));
 }
 
 function titleForDecision(decision: RuntimePolicyDecisionResponse): string {
@@ -447,7 +521,9 @@ export function buildActionLifecycle({
   mutations = [],
 }: BuildActionLifecycleInput): ActionLifecycleRow[] {
   const rows: ActionLifecycleRow[] = [];
-  const actionDecisionIds = new Set<string>();
+  const actionDecisionIds = new Set(
+    intents.map((intent) => intent.runtime_policy_decision_id).filter((id): id is string => Boolean(id)),
+  );
   const actionIds = new Set(intents.map((intent) => intent.action_id));
   const receiptIds = new Set(intents.map((intent) => intent.action_id).filter(Boolean));
   const decisionById = new Map(decisions.map((decision) => [decision.id, decision]));
@@ -455,10 +531,24 @@ export function buildActionLifecycle({
   const attemptsByAction = buildAttemptIndex(attempts);
   const staleIds = new Set(staleAttemptIds);
 
-  for (const intent of intents) {
-    if (intent.runtime_policy_decision_id) {
-      actionDecisionIds.add(intent.runtime_policy_decision_id);
+  let linkedDecisionAdded = true;
+  while (linkedDecisionAdded) {
+    linkedDecisionAdded = false;
+    for (const decision of decisions) {
+      const consumedBy = decision.consumed_by_decision_id;
+      if (!consumedBy || (!actionDecisionIds.has(decision.id) && !actionDecisionIds.has(consumedBy))) continue;
+      if (!actionDecisionIds.has(decision.id)) {
+        actionDecisionIds.add(decision.id);
+        linkedDecisionAdded = true;
+      }
+      if (!actionDecisionIds.has(consumedBy)) {
+        actionDecisionIds.add(consumedBy);
+        linkedDecisionAdded = true;
+      }
     }
+  }
+
+  for (const intent of intents) {
     const decision = intent.runtime_policy_decision_id ? decisionById.get(intent.runtime_policy_decision_id) ?? null : null;
     const outcome = latestOutcomeForIntent(intent, byDecision, byIdempotency);
     const attempt = latestAttemptForAction(intent.action_id, attemptsByAction);
@@ -468,6 +558,31 @@ export function buildActionLifecycle({
     });
     const status = statusForIntent(intent);
     const stage = stageForAttempt(view, attempt, staleIds);
+    const stoppedBeforeExecution = stage.id === "blocked";
+    const waitingBeforeExecution = ["proposed", "policy", "approval", "awaiting_runner", "no_runner"].includes(stage.id);
+    const proofStatus = stoppedBeforeExecution ? "not_required" : waitingBeforeExecution ? "not_started" : view.proofStatus;
+    const receiptStatus = stoppedBeforeExecution ? "evidence_only" : waitingBeforeExecution ? "not_generated" : view.receiptStatus;
+    const proofChain = buildProofChain(view, { attempt, decision, outcome }).map((step) => {
+      if (!waitingBeforeExecution) return step;
+      if (step.step === "verification") {
+        return {
+          ...step,
+          status: "Not started",
+          tone: "neutral" as const,
+          detail: "Verification starts only after a protected execution.",
+        };
+      }
+      if (step.step === "receipt") {
+        return {
+          ...step,
+          status: "Not generated",
+          tone: "neutral" as const,
+          detail: "A receipt can be generated only after protected execution.",
+        };
+      }
+      return step;
+    });
+    const agent = agentIdentity(view.agentName);
 
     rows.push({
       id: `action:${intent.action_id}`,
@@ -479,19 +594,20 @@ export function buildActionLifecycle({
       traceId: traceIdForIntent(intent, decision, outcome),
       callId: callIdForIntent(intent, decision, outcome),
       title: view.title,
-      agentName: view.agentName,
+      agentName: agent.name,
+      agentIdentityKnown: agent.known,
       actionType: view.actionType,
       operationKind: view.operationKind,
       environment: view.environment,
       digest: view.digest,
       systemRef: view.systemRef,
       ...rowStatus(status),
-      proofStatus: view.proofStatus,
-      proofLabel: view.proofLabel,
-      proofTone: view.proofTone,
-      receiptStatus: view.receiptStatus,
-      receiptLabel: view.receiptLabel,
-      receiptTone: view.receiptTone,
+      proofStatus,
+      proofLabel: stoppedBeforeExecution ? "Not required" : waitingBeforeExecution ? "Not started" : view.proofLabel,
+      proofTone: stoppedBeforeExecution || waitingBeforeExecution ? "neutral" : view.proofTone,
+      receiptStatus,
+      receiptLabel: stoppedBeforeExecution ? "Evidence only" : waitingBeforeExecution ? "Not generated" : view.receiptLabel,
+      receiptTone: stoppedBeforeExecution || waitingBeforeExecution ? "neutral" : view.receiptTone,
       stage: {
         ...stage,
         tone: rowTone(status, stage),
@@ -506,7 +622,7 @@ export function buildActionLifecycle({
         approvals: intent.runtime_policy_decision_id
           ? `/approvals?decision_id=${encodeURIComponent(intent.runtime_policy_decision_id)}`
           : null,
-        outcomes: outcome?.id ? `/outcomes?outcome_id=${encodeURIComponent(outcome.id)}` : "/outcomes",
+        outcomes: outcome?.id ? `/outcomes?check_id=${encodeURIComponent(outcome.id)}` : "/outcomes",
         evidence: `/evidence?action_id=${encodeURIComponent(intent.action_id)}`,
       },
       view,
@@ -515,7 +631,7 @@ export function buildActionLifecycle({
       outcome,
       attempt,
       mutation: null,
-      proofChain: buildProofChain(view, { attempt, decision, outcome }),
+      proofChain,
     });
   }
 
@@ -537,6 +653,7 @@ export function buildActionLifecycle({
         tone: statusTone(status),
       }),
     };
+    const agent = agentIdentity(decision.agent_name);
 
     rows.push({
       id: `decision:${decision.id}`,
@@ -548,7 +665,8 @@ export function buildActionLifecycle({
       traceId: outcome?.trace_id ?? decision.trace_id,
       callId: outcome?.call_id ?? decision.call_id,
       title: titleForDecision(decision),
-      agentName: decision.agent_name ?? "Guard-only action",
+      agentName: agent.name,
+      agentIdentityKnown: agent.known,
       actionType: humanize(decision.action_type ?? decision.tool_name),
       operationKind: null,
       environment: null,
@@ -570,7 +688,7 @@ export function buildActionLifecycle({
       hrefs: {
         action: null,
         approvals: `/approvals?decision_id=${encodeURIComponent(decision.id)}`,
-        outcomes: outcome?.id ? `/outcomes?outcome_id=${encodeURIComponent(outcome.id)}` : "/outcomes",
+        outcomes: outcome?.id ? `/outcomes?check_id=${encodeURIComponent(outcome.id)}` : "/outcomes",
         evidence: `/evidence?decision_id=${encodeURIComponent(decision.id)}`,
       },
       view: null,
@@ -588,6 +706,7 @@ export function buildActionLifecycle({
       continue;
     }
     const actor = [mutation.actor_type, mutation.actor_id].filter(Boolean).join(":") || "Unknown actor";
+    const actorIdentity = agentIdentity(actor, "Unidentified actor");
     rows.push({
       id: `mutation:${mutation.id}`,
       kind: "bypass_mutation",
@@ -598,7 +717,8 @@ export function buildActionLifecycle({
       traceId: null,
       callId: null,
       title: titleForMutation(mutation),
-      agentName: actor,
+      agentName: actorIdentity.name,
+      agentIdentityKnown: actorIdentity.known,
       actionType: humanize(mutation.action_type ?? mutation.resource_type, "Source mutation"),
       operationKind: null,
       environment: null,
@@ -655,11 +775,13 @@ export function filterActionLifecycle(
   filter: ActionLifecycleFilter,
 ): ActionLifecycleRow[] {
   if (filter === "all") return rows;
-  if (filter === "held") return rows.filter(isHeld);
-  if (filter === "executing") return rows.filter(isExecuting);
-  if (filter === "mismatched") return rows.filter(isMismatched);
+  if (filter === "needs_action") return rows.filter(isNeedsAction);
+  if (filter === "awaiting_runner") return rows.filter(isAwaitingRunner);
+  if (filter === "in_progress") return rows.filter(isInProgress);
+  if (filter === "completed") return rows.filter(isCompleted);
+  if (filter === "stopped") return rows.filter(isStopped);
   if (filter === "bypassed") return rows.filter(isBypassed);
-  return rows.filter(isNotVerified);
+  return rows;
 }
 
 export function actionLifecycleCounts(rows: ActionLifecycleRow[]): ActionLifecycleCounts {
@@ -667,8 +789,13 @@ export function actionLifecycleCounts(rows: ActionLifecycleRow[]): ActionLifecyc
     total: rows.length,
     protectedActions: rows.filter((row) => row.kind === "action_intent").length,
     guardOnly: rows.filter((row) => row.kind === "orphan_decision").length,
+    needsAction: rows.filter(isNeedsAction).length,
     held: rows.filter(isHeld).length,
+    awaitingRunner: rows.filter(isAwaitingRunner).length,
+    inProgress: rows.filter(isInProgress).length,
     executing: rows.filter(isExecuting).length,
+    completed: rows.filter(isCompleted).length,
+    stopped: rows.filter(isStopped).length,
     mismatched: rows.filter(isMismatched).length,
     notVerified: rows.filter(isNotVerified).length,
     stalled: rows.filter((row) => row.stage.id === "no_runner" || row.stage.id === "execution_stalled").length,

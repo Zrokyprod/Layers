@@ -6,12 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OutcomesPage from "./page";
 
 const apiState = vi.hoisted(() => ({
+  acknowledgeOutcomeMismatchResponse: vi.fn(),
   reconcileSavedConnector: vi.fn(),
+  resolveOutcomeMismatchResponse: vi.fn(),
 }));
 
 const hookState = vi.hoisted(() => ({
   summaryRefetch: vi.fn(),
   checksRefetch: vi.fn(),
+  mismatchCasesRefetch: vi.fn(),
   sourceMutationSummaryRefetch: vi.fn(),
   unreceiptedMutationsRefetch: vi.fn(),
   summary: {
@@ -133,6 +136,30 @@ const hookState = vi.hoisted(() => ({
       created_at: "2026-06-20T09:02:00Z",
     },
   ],
+  mismatchCases: [
+    {
+      id: "case_mismatch_1",
+      project_id: "proj_1",
+      reconciliation_check_id: "check_mismatch",
+      action_intent_id: "action_1",
+      action_receipt_id: "receipt_1",
+      receipt_digest: "digest_1",
+      alert_id: "alert_1",
+      status: "OPEN",
+      resolution_code: null,
+      resolution_note: null,
+      remediation: {
+        safety_boundary: "A rollback is a new protected action. Zroky will not execute it automatically.",
+      },
+      evidence: { mismatched_fields: ["amount_usd"] },
+      acknowledged_by_subject: null,
+      acknowledged_at: null,
+      resolved_by_subject: null,
+      resolved_at: null,
+      created_at: "2026-06-20T09:00:00Z",
+      updated_at: "2026-06-20T09:00:00Z",
+    },
+  ],
 }));
 
 vi.mock("next/link", () => ({
@@ -155,11 +182,17 @@ vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
+    acknowledgeOutcomeMismatchResponse: apiState.acknowledgeOutcomeMismatchResponse,
     reconcileSavedConnector: apiState.reconcileSavedConnector,
+    resolveOutcomeMismatchResponse: apiState.resolveOutcomeMismatchResponse,
   };
 });
 
 vi.mock("@/lib/hooks", () => ({
+  useMyProjects: () => ({
+    data: [{ project_id: "proj_1", project_name: "Project", role: "owner", is_active: true }],
+    isLoading: false,
+  }),
   useOutcomeReconciliationSummary: () => ({
     data: hookState.summary,
     isLoading: false,
@@ -175,6 +208,14 @@ vi.mock("@/lib/hooks", () => ({
     error: null,
     isFetching: false,
     refetch: hookState.checksRefetch,
+  }),
+  useOutcomeMismatchResponses: () => ({
+    data: { items: hookState.mismatchCases, total_in_page: hookState.mismatchCases.length },
+    isLoading: false,
+    isError: false,
+    error: null,
+    isFetching: false,
+    refetch: hookState.mismatchCasesRefetch,
   }),
   useSourceMutationSummary: () => ({
     data: hookState.sourceMutationSummary,
@@ -219,10 +260,24 @@ function renderOutcomesPage() {
 
 describe("OutcomesPage", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/outcomes");
+    apiState.acknowledgeOutcomeMismatchResponse.mockReset();
     apiState.reconcileSavedConnector.mockReset();
+    apiState.resolveOutcomeMismatchResponse.mockReset();
+    apiState.acknowledgeOutcomeMismatchResponse.mockResolvedValue({
+      ...hookState.mismatchCases[0],
+      status: "ACKNOWLEDGED",
+    });
     apiState.reconcileSavedConnector.mockResolvedValue(hookState.checks[0]);
+    apiState.resolveOutcomeMismatchResponse.mockResolvedValue({
+      ...hookState.mismatchCases[0],
+      status: "RESOLVED",
+      resolution_code: "confirmed_mismatch",
+      resolution_note: "Confirmed against the ledger.",
+    });
     hookState.summaryRefetch.mockClear();
     hookState.checksRefetch.mockClear();
+    hookState.mismatchCasesRefetch.mockClear();
     hookState.sourceMutationSummaryRefetch.mockClear();
     hookState.unreceiptedMutationsRefetch.mockClear();
   });
@@ -249,6 +304,83 @@ describe("OutcomesPage", () => {
     expect(screen.getByRole("region", { name: "Selected outcome check" })).toBeInTheDocument();
     expect(screen.getAllByText("Refund id rf_999").length).toBeGreaterThan(0);
     expect(screen.getByText("refund-agent / Refund")).toBeInTheDocument();
+    const amountlessRow = screen.getAllByText("Email customer@example.com")[0]?.closest("button");
+    expect(amountlessRow).not.toBeNull();
+    expect(within(amountlessRow as HTMLElement).queryByText("-")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Mismatch response case" })).toBeInTheDocument();
+    expect(screen.getByText("Needs an operator")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create corrective action" }).getAttribute("href")).toBe(
+      "/actions?correction_case=case_mismatch_1",
+    );
+  });
+
+  it("selects the exact outcome check from canonical and legacy deep links", () => {
+    window.history.replaceState({}, "", "/outcomes?check_id=check_matched");
+    const canonical = renderOutcomesPage();
+    expect(within(screen.getByRole("region", { name: "Selected outcome check" })).getByText("email:msg_1")).toBeInTheDocument();
+
+    canonical.unmount();
+    window.history.replaceState({}, "", "/outcomes?outcome_id=check_matched");
+    renderOutcomesPage();
+    expect(within(screen.getByRole("region", { name: "Selected outcome check" })).getByText("email:msg_1")).toBeInTheDocument();
+  });
+
+  it("does not report bypass risk clear without source mutation coverage", () => {
+    const previousSummary = { ...hookState.sourceMutationSummary };
+    const previousMutations = hookState.unreceiptedMutations;
+    Object.assign(hookState.sourceMutationSummary, {
+      total: 0,
+      matched_receipt: 0,
+      authorized_external: 0,
+      legacy_path: 0,
+      unmanaged_agent_action: 0,
+      policy_bypass: 0,
+      unknown_actor: 0,
+      unreceipted: 0,
+      connected_feeds: 0,
+      successful_pollers: 0,
+    });
+    hookState.unreceiptedMutations = [];
+
+    renderOutcomesPage();
+
+    const bypass = screen.getByRole("region", { name: "Bypass check" });
+    expect(within(metric("Bypass risk")).getByText("Not covered")).toBeInTheDocument();
+    expect(within(bypass).getByRole("heading", { name: "Mutation coverage unavailable" })).toBeInTheDocument();
+    expect(within(bypass).queryByRole("heading", { name: "No bypass risk detected" })).not.toBeInTheDocument();
+    expect(within(bypass).getByRole("link", { name: /Connect mutation feed/ }).getAttribute("href")).toBe(
+      "/integrations",
+    );
+
+    Object.assign(hookState.sourceMutationSummary, previousSummary);
+    hookState.unreceiptedMutations = previousMutations;
+  });
+
+  it("does not treat a configured but unsynced mutation feed as coverage", () => {
+    const previousSummary = { ...hookState.sourceMutationSummary };
+    const previousMutations = hookState.unreceiptedMutations;
+    Object.assign(hookState.sourceMutationSummary, {
+      total: 0,
+      matched_receipt: 0,
+      authorized_external: 0,
+      legacy_path: 0,
+      unmanaged_agent_action: 0,
+      policy_bypass: 0,
+      unknown_actor: 0,
+      unreceipted: 0,
+      connected_feeds: 1,
+      successful_pollers: 0,
+    });
+    hookState.unreceiptedMutations = [];
+
+    renderOutcomesPage();
+
+    expect(within(metric("Bypass risk")).getByText("Not covered")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Bypass check" }))
+      .getByRole("heading", { name: "Mutation coverage unavailable" })).toBeInTheDocument();
+
+    Object.assign(hookState.sourceMutationSummary, previousSummary);
+    hookState.unreceiptedMutations = previousMutations;
   });
 
   it("shows a field-level claimed-vs-actual diff instead of raw JSON first", () => {
@@ -291,6 +423,7 @@ describe("OutcomesPage", () => {
 
     expect(hookState.summaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.checksRefetch).toHaveBeenCalledTimes(1);
+    expect(hookState.mismatchCasesRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.sourceMutationSummaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.unreceiptedMutationsRefetch).toHaveBeenCalledTimes(1);
   });
@@ -315,5 +448,39 @@ describe("OutcomesPage", () => {
       expect(hookState.checksRefetch).toHaveBeenCalled();
     });
     expect(screen.getByText("Re-check created: Mismatched.")).toBeInTheDocument();
+  });
+
+  it("acknowledges a mismatch response case", async () => {
+    renderOutcomesPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge case" }));
+
+    await waitFor(() => {
+      expect(apiState.acknowledgeOutcomeMismatchResponse).toHaveBeenCalledWith("case_mismatch_1");
+    });
+    expect(await screen.findByText("Case acknowledged. Investigation ownership is recorded.")).toBeInTheDocument();
+  });
+
+  it("records an owner resolution without mutating the source system", async () => {
+    renderOutcomesPage();
+
+    fireEvent.change(screen.getByLabelText("Owner resolution"), {
+      target: { value: "confirmed_mismatch" },
+    });
+    fireEvent.change(screen.getByLabelText("Resolution note"), {
+      target: { value: "Confirmed against the ledger." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve case" }));
+
+    await waitFor(() => {
+      expect(apiState.resolveOutcomeMismatchResponse).toHaveBeenCalledWith(
+        "case_mismatch_1",
+        {
+          resolution_code: "confirmed_mismatch",
+          resolution_note: "Confirmed against the ledger.",
+        },
+      );
+    });
+    expect(await screen.findByText("Case resolution recorded in the audit trail.")).toBeInTheDocument();
   });
 });

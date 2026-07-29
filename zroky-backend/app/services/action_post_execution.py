@@ -2,12 +2,39 @@ from __future__ import annotations
 
 from app.services._action_post_execution_connectors import *  # noqa: F403
 from app.services._action_post_execution_core import *  # noqa: F403
+from app.services.approval_adaptations import revoke_active_rules_for_proof_failure
 from app.services.connector_credentials import RemoteCredentialResolutionRequired
 from app.services.private_runner_verification import enqueue_private_runner_verification
 from app.services.verification_execution_controls import (
     ControlledConnector,
     VerificationExecutionControls,
 )
+
+
+def _direct_record_connector_for_context(context: Mapping[str, Any]) -> ApiRecordConnector | None:
+    verification = _as_dict(context.get("verification"))
+    if not verification:
+        return None
+    actual = _direct_record(verification)
+    record_found = verification.get("record_found")
+    if record_found is None and actual is not None:
+        record_found = True
+    if actual is None and not isinstance(record_found, bool):
+        return None
+    connector_type = _connector_alias(verification.get("connector_type")) or "direct_connector"
+    return ApiRecordConnector(
+        record=actual,
+        record_found=record_found if isinstance(record_found, bool) else None,
+        connector_type=connector_type,
+    )
+
+
+def _direct_record(value: Mapping[str, Any]) -> dict[str, Any] | None:
+    for key in ("actual", "record", "source_record"):
+        item = value.get(key)
+        if isinstance(item, Mapping):
+            return dict(item)
+    return None
 
 
 def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
@@ -22,6 +49,7 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
     ).scalar_one()
     context = _verification_context(intent, attempt)
     connector_type = _connector_alias(context.get("connector_type")) or GENERIC_REST_CONNECTOR_TYPE
+    job_payload = _as_dict(_json_loads(job.payload_json, {}))
 
     if attempt.status != "succeeded":
         outcome = _reconcile_not_verified(
@@ -34,55 +62,41 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
             reason=f"execution_{attempt.status}",
         )
     else:
-        try:
-            connector, connector_type, missing_reason = _saved_connector_for_context(
-                db=db,
-                intent=intent,
-                context=context,
-            )
-        except Exception as exc:  # noqa: BLE001
-            connector = None
-            missing_reason = exc.__class__.__name__
-        if connector is None:
-            outcome = _reconcile_not_verified(
+        direct_connector = _direct_record_connector_for_context(context)
+        if direct_connector is not None:
+            claimed = _as_dict(context.get("claimed"))
+            trace = _as_dict(context.get("trace"))
+            verification = _as_dict(context.get("verification"))
+            connector_type = direct_connector.connector_type
+            metadata = {
+                **_base_metadata(intent=intent, attempt=attempt, job=job, connector_type=connector_type),
+                "source": "direct_connector",
+                "proof_mode": "direct_connector_hint",
+                "mcp_event_id": _text(job_payload.get("mcp_event_id")),
+            }
+            outcome = reconcile_outcome(
                 db,
-                intent=intent,
-                attempt=attempt,
-                job=job,
-                context=context,
-                connector_type=connector_type,
-                reason=missing_reason or "connector_unavailable",
+                project_id=intent.project_id,
+                claimed=claimed,
+                connector=direct_connector,
+                call_id=_text(trace.get("call_id")),
+                trace_id=_text(trace.get("trace_id")),
+                runtime_policy_decision_id=intent.runtime_policy_decision_id,
+                action_intent_id=intent.id,
+                action_type=intent.action_type,
+                system_ref=_text(verification.get("system_ref")) or f"mcp:{intent.id}:{attempt.id}",
+                amount_usd=_float(claimed.get("amount_usd")),
+                currency=_text(claimed.get("currency")),
+                match_fields=_as_list(context.get("match_fields")),
+                idempotency_key=f"action-post-exec:{intent.id}:{attempt.id}:verify",
+                metadata=metadata,
             )
         else:
-            trace = _as_dict(context.get("trace"))
-            claimed = _as_dict(context.get("claimed"))
-            metadata = _base_metadata(intent=intent, attempt=attempt, job=job, connector_type=connector_type)
-            controlled_connector = ControlledConnector(
-                connector=connector,
-                controls=VerificationExecutionControls(
-                    project_id=intent.project_id,
-                    connector_type=connector_type,
-                    token=job.id,
-                ),
-            )
             try:
-                outcome = reconcile_outcome(
-                    db,
-                    project_id=intent.project_id,
-                    claimed=claimed,
-                    connector=controlled_connector,
-                    call_id=_text(trace.get("call_id")),
-                    trace_id=_text(trace.get("trace_id")),
-                    runtime_policy_decision_id=intent.runtime_policy_decision_id,
-                    action_intent_id=intent.id,
-                    action_type=intent.action_type,
-                    system_ref=_text(context.get("system_ref"), _as_dict(context.get("verification")).get("system_ref"))
-                    or f"{connector_type}:{intent.id}",
-                    amount_usd=_float(claimed.get("amount_usd")),
-                    currency=_text(claimed.get("currency")),
-                    match_fields=_as_list(context.get("match_fields")),
-                    idempotency_key=f"action-post-exec:{intent.id}:{attempt.id}:verify",
-                    metadata=metadata,
+                connector, connector_type, missing_reason = _saved_connector_for_context(
+                    db=db,
+                    intent=intent,
+                    context=context,
                 )
             except RemoteCredentialResolutionRequired:
                 runner_job = enqueue_private_runner_verification(
@@ -102,20 +116,9 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                 connector = None
                 missing_reason = "private_runner_unavailable"
             except Exception as exc:  # noqa: BLE001
-                db.rollback()
-                intent = db.execute(
-                    select(ActionIntent).where(
-                        ActionIntent.project_id == job.project_id,
-                        ActionIntent.id == job.action_intent_id,
-                    )
-                ).scalar_one()
-                attempt = db.execute(
-                    select(ActionExecutionAttempt).where(
-                        ActionExecutionAttempt.project_id == job.project_id,
-                        ActionExecutionAttempt.id == job.execution_attempt_id,
-                    )
-                ).scalar_one()
-                context = _verification_context(intent, attempt)
+                connector = None
+                missing_reason = exc.__class__.__name__
+            if connector is None:
                 outcome = _reconcile_not_verified(
                     db,
                     intent=intent,
@@ -123,15 +126,77 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
                     job=job,
                     context=context,
                     connector_type=connector_type,
-                    reason=f"connector_exception:{exc.__class__.__name__}",
+                    reason=missing_reason or "connector_unavailable",
                 )
+            else:
+                trace = _as_dict(context.get("trace"))
+                claimed = _as_dict(context.get("claimed"))
+                metadata = _base_metadata(intent=intent, attempt=attempt, job=job, connector_type=connector_type)
+                connector = ControlledConnector(
+                    connector=connector,
+                    controls=VerificationExecutionControls(
+                        project_id=intent.project_id,
+                        connector_type=connector_type,
+                        token=job.id,
+                    ),
+                )
+                try:
+                    outcome = reconcile_outcome(
+                        db,
+                        project_id=intent.project_id,
+                        claimed=claimed,
+                        connector=connector,
+                        call_id=_text(trace.get("call_id")),
+                        trace_id=_text(trace.get("trace_id")),
+                        runtime_policy_decision_id=intent.runtime_policy_decision_id,
+                        action_intent_id=intent.id,
+                        action_type=intent.action_type,
+                        system_ref=_text(context.get("system_ref"), _as_dict(context.get("verification")).get("system_ref"))
+                        or f"{connector_type}:{intent.id}",
+                        amount_usd=_float(claimed.get("amount_usd")),
+                        currency=_text(claimed.get("currency")),
+                        match_fields=_as_list(context.get("match_fields")),
+                        proof_manifest=_as_dict(context.get("proof_manifest")) or None,
+                        idempotency_key=f"action-post-exec:{intent.id}:{attempt.id}:verify",
+                        metadata=metadata,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    db.rollback()
+                    intent = db.execute(
+                        select(ActionIntent).where(
+                            ActionIntent.project_id == job.project_id,
+                            ActionIntent.id == job.action_intent_id,
+                        )
+                    ).scalar_one()
+                    attempt = db.execute(
+                        select(ActionExecutionAttempt).where(
+                            ActionExecutionAttempt.project_id == job.project_id,
+                            ActionExecutionAttempt.id == job.execution_attempt_id,
+                        )
+                    ).scalar_one()
+                    context = _verification_context(intent, attempt)
+                    outcome = _reconcile_not_verified(
+                        db,
+                        intent=intent,
+                        attempt=attempt,
+                        job=job,
+                        context=context,
+                        connector_type=connector_type,
+                        reason=f"connector_exception:{exc.__class__.__name__}",
+                    )
 
     intent = db.execute(
         select(ActionIntent).where(ActionIntent.project_id == job.project_id, ActionIntent.id == job.action_intent_id)
     ).scalar_one()
-    intent.proof_status = outcome.verdict
+    intent.proof_status = intent_proof_status_for_check(outcome)
     intent.receipt_status = RECEIPT_PENDING
     db.add(intent)
+    if intent.proof_status in {"mismatched", "not_verified"}:
+        revoke_active_rules_for_proof_failure(
+            db,
+            intent=intent,
+            proof_status=intent.proof_status,
+        )
     receipt_job = enqueue_action_post_execution_job(
         db,
         project_id=job.project_id,
@@ -142,6 +207,7 @@ def _run_verify_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
             "trigger": "verification_completed",
             "outcome_reconciliation_id": outcome.id,
             "verdict": outcome.verdict,
+            "mcp_event_id": _text(job_payload.get("mcp_event_id")),
         },
     )
     record_action_timeline_event(
@@ -171,6 +237,7 @@ def _resolve_verify_job_as_not_verified(
     job: ActionPostExecutionJob,
     reason: str,
 ) -> dict[str, Any]:
+    job_payload = _as_dict(_json_loads(job.payload_json, {}))
     intent = db.execute(
         select(ActionIntent).where(ActionIntent.project_id == job.project_id, ActionIntent.id == job.action_intent_id)
     ).scalar_one()
@@ -208,6 +275,7 @@ def _resolve_verify_job_as_not_verified(
             "outcome_reconciliation_id": outcome.id,
             "verdict": outcome.verdict,
             "reason": reason,
+            "mcp_event_id": _text(job_payload.get("mcp_event_id")),
         },
     )
     record_action_timeline_event(
@@ -233,6 +301,7 @@ def _resolve_verify_job_as_not_verified(
 
 
 def _run_receipt_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]:
+    job_payload = _as_dict(_json_loads(job.payload_json, {}))
     generated = generate_action_receipt(
         db,
         project_id=job.project_id,
@@ -247,9 +316,9 @@ def _run_receipt_job(db: Session, job: ActionPostExecutionJob) -> dict[str, Any]
     return {
         "status": "receipt_generated",
         "receipt_id": generated.row.id,
+        "receipt_digest": generated.row.receipt_digest,
         "created": generated.created,
     }
-
 
 def _mark_job_succeeded(db: Session, job: ActionPostExecutionJob, result: Mapping[str, Any]) -> ActionPostExecutionJob:
     current = _now()

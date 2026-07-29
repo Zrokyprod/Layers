@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { Activity, ArrowUpRight, Clock3, FileCheck2, UsersRound } from "lucide-react";
 
 import type { StatusTone } from "@/lib/action-status";
 
@@ -18,6 +18,13 @@ type ProofStripProps = {
   metrics: ProofMetric[];
   loading: boolean;
 };
+
+const metricIcons = {
+  "agents-protected": UsersRound,
+  "controlled-actions": Activity,
+  "pending-approvals": Clock3,
+  "proof-generated": FileCheck2,
+} as const;
 
 export function ProofStrip({ metrics, loading }: ProofStripProps) {
   if (loading) {
@@ -36,16 +43,30 @@ export function ProofStrip({ metrics, loading }: ProofStripProps) {
 
   return (
     <section className="mc-proof-strip" aria-label="Proof metrics">
-      {metrics.map((metric) => (
-        <Link className={`mc-proof-card mc-tone-${metric.tone}`} href={metric.href} key={metric.id}>
-          <div className="mc-proof-card-head">
-            <span>{metric.label}</span>
-            <ArrowUpRight aria-hidden="true" size={14} />
-          </div>
-          <strong>{metric.value}</strong>
-          <p>{metric.detail}</p>
-        </Link>
-      ))}
+      {metrics.map((metric) => {
+        const MetricIcon = metricIcons[metric.id as keyof typeof metricIcons] ?? Activity;
+
+        return (
+          <Link
+            className={`mc-proof-card mc-tone-${metric.tone}`}
+            data-metric={metric.id}
+            href={metric.href}
+            key={metric.id}
+          >
+            <span className="mc-proof-card-icon" aria-hidden="true">
+              <MetricIcon size={19} />
+            </span>
+            <div className="mc-proof-card-copy">
+              <div className="mc-proof-card-head">
+                <span>{metric.label}</span>
+                <ArrowUpRight aria-hidden="true" size={14} />
+              </div>
+              <strong>{metric.value}</strong>
+              <p>{metric.detail}</p>
+            </div>
+          </Link>
+        );
+      })}
     </section>
   );
 }

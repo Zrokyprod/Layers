@@ -338,6 +338,29 @@ def get_action_contract(
     return row
 
 
+def list_action_contracts(
+    db: Session,
+    *,
+    project_id: str,
+    status: str = "active",
+    limit: int = 100,
+) -> list[ActionContractVersion]:
+    """List project-scoped action contracts available to protected-action clients."""
+
+    query = select(ActionContractVersion).where(
+        ActionContractVersion.project_id == project_id,
+        ActionContractVersion.status == status,
+    )
+    return list(
+        db.execute(
+            query.order_by(
+                ActionContractVersion.action_type.asc(),
+                ActionContractVersion.created_at.desc(),
+            ).limit(limit)
+        ).scalars()
+    )
+
+
 def split_contract_version(contract_version: str) -> tuple[str, str]:
     contract_version = contract_version.strip()
     if "/" not in contract_version:
@@ -523,6 +546,7 @@ def list_action_intents(
     status: str | None = None,
     proof_status: str | None = None,
     receipt_status: str | None = None,
+    since: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
     max_limit: int = 100,
@@ -536,6 +560,8 @@ def list_action_intents(
         query = query.where(ActionIntent.proof_status == proof_status)
     if receipt_status:
         query = query.where(ActionIntent.receipt_status == receipt_status)
+    if since:
+        query = query.where(ActionIntent.created_at >= since)
     return list(
         db.execute(
             query.order_by(ActionIntent.created_at.desc(), ActionIntent.id.desc())
@@ -691,6 +717,7 @@ def decide_action_intent(
         db,
         project_id=project_id,
         payload=build_runtime_policy_payload(intent, approval_id=effective_approval_id, actor=actor),
+        allow_approval_adaptation=True,
     )
     # Cross-action ("sequence") risk: a bulk read + external send, repeated money
     # movement, or a credential change + external transfer are dangerous only as

@@ -51,6 +51,10 @@ function fmtCount(value: number | null | undefined): string {
   return value.toLocaleString();
 }
 
+function liveNumber(sourceLoaded: boolean, value: number | null | undefined): number | null {
+  return sourceLoaded ? value ?? 0 : null;
+}
+
 function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action.replaceAll("_", " ");
 }
@@ -199,13 +203,14 @@ function MiniBarChart({
 }: {
   title: string;
   note: string;
-  items: Array<{ label: string; value: number; detail: string; tone?: Tone }>;
+  items: Array<{ label: string; value: number | null; detail: string; tone?: Tone }>;
 }) {
-  const max = Math.max(1, ...items.map((item) => item.value));
-  const criticalCount = items.filter((item) => item.tone === "danger" && item.value > 0).length;
-  const warningCount = items.filter((item) => item.tone === "warn" && item.value > 0).length;
-  const panelTone: Tone = criticalCount > 0 ? "danger" : warningCount > 0 ? "warn" : "ok";
-  const panelStatus = criticalCount > 0 ? "Needs owner action" : warningCount > 0 ? "Watch" : "Clean";
+  const max = Math.max(1, ...items.map((item) => item.value ?? 0));
+  const criticalCount = items.filter((item) => item.tone === "danger" && (item.value ?? 0) > 0).length;
+  const warningCount = items.filter((item) => item.tone === "warn" && (item.value ?? 0) > 0).length;
+  const unavailableCount = items.filter((item) => item.value === null).length;
+  const panelTone: Tone = criticalCount > 0 ? "danger" : warningCount > 0 ? "warn" : unavailableCount > 0 ? "neutral" : "ok";
+  const panelStatus = criticalCount > 0 ? "Needs owner action" : warningCount > 0 ? "Watch" : unavailableCount > 0 ? "Unavailable" : "Clean";
 
   return (
     <section className={`panel owner-live-chart owner-snapshot-card owner-snapshot-card-${panelTone}`}>
@@ -227,7 +232,7 @@ function MiniBarChart({
               </div>
             </div>
             <div className="owner-snapshot-track" aria-hidden="true">
-              <span className={`owner-snapshot-bar owner-snapshot-bar-${item.tone ?? "neutral"}`} style={{ width: `${Math.round((item.value / max) * 100)}%` }} />
+              <span className={`owner-snapshot-bar owner-snapshot-bar-${item.tone ?? "neutral"}`} style={{ width: `${Math.round(((item.value ?? 0) / max) * 100)}%` }} />
             </div>
           </div>
         ))}
@@ -242,6 +247,10 @@ export default function OwnerOverviewPage() {
   const readinessQuery = useOwnerLaunchReadiness();
   const healthQuery = useOwnerHealth();
   const billingQuery = useOwnerBillingSummary();
+  const refetchBilling = billingQuery.refetch;
+  const refetchHealth = healthQuery.refetch;
+  const refetchMoneyPath = moneyPathQuery.refetch;
+  const refetchReadiness = readinessQuery.refetch;
 
   const moneyPath = moneyPathQuery.data ?? null;
   const platform = moneyPath?.platform ?? null;
@@ -254,11 +263,14 @@ export default function OwnerOverviewPage() {
     .map((tenant) => ({ tenant, ...issueForTenant(tenant) }))
     .sort((a, b) => issuePriority(a.tone) - issuePriority(b.tone));
   const tenantRiskCount = issueRows.length;
-  const badServices = health?.services.filter((service) => !["ok", "unknown"].includes(service.status)) ?? [];
+  const badServices = health?.services.filter((service) => !["ok", "unknown"].includes(service.status)) ?? null;
+  const badServiceCount = badServices?.length ?? null;
   const firstTenantAction = tenants.find(tenantNeedsAction);
-  const paidTraffic = paidTrafficStatus({ readiness, health, platform, badServices: badServices.length });
+  const paidTraffic = paidTrafficStatus({ readiness, health, platform, badServices: badServiceCount ?? 0 });
   const activeSubCount = activeSubscriptions(billing);
-  const quotaRisk = tenants.filter((tenant) => ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)).length;
+  const quotaRisk = moneyPath
+    ? tenants.filter((tenant) => ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)).length
+    : null;
   const error =
     moneyPathQuery.error?.message ??
     readinessQuery.error?.message ??
@@ -275,11 +287,11 @@ export default function OwnerOverviewPage() {
 
   const refreshAll = useCallback(() => {
     setNow(Date.now());
-    void moneyPathQuery.refetch();
-    void readinessQuery.refetch();
-    void healthQuery.refetch();
-    void billingQuery.refetch();
-  }, [billingQuery.refetch, healthQuery.refetch, moneyPathQuery.refetch, readinessQuery.refetch]);
+    void refetchMoneyPath();
+    void refetchReadiness();
+    void refetchHealth();
+    void refetchBilling();
+  }, [refetchBilling, refetchHealth, refetchMoneyPath, refetchReadiness]);
 
   useEffect(() => {
     const interval = window.setInterval(refreshAll, 15_000);
@@ -321,8 +333,8 @@ export default function OwnerOverviewPage() {
         />
         <CommandCard
           label="Customers Needing Action"
-          value={fmtCount(tenantRiskCount)}
-          detail={firstTenantAction ? `${firstTenantAction.project_name}: ${actionLabel(firstTenantAction.next_owner_action)}` : "No tenant action queued"}
+          value={fmtCount(moneyPath ? tenantRiskCount : null)}
+          detail={moneyPath ? firstTenantAction ? `${firstTenantAction.project_name}: ${actionLabel(firstTenantAction.next_owner_action)}` : "No tenant action queued" : "Money-path feed unavailable"}
           href="/owner/projects"
           tone={tenantRiskCount > 0 ? "warn" : moneyPath ? "ok" : "neutral"}
           icon={Activity}
@@ -337,10 +349,10 @@ export default function OwnerOverviewPage() {
         />
         <CommandCard
           label="Infrastructure"
-          value={health?.overall ?? "unknown"}
-          detail={badServices.length ? `${badServices.length} degraded/down service(s)` : "Core services healthy"}
+          value={health?.overall ?? "Unavailable"}
+          detail={health ? badServiceCount ? `${badServiceCount} degraded/down service(s)` : "Core services healthy" : "Infrastructure health unavailable"}
           href="/owner/infrastructure"
-          tone={statusTone(health?.overall)}
+          tone={health ? statusTone(health.overall) : "neutral"}
           icon={ServerCog}
         />
       </div>
@@ -350,30 +362,30 @@ export default function OwnerOverviewPage() {
           title="Control Plane Health"
           note="Protected-action volume and proof quality"
           items={[
-            { label: "Protected actions", value: platform?.captures_24h ?? 0, detail: "Action intents captured in the last 24h.", tone: (platform?.captures_24h ?? 0) > 0 ? "ok" : "neutral" },
-            { label: "Proof checks", value: platform?.replay_runs_7d ?? 0, detail: "Outcome/proof checks requested in 7 days.", tone: "neutral" },
-            { label: "Verified outcomes", value: platform?.verified_replay_runs_7d ?? 0, detail: "Checks that matched the source of record.", tone: (platform?.verified_replay_runs_7d ?? 0) > 0 ? "ok" : "neutral" },
-            { label: "Receipt baselines", value: platform?.golden_traces_active ?? 0, detail: "Signed evidence artifacts ready for review.", tone: "neutral" },
+            { label: "Protected actions", value: liveNumber(Boolean(platform), platform?.captures_24h), detail: "Action intents captured in the last 24h.", tone: (platform?.captures_24h ?? 0) > 0 ? "ok" : "neutral" },
+            { label: "Proof checks", value: liveNumber(Boolean(platform), platform?.replay_runs_7d), detail: "Outcome/proof checks requested in 7 days.", tone: "neutral" },
+            { label: "Verified outcomes", value: liveNumber(Boolean(platform), platform?.verified_replay_runs_7d), detail: "Checks that matched the source of record.", tone: (platform?.verified_replay_runs_7d ?? 0) > 0 ? "ok" : "neutral" },
+            { label: "Receipt baselines", value: liveNumber(Boolean(platform), platform?.golden_traces_active), detail: "Signed evidence artifacts ready for review.", tone: "neutral" },
           ]}
         />
         <MiniBarChart
           title="Customer Risk"
           note="Tenants that need owner attention"
           items={[
-            { label: "Need action", value: tenantRiskCount, detail: "Customers with an owner action queued.", tone: tenantRiskCount > 0 ? "warn" : "ok" },
-            { label: "No recent actions", value: platform?.tenants_without_recent_capture ?? 0, detail: "Tenants with silent protected-action flow.", tone: (platform?.tenants_without_recent_capture ?? 0) > 0 ? "danger" : "ok" },
-            { label: "Connector gaps", value: platform?.tenants_missing_provider_key ?? 0, detail: "Customers missing connector or analysis readiness.", tone: (platform?.tenants_missing_provider_key ?? 0) > 0 ? "warn" : "ok" },
-            { label: "Proof quota", value: quotaRisk, detail: "Tenants near or above proof-check limits.", tone: quotaRisk > 0 ? "warn" : "ok" },
+            { label: "Need action", value: liveNumber(Boolean(moneyPath), tenantRiskCount), detail: "Customers with an owner action queued.", tone: tenantRiskCount > 0 ? "warn" : moneyPath ? "ok" : "neutral" },
+            { label: "No recent actions", value: liveNumber(Boolean(platform), platform?.tenants_without_recent_capture), detail: "Tenants with silent protected-action flow.", tone: (platform?.tenants_without_recent_capture ?? 0) > 0 ? "danger" : platform ? "ok" : "neutral" },
+            { label: "Connector gaps", value: liveNumber(Boolean(platform), platform?.tenants_missing_provider_key), detail: "Customers missing connector or analysis readiness.", tone: (platform?.tenants_missing_provider_key ?? 0) > 0 ? "warn" : platform ? "ok" : "neutral" },
+            { label: "Proof quota", value: quotaRisk, detail: "Tenants near or above proof-check limits.", tone: (quotaRisk ?? 0) > 0 ? "warn" : quotaRisk === null ? "neutral" : "ok" },
           ]}
         />
         <MiniBarChart
           title="Money & Infra"
           note="Revenue health and platform blockers"
           items={[
-            { label: "Subscriptions", value: billing?.total_subscriptions ?? 0, detail: "Total billing accounts visible to owner.", tone: (billing?.total_subscriptions ?? 0) > 0 ? "ok" : "neutral" },
-            { label: "Overdue", value: billing?.overdue ?? 0, detail: "Accounts needing billing recovery.", tone: (billing?.overdue ?? 0) > 0 ? "danger" : "ok" },
-            { label: "Open issues", value: platform?.issues_open ?? 0, detail: "Open product/support issues from customer signals.", tone: (platform?.issues_open ?? 0) > 0 ? "warn" : "ok" },
-            { label: "Bad services", value: badServices.length, detail: "Services currently degraded or down.", tone: badServices.length > 0 ? "danger" : "ok" },
+            { label: "Subscriptions", value: liveNumber(Boolean(billing), billing?.total_subscriptions), detail: "Total billing accounts visible to owner.", tone: (billing?.total_subscriptions ?? 0) > 0 ? "ok" : billing ? "neutral" : "neutral" },
+            { label: "Overdue", value: liveNumber(Boolean(billing), billing?.overdue), detail: "Accounts needing billing recovery.", tone: (billing?.overdue ?? 0) > 0 ? "danger" : billing ? "ok" : "neutral" },
+            { label: "Open issues", value: liveNumber(Boolean(platform), platform?.issues_open), detail: "Open product/support issues from customer signals.", tone: (platform?.issues_open ?? 0) > 0 ? "warn" : platform ? "ok" : "neutral" },
+            { label: "Bad services", value: badServiceCount, detail: "Services currently degraded or down.", tone: (badServiceCount ?? 0) > 0 ? "danger" : badServiceCount === null ? "neutral" : "ok" },
           ]}
         />
       </div>
@@ -383,7 +395,9 @@ export default function OwnerOverviewPage() {
           <h3>Customer Action Queue</h3>
           <span className="panel-header-note">Customers that need owner attention across action intake, connectors, proof, billing, or support.</span>
         </div>
-        {issueRows.length ? (
+        {!moneyPath ? (
+          <p className="hint">Customer action queue unavailable until money-path health loads.</p>
+        ) : issueRows.length ? (
           <div className="owner-live-issue-list">
             {issueRows.slice(0, 5).map(({ tenant, issue, severity, tone }) => (
               <Link key={tenant.project_id} href={`/owner/projects/${tenant.project_id}`} className="owner-live-issue-row">

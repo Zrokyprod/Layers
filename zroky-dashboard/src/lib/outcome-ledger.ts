@@ -177,12 +177,22 @@ function agentLabel(check: OutcomeReconciliationView): string {
     if (typeof value === "string" && value.trim()) return value;
   }
   const claimedAgent = check.claimed.agent_name ?? check.claimed.agent_id;
-  return typeof claimedAgent === "string" && claimedAgent.trim() ? claimedAgent : "Agent not linked";
+  return typeof claimedAgent === "string" && claimedAgent.trim() ? claimedAgent : "Unidentified runtime";
 }
 
 function mismatchCount(check: OutcomeReconciliationView): number {
   const mismatches = check.comparison?.mismatches;
-  return Array.isArray(mismatches) ? mismatches.length : check.verdict === "mismatched" ? 1 : 0;
+  if (Array.isArray(mismatches) && mismatches.length > 0) return mismatches.length;
+  if (check.verdict !== "mismatched") return 0;
+  const diffCount = buildClaimedActualDiff(check)
+    .filter((row) => row.status !== "matched")
+    .length;
+  return Math.max(diffCount, 1);
+}
+
+function reasonLabel(check: OutcomeReconciliationView): string {
+  return humanize(check.reason, "No reason supplied")
+    .replace(/\brecord record\b/gi, "record");
 }
 
 function priorityFor(verdict: OutcomeReconciliationVerdict): 0 | 1 | 2 {
@@ -245,7 +255,7 @@ export function buildOutcomeLedger({
         connectorLabel: humanize(check.connector_type, "Unknown connector"),
         detail:
           check.verdict === "mismatched"
-            ? `${mismatches} field mismatch${mismatches === 1 ? "" : "es"}`
+            ? `${mismatches} field difference${mismatches === 1 ? "" : "s"}`
             : check.verdict === "not_verified"
               ? humanize(check.reason, "Proof missing")
               : "Claim matched actual record",
@@ -253,7 +263,7 @@ export function buildOutcomeLedger({
         id: check.id,
         mismatchCount: mismatches,
         priority: priorityFor(check.verdict),
-        reasonLabel: humanize(check.reason, "No reason supplied"),
+        reasonLabel: reasonLabel(check),
         systemRef: check.system_ref ?? check.id,
         title: outcomeTitle(check),
         tone: statusTone(check.verdict, "proof"),

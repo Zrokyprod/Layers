@@ -8,6 +8,7 @@ import httpx
 
 from app.core.config import Settings
 from app.db.models import SystemOfRecordConnectorConfig
+from sqlalchemy.orm import Session
 from app.services.system_of_record_connector_config import (
     decrypt_connector_bearer_token,
     decrypt_connector_oauth_refresh_token,
@@ -97,8 +98,11 @@ def resolve_zoho_crm_bearer_token(
     *,
     project_id: str,
     settings: Settings,
+    db: Session | None = None,
 ) -> str | None:
-    refresh_token = decrypt_connector_oauth_refresh_token(row, project_id=project_id)
+    refresh_token = decrypt_connector_oauth_refresh_token(
+        row, project_id=project_id, db=db
+    )
     if refresh_token and settings.ZOHO_CLIENT_ID and settings.ZOHO_CLIENT_SECRET:
         return refresh_zoho_access_token(refresh_token=refresh_token, settings=settings)
-    return decrypt_connector_bearer_token(row, project_id=project_id)
+    return decrypt_connector_bearer_token(row, project_id=project_id, db=db)

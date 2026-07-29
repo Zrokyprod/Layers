@@ -76,6 +76,15 @@ function boolLabel(value: boolean, enabledLabel: string, disabledLabel: string):
 
 export function describePolicyPatch(patch: Partial<PilotPolicyPayload>): string[] {
   const conditions: string[] = [];
+  if (patch.runtime_action_decision && patch.runtime_action_decision !== "inherit") {
+    const outcomeLabels = {
+      allow: "Allow within hard safety limits",
+      require_approval: "Require one approval",
+      require_two_approvals: "Require two approvals",
+      deny: "Deny action",
+    } as const;
+    conditions.push(outcomeLabels[patch.runtime_action_decision]);
+  }
   if (patch.kill_switch != null) {
     conditions.push(boolLabel(Boolean(patch.kill_switch), "Kill switch on", "Kill switch off"));
   }

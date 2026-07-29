@@ -1,33 +1,46 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  acknowledgeOutcomeMismatchResponse,
+  createActionIntent,
+  createOutcomeCorrectiveAction,
   decideActionIntent,
   approveRuntimePolicyDecision,
+  activateMcpUpstream,
+  disableMcpUpstream,
   enforceAgentProfile,
   getActionsLifecycleSummary,
   getBillingMe,
   getActionIntentReceipt,
   getActionIntentTimeline,
   getCustomerRecordConnectorStatus,
+  getEvidenceLedger,
   getLedgerRefundConnectorStatus,
+  getMcpUpstreamBinding,
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
+  getOutcomeMismatchResponse,
   getOutcomeReconciliationSummary,
   getPostgresReadConnectorStatus,
   listActionExecutionAttempts,
+  listActionContracts,
   listActionIntents,
   listProjectActionExecutionAttempts,
   listActionRunners,
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
+  listOutcomeMismatchResponses,
   rejectRuntimePolicyDecision,
+  preflightMcpUpstream,
   reconcileSavedConnector,
   reconcileSavedCustomerRecord,
   reconcileSavedGenericRest,
   reconcileSavedLedgerRefund,
   reconcileSavedPostgresRead,
+  resolveOutcomeMismatchResponse,
   saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
+  saveMcpUpstreamDraft,
   savePostgresReadConnectorConfig,
   setRuntimePolicyKillSwitch,
   testCustomerRecordConnector,
@@ -35,12 +48,57 @@ import {
   testPostgresReadConnector,
 } from "@/lib/api";
 
+describe("evidence ledger API", () => {
+  it("sends authoritative timeframe, filter, search, and pagination query values", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      counts: { exceptions: 0, export_ready: 0, needs_verification: 0, total: 0 },
+      has_more: false,
+      items: [],
+      limit: 100,
+      offset: 100,
+      total_in_scope: 0,
+      total_matching: 0,
+      window_days: 30,
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getEvidenceLedger({
+      days: 30,
+      filter: "exceptions",
+      limit: 100,
+      offset: 100,
+      search: "trace 42",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/evidence/ledger?days=30&filter=exceptions&limit=100&offset=100&search=trace+42",
+      expect.objectContaining({ method: "GET" }),
+    );
+    vi.unstubAllGlobals();
+  });
+});
+
 vi.mock("@/lib/auth", () => ({
   clearAuthSession: vi.fn(),
   readAccessTokenFromBrowser: vi.fn(() => null),
   readRefreshTokenFromBrowser: vi.fn(() => null),
   storeAuthSession: vi.fn(),
 }));
+
+const mcpBindingResponse = {
+  endpoint_url: "https://mcp.example.com/mcp",
+  protocol_version: "2025-06-18",
+  credential_configured: true,
+  allowed_tools: ["refund.create"],
+  status: "draft",
+  test_status: "not_tested",
+  tested_at: null,
+  last_test_error: null,
+  activated_at: null,
+  version: 1,
+  created_at: "2026-07-11T09:00:00Z",
+  updated_at: "2026-07-11T09:00:00Z",
+};
 
 function mockFetchResponse(response: Response): void {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
@@ -126,6 +184,61 @@ describe("shared API error parsing", () => {
   });
 });
 
+describe("MCP upstream API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("treats a missing tenant binding as unconfigured", async () => {
+    mockFetchResponse(new Response(JSON.stringify({ detail: "Not found" }), { status: 404 }));
+
+    await expect(getMcpUpstreamBinding()).resolves.toBeNull();
+  });
+
+  it("uses the owner lifecycle endpoints and sends only a managed credential reference", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(mcpBindingResponse), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        binding: { ...mcpBindingResponse, test_status: "succeeded" },
+        discovered_tools: ["refund.create"],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...mcpBindingResponse,
+        status: "active",
+        test_status: "succeeded",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...mcpBindingResponse,
+        status: "disabled",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveMcpUpstreamDraft({
+      endpoint_url: "https://mcp.example.com/mcp",
+      protocol_version: "2025-06-18",
+      bearer_credential_id: "cred_managed_123",
+      allowed_tools: ["refund.create"],
+    });
+    await preflightMcpUpstream();
+    await activateMcpUpstream();
+    await disableMcpUpstream();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/zroky/v1/mcp-config/upstream", expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({
+        endpoint_url: "https://mcp.example.com/mcp",
+        protocol_version: "2025-06-18",
+        bearer_credential_id: "cred_managed_123",
+        allowed_tools: ["refund.create"],
+      }),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/zroky/v1/mcp-config/upstream/preflight", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/zroky/v1/mcp-config/upstream/activate", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/zroky/v1/mcp-config/upstream/disable", expect.objectContaining({ method: "POST" }));
+  });
+});
+
 describe("runtime policy API client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -141,7 +254,7 @@ describe("runtime policy API client", () => {
     await expect(listRuntimePolicyApprovals()).resolves.toEqual({ items: [], total_in_page: 0 });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/zroky/v1/runtime-policy/approvals?status=pending_approval",
+      "/api/zroky/v1/runtime-policy/approvals?status=pending_approval&limit=100",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -155,7 +268,7 @@ describe("runtime policy API client", () => {
     await listRuntimePolicyApprovals("all");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/zroky/v1/runtime-policy/approvals?status=all",
+      "/api/zroky/v1/runtime-policy/approvals?status=all&limit=100",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -301,6 +414,37 @@ describe("verified action API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/zroky/v1/action-intents?limit=50",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("lists contracts and creates an idempotent protected intent", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ action_id: "action_correction" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listActionContracts(100);
+    await createActionIntent({
+      contract_version: "ticket.reopen/1.0",
+      action_type: "ticket.reopen",
+      operation_kind: "UPDATE",
+      resource: { ticket_id: "KAN-1" },
+      parameters: { status: "In Progress" },
+    }, "outcome-correction:case_1:attempt_1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/action-contracts?limit=100",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/action-intents",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": "outcome-correction:case_1:attempt_1" }),
+      }),
     );
   });
 
@@ -511,18 +655,94 @@ describe("outcome reconciliation API client", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await listOutcomeReconciliations({ verdict: "mismatched", limit: 25 });
+    await listOutcomeReconciliations({ verdict: "mismatched", days: 14, limit: 25 });
     await listOutcomeReconciliations({ verdict: "all", limit: 50 });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/zroky/v1/outcomes/reconciliation?verdict=mismatched&limit=25",
+      "/api/zroky/v1/outcomes/reconciliation?verdict=mismatched&days=14&limit=25",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/zroky/v1/outcomes/reconciliation?limit=50",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("lists, acknowledges, and resolves mismatch response cases", async () => {
+    const responseCase = {
+      id: "case_1",
+      project_id: "proj_1",
+      reconciliation_check_id: "check_1",
+      status: "OPEN",
+      remediation: {},
+      evidence: {},
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [responseCase], total_in_page: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseCase), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...responseCase, status: "ACKNOWLEDGED" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...responseCase, status: "RESOLVED" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listOutcomeMismatchResponses("OPEN", 25, 14);
+    await getOutcomeMismatchResponse("case_1");
+    await acknowledgeOutcomeMismatchResponse("case_1");
+    await resolveOutcomeMismatchResponse("case_1", {
+      resolution_code: "confirmed_mismatch",
+      resolution_note: "Confirmed against the ledger.",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses?status=OPEN&limit=25&days=14",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/acknowledge",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/resolve",
+      expect.objectContaining({
+        body: JSON.stringify({
+          resolution_code: "confirmed_mismatch",
+          resolution_note: "Confirmed against the ledger.",
+        }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("submits a mismatch correction through its tenant-scoped case endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ action_id: "action_correction", requires_approval: true }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createOutcomeCorrectiveAction("case_1", {
+      contract_version: "ticket.reopen/1.0",
+      action_type: "ticket.reopen",
+      operation_kind: "UPDATE",
+      resource: { ticket_id: "KAN-1" },
+      parameters: { status: "In Progress" },
+    }, "outcome-correction:case_1:attempt_1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/mismatch-responses/case_1/corrective-action",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": "outcome-correction:case_1:attempt_1" }),
+      }),
     );
   });
 

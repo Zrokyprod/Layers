@@ -20,7 +20,6 @@ import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/lib/format";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 import {
-  useProjectSettings,
   useListProjectApiKeys,
   useCreateProjectApiKey,
   useRevokeProjectApiKey,
@@ -69,8 +68,7 @@ function expiryWarningLabel(key: ApiKeyResponse): string | null {
 }
 
 function ApiKeysContent() {
-  const projectQuery = useProjectSettings();
-  const projectId = projectQuery.data?.project_id ?? "";
+  const projectId = useDashboardStore((state) => state.selectedProject) ?? "";
   const keysQuery = useListProjectApiKeys(projectId);
 
   const createMutation = useCreateProjectApiKey();
@@ -79,6 +77,7 @@ function ApiKeysContent() {
 
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const [secretStored, setSecretStored] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [statusTone, setStatusTone] = useState<"success" | "danger" | null>(null);
   const [expiresInDays, setExpiresInDays] = useState("90");
@@ -100,6 +99,8 @@ function ApiKeysContent() {
     setStatusMsg("");
     setStatusTone(null);
     setNewKey(null);
+    setCopied(false);
+    setSecretStored(false);
     try {
       const expiryValue = expiresInDays.trim();
       let parsedExpiry: number | null = null;
@@ -144,6 +145,8 @@ function ApiKeysContent() {
     if (!projectId || !rotateTarget) return;
     try {
       const rotated = await rotateMutation.mutateAsync({ projectId, keyId: rotateTarget.key_id });
+      setCopied(false);
+      setSecretStored(false);
       setNewKey(rotated);
       setStatusMsg(`Key "${rotateTarget.name}" rotated. Copy the replacement key now.`);
       setStatusTone("success");
@@ -167,8 +170,8 @@ function ApiKeysContent() {
   }
 
   const keys = keysQuery.data ?? [];
-  const loading = projectQuery.isLoading || keysQuery.isLoading;
-  const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
+  const loading = keysQuery.isLoading;
+  const error = keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
@@ -203,7 +206,7 @@ function ApiKeysContent() {
                 </div>
                 <div className="keys-card-meta">
                   <span className="mono">{key.key_prefix}...</span>
-                  <span>{key.scopes?.join(", ") || "project:member"}</span>
+                  <span>{keyAccessLabel(key.scopes)}</span>
                   <span>Created {formatDateTime(key.created_at)}</span>
                 </div>
                 {expiryWarningLabel(key) ? (
@@ -416,7 +419,7 @@ function ApiKeysContent() {
                 Current prefix <strong className="mono">{rotateTarget.key_prefix}...</strong>
               </span>
               <span>
-                Scope <strong>{rotateTarget.scopes?.join(", ") || "project:member"}</strong>
+                Access <strong>{keyAccessLabel(rotateTarget.scopes)}</strong>
               </span>
             </div>
             <div className="actions">

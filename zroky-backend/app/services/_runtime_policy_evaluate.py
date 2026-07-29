@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.config import get_settings
+from app.services.approval_adaptations import find_active_rule_for_action
 from app.services._runtime_policy_core import *  # noqa: F403
 
 
@@ -9,6 +11,7 @@ def evaluate_runtime_policy(
     project_id: str,
     payload: dict[str, Any],
     persist: bool = True,
+    allow_approval_adaptation: bool = False,
 ) -> RuntimePolicyResult:
     policy = resolve_runtime_policy(db, project_id=project_id, payload=payload).policy
 
@@ -87,6 +90,20 @@ def evaluate_runtime_policy(
 
     reasons.extend(_first_launch_block_reasons(payload, policy))
 
+    resolution = policy.get("_runtime_policy_resolution")
+    action_decision_source = (
+        resolution.get("action_decision_source_rule_id")
+        if isinstance(resolution, dict)
+        else None
+    )
+    action_decision = (
+        str(policy.get("runtime_action_decision") or "inherit").strip().lower()
+        if action_decision_source
+        else "inherit"
+    )
+    if action_decision == "deny":
+        reasons.append("matched policy rule denies this action")
+
     if reasons:
         return make_result(
             decision="block",
@@ -96,10 +113,51 @@ def evaluate_runtime_policy(
             requires_approval=False,
         )
 
-    approval_reasons = _first_launch_approval_reasons(payload, policy)
-    if _is_sensitive_action(payload, policy) and policy.get("runtime_sensitive_actions_require_approval") is True:
-        approval_reasons.insert(0, "sensitive action requires human approval before execution")
-    required_approval_count = _required_approval_count(payload, policy, approval_reasons)
+    if action_decision == "allow":
+        approval_reasons = []
+    elif action_decision in {"require_approval", "require_two_approvals"}:
+        approval_reasons = [
+            "matched policy rule requires two distinct approvals before execution"
+            if action_decision == "require_two_approvals"
+            else "matched policy rule requires human approval before execution"
+        ]
+    else:
+        approval_reasons = _first_launch_approval_reasons(payload, policy)
+        if _is_sensitive_action(payload, policy) and policy.get("runtime_sensitive_actions_require_approval") is True:
+            approval_reasons.insert(0, "sensitive action requires human approval before execution")
+    required_approval_count = (
+        2
+        if action_decision == "require_two_approvals"
+        else _required_approval_count(payload, policy, approval_reasons)
+    )
+
+    settings = get_settings()
+    if (
+        approval_reasons
+        and required_approval_count == 1
+        and settings.APPROVAL_ADAPTATION_ENABLED
+        and allow_approval_adaptation
+    ):
+        rule = find_active_rule_for_action(
+            db,
+            project_id=project_id,
+            action_id=_bounded(payload.get("zroky_action_id"), max_length=36),
+        )
+        if rule is not None:
+            # The resolved policy snapshot records exactly which temporary
+            # owner-approved rule authorized this action and its expiry.
+            policy["_approval_adaptation"] = {
+                "rule_id": rule.id,
+                "expires_at": rule.expires_at.isoformat(),
+                "evidence_matched_count": rule.evidence_matched_count,
+            }
+            return make_result(
+                decision="allow",
+                status="allowed",
+                reasons=[f"bounded approval adaptation rule {rule.id} auto-authorized this verified pattern"],
+                allowed=True,
+                requires_approval=False,
+            )
 
     if approval_reasons:
         if not persist:

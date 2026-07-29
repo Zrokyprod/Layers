@@ -13,6 +13,7 @@ export type AgentControlSetupStatus = {
   complete: boolean;
   profileCount: number;
   setupProfileCount: number;
+  setupAgentId: string | null;
   completedCount: number;
   totalCount: number;
   progressPct: number;
@@ -54,42 +55,60 @@ function runtimePolicyMandateEnforced(profile: AgentProfileResponse | null): boo
 
 function productContextComplete(profile: AgentProfileResponse | null): boolean {
   const context = asRecord(profile?.metadata?.product_context);
-  return hasNonEmptyString(context, "product_name") &&
+  const richContextComplete = hasNonEmptyString(context, "product_name") &&
     hasNonEmptyString(context, "business_goal") &&
     hasNonEmptyArray(context, "critical_objects") &&
     hasNonEmptyArray(context, "source_systems");
+  return richContextComplete || (
+    Boolean(profile && hasWizardMetadata(profile)) &&
+    typeof profile?.metadata?.setup_action_pack_id === "string" &&
+    profile.metadata.setup_action_pack_id.trim().length > 0
+  );
 }
 
 function workflowComplete(profile: AgentProfileResponse | null): boolean {
   const workflow = asRecord(profile?.metadata?.workflow_manifest);
-  return hasNonEmptyString(workflow, "workflow_id") &&
+  const richWorkflowComplete = hasNonEmptyString(workflow, "workflow_id") &&
     hasNonEmptyString(workflow, "owner_team") &&
     hasNonEmptyArray(workflow, "protected_actions");
+  return richWorkflowComplete || Boolean(
+    profile &&
+    hasWizardMetadata(profile) &&
+    (profile.tool_names ?? []).length > 0,
+  );
 }
 
 function actionContractsComplete(profile: AgentProfileResponse | null): boolean {
   const contracts = profile?.metadata?.action_contracts;
-  if (!Array.isArray(contracts) || contracts.length === 0) return false;
-  return contracts.some((contract) => {
+  const richContractsComplete = Array.isArray(contracts) && contracts.some((contract) => {
     const value = asRecord(contract);
     return hasNonEmptyString(value, "id") &&
       hasNonEmptyString(value, "verb") &&
       hasNonEmptyString(value, "risk_class");
   });
+  const installedContracts = profile?.metadata?.setup_action_contract_versions;
+  return richContractsComplete || (
+    Array.isArray(installedContracts) &&
+    installedContracts.some((value) => typeof value === "string" && value.trim().length > 0)
+  );
 }
 
 function policyComplete(profile: AgentProfileResponse | null): boolean {
   const policy = asRecord(profile?.metadata?.policy_preview);
-  return policy != null &&
+  return runtimePolicyMandateEnforced(profile) || (policy != null &&
     typeof policy.approval_required_above_usd === "number" &&
     typeof policy.deny_above_usd === "number" &&
-    policy.unknown_contract_decision === "deny";
+    policy.unknown_contract_decision === "deny");
 }
 
-function runnerVerifierComplete(profile: AgentProfileResponse | null): boolean {
+function runnerComplete(profile: AgentProfileResponse | null): boolean {
   const runner = asRecord(profile?.metadata?.runner_verification);
-  return hasNonEmptyString(runner, "credential_ref") &&
-    hasNonEmptyString(runner, "verifier_connector") &&
+  return hasNonEmptyString(runner, "credential_ref");
+}
+
+function verifierComplete(profile: AgentProfileResponse | null): boolean {
+  const runner = asRecord(profile?.metadata?.runner_verification);
+  return hasNonEmptyString(runner, "verifier_connector") &&
     hasNonEmptyString(runner, "source_of_record");
 }
 
@@ -180,10 +199,16 @@ export function getAgentControlSetupStatus(
       detail: "Unknown contracts must deny and risky actions must hold or deny.",
     },
     {
-      id: "runner_verifier",
-      label: "Select runner and verifier",
-      done: runnerVerifierComplete(primary),
-      detail: "Protected credentials and source-of-record verification must be configured.",
+      id: "runner",
+      label: "Connect protected runner",
+      done: runnerComplete(primary),
+      detail: "Select a protected credential reference for customer-hosted execution.",
+    },
+    {
+      id: "verifier",
+      label: "Connect source verification",
+      done: verifierComplete(primary),
+      detail: "Select the source of record and verifier connector for independent proof.",
     },
   ];
   const completedCount = checks.filter((check) => check.done).length;
@@ -205,6 +230,7 @@ export function getAgentControlSetupStatus(
     complete: state === "live",
     profileCount: profiles.length,
     setupProfileCount: setupProfiles.length,
+    setupAgentId: primary?.id ?? null,
     completedCount,
     totalCount,
     progressPct: Math.round((completedCount / totalCount) * 100),

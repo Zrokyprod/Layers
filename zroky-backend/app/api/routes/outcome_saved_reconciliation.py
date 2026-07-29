@@ -81,6 +81,7 @@ from app.services.system_of_record_connector_config import (
     decrypt_connector_database_url,
     get_connector_config,
 )
+from app.services.atlassian_oauth import resolve_jira_bearer_token
 from app.services.zoho_oauth import ZohoOAuthError, resolve_zoho_crm_bearer_token
 
 
@@ -203,7 +204,12 @@ def _create_saved_ledger_refund_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = resolve_jira_bearer_token(
+            config,
+            project_id=tenant_id,
+            settings=settings,
+            db=db,
+        )
         connector = build_ledger_refund_connector(
             config,
             refund_id=refund_id,
@@ -247,8 +253,6 @@ def _create_saved_ledger_refund_reconciliation(
         raise _map_saved_connector_error(exc) from exc
 
     return _serialize_reconciliation(row)
-
-
 def _create_saved_stripe_refund_reconciliation(
     *,
     db: Session,
@@ -273,7 +277,7 @@ def _create_saved_stripe_refund_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_stripe_refund_connector(
             config,
             refund_id=refund_id,
@@ -342,7 +346,7 @@ def _create_saved_razorpay_refund_reconciliation(
     settings = get_settings()
 
     try:
-        key_secret = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        key_secret = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_razorpay_refund_connector(
             config,
             refund_id=refund_id,
@@ -410,7 +414,7 @@ def _create_saved_customer_record_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_customer_record_connector(
             config,
             customer_id=customer_id,
@@ -477,7 +481,7 @@ def _create_saved_generic_rest_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_generic_rest_connector(
             config,
             record_ref=record_ref,
@@ -546,7 +550,7 @@ def _create_saved_hubspot_crm_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_hubspot_crm_connector(
             config,
             record_ref=record_ref,
@@ -613,7 +617,7 @@ def _create_saved_zendesk_ticket_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_zendesk_ticket_connector(
             config,
             record_ref=record_ref,
@@ -681,7 +685,7 @@ def _create_saved_jira_issue_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_jira_issue_connector(
             config,
             record_ref=record_ref,
@@ -750,7 +754,7 @@ def _create_saved_salesforce_crm_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_salesforce_crm_connector(
             config,
             object_type=object_type,
@@ -829,6 +833,7 @@ def _create_saved_zoho_crm_reconciliation(
             config,
             project_id=tenant_id,
             settings=settings,
+            db=db,
         )
         connector = build_zoho_crm_connector(
             config,
@@ -905,7 +910,7 @@ def _create_saved_netsuite_finance_reconciliation(
     settings = get_settings()
 
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_netsuite_finance_connector(
             config,
             record_type=record_type,
@@ -982,7 +987,7 @@ def _create_saved_postgres_read_reconciliation(
 
     settings = get_settings()
     try:
-        database_url = decrypt_connector_database_url(config, project_id=tenant_id)
+        database_url = decrypt_connector_database_url(config, project_id=tenant_id, db=db)
         if not database_url:
             raise ValueError("PostgreSQL database URL is not configured.")
         connector = build_postgres_read_connector(
@@ -1025,5 +1030,3 @@ def _create_saved_postgres_read_reconciliation(
         raise _map_saved_connector_error(exc) from exc
 
     return _serialize_reconciliation(row)
-
-

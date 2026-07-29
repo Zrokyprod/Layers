@@ -170,7 +170,7 @@ def test_salesforce_crm_connector(
     claimed.setdefault("object_type", object_type)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_salesforce_crm_connector(
             config,
             object_type=object_type,
@@ -423,6 +423,7 @@ def test_zoho_crm_connector(
             config,
             project_id=tenant_id,
             settings=settings,
+            db=db,
         )
         connector = build_zoho_crm_connector(
             config,
@@ -555,7 +556,7 @@ def test_netsuite_finance_connector(
     claimed.setdefault("record_type", record_type)
     settings = get_settings()
     try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id, db=db)
         connector = build_netsuite_finance_connector(
             config,
             record_type=record_type,

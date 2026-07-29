@@ -486,5 +486,3 @@ def _saved_postgres_read_idempotency_key(
     )
     digest = hashlib.sha256(query_material.encode("utf-8")).hexdigest()[:16]
     return f"saved_postgres_read:{scope}:{digest}"
-
-

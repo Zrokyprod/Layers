@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.config_validation import is_jwt_configured, is_production_env, validate_runtime_settings
@@ -173,6 +174,9 @@ class Settings(BaseSettings):
     ACTION_EXECUTION_ATTEMPT_STALE_SECONDS: int = 600
     ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS: int = 60
     ACTION_EXECUTION_ATTEMPT_SWEEP_LIMIT: int = 50
+    PROOF_PENDING_SWEEP_ENABLED: bool = True
+    PROOF_PENDING_SWEEP_INTERVAL_SECONDS: int = 60
+    PROOF_PENDING_SWEEP_LIMIT: int = 500
     PRIVATE_RUNNER_VERIFICATION_STALE_SECONDS: int = 300
     PRIVATE_RUNNER_VERIFICATION_SWEEP_INTERVAL_SECONDS: int = 60
     PRIVATE_RUNNER_VERIFICATION_SWEEP_LIMIT: int = 100
@@ -272,15 +276,12 @@ class Settings(BaseSettings):
     CUSTOMER_LOCAL_SECRETS_MODE: bool = False
     CUSTOMER_LOCAL_SECRET_REF_PREFIXES: str = "vault://,openbao://,bao://"
 
-    # MCP-native interception (Gap 1: distribution). When enabled, the
-    # /v1/mcp/{project_id} ingress proxies an agent's MCP traffic through the
-    # runtime-policy gate. Default OFF so the route is inert (404) until an
-    # operator opts a deployment in. MCP_UPSTREAM_URL is the real MCP server
-    # that allowed tool calls are forwarded to (per-project override lands in
-    # a later slice; this is the deployment-wide default).
-    MCP_INTERCEPTION_ENABLED: bool = False
-    MCP_UPSTREAM_URL: Optional[str] = None
-    MCP_UPSTREAM_TIMEOUT_SECONDS: float = 30.0
+    # Approval adaptation converts only owner-approved, evidence-backed action
+    # patterns into temporary auto-allow rules. Default OFF: creating a rule
+    # never changes live policy behavior until an operator enables this flag.
+    APPROVAL_ADAPTATION_ENABLED: bool = False
+    APPROVAL_ADAPTATION_MIN_MATCHED_APPROVALS: int = Field(default=5, ge=5, le=100)
+    APPROVAL_ADAPTATION_MAX_DURATION_DAYS: int = Field(default=30, ge=1, le=30)
 
     # Hosted billing uses Razorpay. When disabled, paid checkout/verification
     # endpoints return 503; self-host profiles keep billing disabled by default.
@@ -444,6 +445,14 @@ class Settings(BaseSettings):
         "http://localhost:8000/v1/integrations/system-of-record/zoho-crm/oauth/callback"
     )
     ZOHO_OAUTH_SCOPES: str = "ZohoCRM.modules.READ"
+
+    # Atlassian OAuth 2.0 (3LO) for Jira system-of-record verification.
+    ATLASSIAN_CLIENT_ID: Optional[str] = None
+    ATLASSIAN_CLIENT_SECRET: Optional[str] = None
+    ATLASSIAN_OAUTH_REDIRECT_URL: str = (
+        "http://localhost:8000/v1/integrations/system-of-record/jira-issue/oauth/callback"
+    )
+    ATLASSIAN_OAUTH_SCOPES: str = "read:jira-work read:jira-user offline_access"
 
 
     # Weekly digest pipeline.

@@ -194,4 +194,16 @@ def test_home_summary_uses_exact_window_counts_not_list_caps(client: TestClient)
     assert len(body["data"]["mutations"]) == 1
     assert body["data"]["outcome_summary"]["total"] == 2
     assert body["data"]["source_summary"]["unreceipted"] == 1
+    assert body["data"]["control_health"] == {
+        "active_agents": 0,
+        "policy_enforced_agents": 0,
+        "configured_action_packs": 0,
+        "online_runners": 0,
+        "active_sor_connectors": 0,
+        "tested_sor_connectors": 0,
+        "mcp_gateway_status": "not_configured",
+        "mcp_gateway_test_status": "not_tested",
+        "runtime_enabled": True,
+        "kill_switch_enabled": False,
+    }
     assert body["sources"]["intents"] is True

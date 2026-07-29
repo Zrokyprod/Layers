@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
   getActionIntentReceipt,
+  getEvidenceLedger,
   getEvidenceManifest,
   getFinalEvidenceBundle,
   getRuntimePolicyEvidencePack,
@@ -16,15 +17,19 @@ import {
   type ActionReceiptResponse,
   type RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
+import { statusLabel, statusTone } from "@/lib/action-status";
+import { dashboardWindowDays } from "@/lib/dashboard-window";
 import {
   buildEvidenceLedger,
   evidenceLedgerCounts,
   resolveEvidenceLedgerDeepLink,
+  type EvidenceLedgerCounts,
   type EvidenceLedgerFilter,
   type EvidenceLedgerRow,
 } from "@/lib/evidence-ledger";
 import { buildEvidenceArtifact } from "@/lib/evidence-artifact";
 import { formatDateTime } from "@/lib/format";
+import { useDashboardStore } from "@/lib/store";
 import { EvidenceLedger } from "./EvidenceLedger";
 import type { EvidenceProofMetric } from "./EvidenceProofStrip";
 import { EvidenceReport } from "./EvidenceReport";
@@ -261,7 +266,7 @@ function buildVerdict({
   error,
   loading,
 }: {
-  counts: ReturnType<typeof evidenceLedgerCounts>;
+  counts: EvidenceLedgerCounts;
   error: unknown;
   loading: boolean;
 }): EvidenceVerdict {
@@ -325,17 +330,17 @@ function buildVerdict({
   };
 }
 
-function metricsForCounts(counts: ReturnType<typeof evidenceLedgerCounts>): EvidenceProofMetric[] {
+function metricsForCounts(counts: EvidenceLedgerCounts): EvidenceProofMetric[] {
   return [
     {
-      detail: "matched + generated receipt",
+      detail: "matched signed receipts",
       href: "/evidence?filter=matched",
       label: "Export-ready",
       tone: "success",
       value: String(counts.exportReady),
     },
     {
-      detail: "not_verified, missing, or pending",
+      detail: "not verified, missing, or pending",
       href: "/evidence?filter=needs_verification",
       label: "Needs verification",
       tone: counts.needsVerification > 0 ? "warning" : "neutral",
@@ -349,7 +354,7 @@ function metricsForCounts(counts: ReturnType<typeof evidenceLedgerCounts>): Evid
       value: String(counts.exceptions),
     },
     {
-      detail: "receipts, guard decisions, and unlinked outcomes",
+      detail: "action records, guard decisions, and outcomes",
       href: "/evidence?filter=all",
       label: "Total proof records",
       tone: "neutral",
@@ -367,6 +372,10 @@ export default function EvidencePage() {
   const [search, setSearch] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
+  const windowDays = useMemo(() => dashboardWindowDays(dateRange), [dateRange]);
+  const deferredSearch = useDeferredValue(search.trim());
 
   const actionsQuery = useQuery({
     queryKey: ["action-intents", "evidence-index"],
@@ -473,7 +482,7 @@ export default function EvidencePage() {
   }
 
   async function refreshEvidence() {
-    await Promise.all([actionsQuery.refetch(), decisionsQuery.refetch(), outcomesQuery.refetch()]);
+    await ledgerQuery.refetch();
   }
 
   async function exportSelectedProof() {
@@ -543,7 +552,7 @@ export default function EvidencePage() {
   const heroSummaryTitle = `${formatCount(counts.total)} proof records`;
   const heroSummaryDetail = `${formatCount(counts.exportReady)} export-ready · ${formatCount(counts.needsVerification)} need verification · ${formatCount(counts.exceptions)} exceptions`;
   const updatedAt = latestCheckedAt(rows);
-  const isRefreshing = actionsQuery.isFetching || decisionsQuery.isFetching || outcomesQuery.isFetching;
+  const isRefreshing = ledgerQuery.isFetching;
 
   return (
     <div className="dashboard-page evidence-page evidence-ledger-page ev-page">
@@ -568,6 +577,7 @@ export default function EvidencePage() {
         left={(
           <EvidenceLedger
             filter={filter}
+            hasMore={Boolean(ledgerQuery.hasNextPage)}
             isError={Boolean(error)}
             isExporting={exporting}
             isLoading={loading}
@@ -578,6 +588,7 @@ export default function EvidencePage() {
             rows={rows}
             search={search}
             selectedRowId={focusedRow?.id ?? null}
+            totalMatching={firstLedgerPage?.total_matching ?? rows.length}
           />
         )}
         right={(

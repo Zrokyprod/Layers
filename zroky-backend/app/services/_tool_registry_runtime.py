@@ -45,9 +45,12 @@ RUNTIME_PATHS: tuple[ToolRegistryItem, ...] = (
         label="MCP Gateway",
         description="Run MCP tools behind Zroky's mandate, approval, and evidence controls.",
         category="agent_runtime",
-        implementation_status="planned",
+        implementation_status="available",
         supported_action_types=("refund", "customer_record_update", "ticket_close", "email_send", "deploy_change", "invoice_spend_approval", "internal_api_mutation", "database_record_update", "custom"),
-        dashboard_href="/agents",
+        recommended_for_action_types=ALL_LAUNCH_ACTION_TYPES,
+        dashboard_href="/integrations?connector=mcp_upstream",
+        backend_capability="mcp.interception_gateway",
+        availability_notes="Tenant-scoped upstream binding, mandatory audit for protected calls, and fail-closed policy gating are available.",
     ),
     ToolRegistryItem(
         id="webhook",
@@ -61,5 +64,4 @@ RUNTIME_PATHS: tuple[ToolRegistryItem, ...] = (
         backend_capability="outcome_reconciliation.saved_connector_bridge",
     ),
 )
-
 

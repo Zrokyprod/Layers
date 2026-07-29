@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowRight,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   FileCheck2,
   RadioTower,
   ShieldCheck,
+  X,
 } from "lucide-react";
 
 import { DashboardButtonLink } from "@/components/dashboard-button";

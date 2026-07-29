@@ -7530,30 +7530,26 @@
     "/v1/integrations/github/webhook": {
       "post": {
         "tags": [
-          "github-webhooks"
+          "digest"
         ],
-        "summary": "Github Webhook",
-        "operationId": "github_webhook_v1_integrations_github_webhook_post",
+        "summary": "List Project Digests",
+        "operationId": "list_project_digests_v1_digest_get",
         "parameters": [
           {
-            "name": "x-github-event",
-            "in": "header",
+            "name": "limit",
+            "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Github-Event"
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
             }
           },
           {
-            "name": "x-github-delivery",
-            "in": "header",
+            "name": "cursor",
+            "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
@@ -7564,11 +7560,11 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Github-Delivery"
+              "title": "Cursor"
             }
           },
           {
-            "name": "x-hub-signature-256",
+            "name": "X-Project-Id",
             "in": "header",
             "required": false,
             "schema": {
@@ -7580,7 +7576,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Hub-Signature-256"
+              "title": "X-Project-Id"
             }
           }
         ],
@@ -7590,9 +7586,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Github Webhook V1 Integrations Github Webhook Post"
+                  "$ref": "#/components/schemas/DigestListResponse"
                 }
               }
             }
@@ -20706,30 +20700,26 @@
     "/api/v1/integrations/github/webhook": {
       "post": {
         "tags": [
-          "github-webhooks"
+          "digest"
         ],
-        "summary": "Github Webhook",
-        "operationId": "github_webhook_api_v1_integrations_github_webhook_post",
+        "summary": "List Project Digests",
+        "operationId": "list_project_digests_api_v1_digest_get",
         "parameters": [
           {
-            "name": "x-github-event",
-            "in": "header",
+            "name": "limit",
+            "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Github-Event"
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
             }
           },
           {
-            "name": "x-github-delivery",
-            "in": "header",
+            "name": "cursor",
+            "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
@@ -20740,11 +20730,11 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Github-Delivery"
+              "title": "Cursor"
             }
           },
           {
-            "name": "x-hub-signature-256",
+            "name": "X-Project-Id",
             "in": "header",
             "required": false,
             "schema": {
@@ -20756,7 +20746,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Hub-Signature-256"
+              "title": "X-Project-Id"
             }
           }
         ],
@@ -20766,9 +20756,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Github Webhook Api V1 Integrations Github Webhook Post"
+                  "$ref": "#/components/schemas/DigestListResponse"
                 }
               }
             }
@@ -37250,6 +37238,447 @@
         ],
         "title": "NetSuiteFinanceConnectorTestResponse"
       },
+      "NetSuiteFinanceConnectorConfigRequest": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Base Url"
+          },
+          "path_template": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path Template",
+            "default": "/services/rest/record/v1/{record_type}/{record_ref}"
+          },
+          "record_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "bearer_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer Token"
+          },
+          "clear_bearer_token": {
+            "type": "boolean",
+            "title": "Clear Bearer Token",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_url"
+        ],
+        "title": "NetSuiteFinanceConnectorConfigRequest"
+      },
+      "NetSuiteFinanceConnectorStatusResponse": {
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "connector_type": {
+            "type": "string",
+            "title": "Connector Type"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "path_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Template"
+          },
+          "record_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "has_bearer_token": {
+            "type": "boolean",
+            "title": "Has Bearer Token"
+          },
+          "bearer_token_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer Token Last4"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tested At"
+          },
+          "health_status": {
+            "type": "string",
+            "title": "Health Status",
+            "default": "not_configured"
+          },
+          "last_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verdict"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Http Status"
+          },
+          "last_attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempts"
+          },
+          "last_retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Retryable"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "readiness": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Readiness"
+          },
+          "created_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connected",
+          "connector_type",
+          "has_bearer_token"
+        ],
+        "title": "NetSuiteFinanceConnectorStatusResponse"
+      },
+      "NetSuiteFinanceConnectorTestRequest": {
+        "properties": {
+          "record_type": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Record Type",
+            "default": "vendorBill"
+          },
+          "record_ref": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Record Ref"
+          },
+          "claimed": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Claimed"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "runtime_policy_decision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Policy Decision Id"
+          },
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type",
+            "default": "finance_record_update"
+          },
+          "system_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Ref"
+          },
+          "match_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Fields"
+          },
+          "amount_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Usd"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_ref"
+        ],
+        "title": "NetSuiteFinanceConnectorTestRequest"
+      },
+      "NetSuiteFinanceConnectorTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "check": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Check"
+          },
+          "connector": {
+            "$ref": "#/components/schemas/NetSuiteFinanceConnectorStatusResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "check",
+          "connector"
+        ],
+        "title": "NetSuiteFinanceConnectorTestResponse"
+      },
       "NotificationListResponse": {
         "properties": {
           "total": {
@@ -41868,6 +42297,21 @@
           "is_active"
         ],
         "title": "ProjectStatusRequest"
+      },
+      "ProjectUpdateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ProjectUpdateRequest"
       },
       "ProjectUpdateRequest": {
         "properties": {
@@ -49448,6 +49892,909 @@
           "result"
         ],
         "title": "WebhookResponse"
+      },
+      "ZendeskTicketConnectorConfigRequest": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Base Url"
+          },
+          "path_template": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path Template",
+            "default": "/api/v2/tickets/{record_ref}.json"
+          },
+          "record_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Path",
+            "default": "ticket"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "auth_username": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Username"
+          },
+          "bearer_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer Token"
+          },
+          "clear_bearer_token": {
+            "type": "boolean",
+            "title": "Clear Bearer Token",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_url"
+        ],
+        "title": "ZendeskTicketConnectorConfigRequest"
+      },
+      "ZendeskTicketConnectorStatusResponse": {
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "connector_type": {
+            "type": "string",
+            "title": "Connector Type"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "path_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Template"
+          },
+          "record_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "has_bearer_token": {
+            "type": "boolean",
+            "title": "Has Bearer Token"
+          },
+          "bearer_token_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer Token Last4"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tested At"
+          },
+          "health_status": {
+            "type": "string",
+            "title": "Health Status",
+            "default": "not_configured"
+          },
+          "last_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verdict"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Http Status"
+          },
+          "last_attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempts"
+          },
+          "last_retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Retryable"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "readiness": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Readiness"
+          },
+          "created_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connected",
+          "connector_type",
+          "has_bearer_token"
+        ],
+        "title": "ZendeskTicketConnectorStatusResponse"
+      },
+      "ZendeskTicketConnectorTestRequest": {
+        "properties": {
+          "record_ref": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Record Ref"
+          },
+          "claimed": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Claimed"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "runtime_policy_decision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Policy Decision Id"
+          },
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type",
+            "default": "ticket_close"
+          },
+          "system_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Ref"
+          },
+          "match_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Fields"
+          },
+          "amount_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Usd"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_ref"
+        ],
+        "title": "ZendeskTicketConnectorTestRequest"
+      },
+      "ZendeskTicketConnectorTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "check": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Check"
+          },
+          "connector": {
+            "$ref": "#/components/schemas/ZendeskTicketConnectorStatusResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "check",
+          "connector"
+        ],
+        "title": "ZendeskTicketConnectorTestResponse"
+      },
+      "ZohoCrmConnectorConfigRequest": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Base Url",
+            "default": "https://www.zohoapis.com"
+          },
+          "path_template": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Path Template",
+            "default": "/crm/v8/{module_name}/{record_ref}"
+          },
+          "record_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Path",
+            "default": "data.0"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "bearer_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer Token"
+          },
+          "clear_bearer_token": {
+            "type": "boolean",
+            "title": "Clear Bearer Token",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ZohoCrmConnectorConfigRequest"
+      },
+      "ZohoCrmConnectorStatusResponse": {
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "connector_type": {
+            "type": "string",
+            "title": "Connector Type"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "path_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Template"
+          },
+          "record_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "has_bearer_token": {
+            "type": "boolean",
+            "title": "Has Bearer Token"
+          },
+          "bearer_token_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearer Token Last4"
+          },
+          "last_tested_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tested At"
+          },
+          "health_status": {
+            "type": "string",
+            "title": "Health Status",
+            "default": "not_configured"
+          },
+          "last_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verdict"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Http Status"
+          },
+          "last_attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempts"
+          },
+          "last_retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Retryable"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "readiness": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Readiness"
+          },
+          "created_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "has_oauth_refresh_token": {
+            "type": "boolean",
+            "title": "Has Oauth Refresh Token",
+            "default": false
+          },
+          "oauth_refresh_token_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Refresh Token Last4"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connected",
+          "connector_type",
+          "has_bearer_token"
+        ],
+        "title": "ZohoCrmConnectorStatusResponse"
+      },
+      "ZohoCrmConnectorTestRequest": {
+        "properties": {
+          "module_name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Module Name",
+            "default": "Contacts"
+          },
+          "record_ref": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Record Ref"
+          },
+          "claimed": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Claimed"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "runtime_policy_decision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Policy Decision Id"
+          },
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type",
+            "default": "customer_record_update"
+          },
+          "system_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Ref"
+          },
+          "match_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Fields"
+          },
+          "amount_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Usd"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_ref"
+        ],
+        "title": "ZohoCrmConnectorTestRequest"
+      },
+      "ZohoCrmConnectorTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "check": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Check"
+          },
+          "connector": {
+            "$ref": "#/components/schemas/ZohoCrmConnectorStatusResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "check",
+          "connector"
+        ],
+        "title": "ZohoCrmConnectorTestResponse"
       },
       "ZendeskTicketConnectorConfigRequest": {
         "properties": {

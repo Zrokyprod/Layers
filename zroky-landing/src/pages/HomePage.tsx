@@ -20,19 +20,12 @@ import {
 import type { IconType } from 'react-icons';
 import {
   SiCrewai,
-  SiFresh,
   SiHubspot,
-  SiIntercom,
-  SiJira,
   SiLangchain,
-  SiLinear,
   SiPostgresql,
-  SiQuickbooks,
-  SiRazorpay,
   SiShopify,
   SiStripe,
   SiZendesk,
-  SiZoho,
 } from 'react-icons/si';
 import Hero from '../components/hero/Hero';
 import { DEMO_URL, SIGN_UP_URL } from '../lib/links';
@@ -114,113 +107,202 @@ function wait(ms: number) {
 }
 
 function ControlFlowSection() {
-  const reduce = useReducedMotion();
+  const reduce = Boolean(useReducedMotion());
+  const [activeStep, setActiveStep] = useState(0);
   const steps = [
     {
       icon: Bot,
-      label: 'Agent request',
-      title: 'refund.customer_balance',
-      meta: 'intent captured',
+      label: 'Protected action',
+      title: 'refund.create',
+      meta: 'contract · finance.refund.v4',
     },
     {
       icon: ShieldCheck,
-      label: 'Policy check',
-      title: 'finance.refund <= $500',
-      meta: 'rule matched',
+      label: 'Policy decision',
+      title: 'ALLOW · HOLD · DENY',
+      meta: 'evaluated before execution',
     },
     {
       icon: LockKeyhole,
-      label: 'Approval rule',
-      title: 'manager review required',
-      meta: 'held until approved',
+      label: 'Controlled execution',
+      title: 'MCP upstream or runner',
+      meta: 'execution state recorded',
     },
     {
       icon: DatabaseZap,
-      label: 'Scoped execution',
-      title: 'temporary permission',
-      meta: 'least privilege',
+      label: 'Outcome verification',
+      title: 'System of record',
+      meta: 'matched · mismatched · pending',
     },
     {
       icon: ReceiptText,
-      label: 'Signed receipt',
-      title: 'proof generated',
-      meta: 'audit trail saved',
+      label: 'Signed evidence',
+      title: 'Ed25519 receipt',
+      meta: 'audit trail preserved',
     },
   ];
+  const activeStates = [
+    'INTENT CAPTURED',
+    'POLICY · ALLOW',
+    'EXECUTION RECORDED',
+    'SOR · MATCHED',
+    'RECEIPT SIGNED',
+  ];
+  const visibleStep = reduce ? steps.length - 1 : activeStep;
+  const progress = (visibleStep / (steps.length - 1)) * 100;
+
+  useEffect(() => {
+    if (reduce) return undefined;
+    const id = window.setInterval(() => {
+      setActiveStep((current) => (current + 1) % steps.length);
+    }, 1700);
+    return () => window.clearInterval(id);
+  }, [reduce, steps.length]);
+
+  const stageState = (index: number) => {
+    if (visibleStep === index) return 'active';
+    if (visibleStep > index) return 'complete';
+    return 'pending';
+  };
 
   return (
     <Section id="control-flow" className="bg-[#fbfaf6] py-16 md:py-20">
       <SectionHeader
         eyebrow="Control flow"
-        title="From agent intent to verified action."
-        copy="Zroky turns every agent request into a governed path: validate intent, enforce policy, require approval when needed, limit execution scope, and preserve proof."
+        title="From protected action to verified outcome."
+        copy="Zroky binds each protected action to a versioned contract, applies policy before execution, verifies the result in the system of record, and records the evidence in a signed receipt."
         align="center"
       />
 
-      <Reveal delay={0.08} className="mx-auto mt-10 max-w-6xl">
-        <div className="relative overflow-hidden border border-[#ded9cf] bg-[#fffefa]/86 px-4 py-5 shadow-[0_28px_80px_-64px_rgba(23,25,22,0.52)] backdrop-blur sm:px-5 md:px-6">
-          <span className="absolute -left-1.5 -top-1.5 h-3 w-3 border-l border-t border-[#cfc9bd]" />
-          <span className="absolute -right-1.5 -top-1.5 h-3 w-3 border-r border-t border-[#cfc9bd]" />
-          <span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 border-b border-l border-[#cfc9bd]" />
-          <span className="absolute -bottom-1.5 -right-1.5 h-3 w-3 border-b border-r border-[#cfc9bd]" />
+      <Reveal delay={0.08} className="mx-auto mt-10 max-w-[1180px]">
+        <div className="relative overflow-hidden rounded-[6px] border border-[#d8d4c9] bg-[#fffefa]/92 shadow-[0_34px_90px_-70px_rgba(23,25,22,0.62)] backdrop-blur">
+          <div className="flex min-h-12 flex-col gap-2 border-b border-[#ded9cf] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+                {!reduce ? <span className="absolute h-2.5 w-2.5 rounded-full bg-[#3a747c]/20 motion-safe:animate-ping" /> : null}
+                <span className="relative h-1.5 w-1.5 rounded-full bg-[#3a747c]" />
+              </span>
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Control path</span>
+              <span className="h-4 w-px bg-[#d8d4c9]" />
+              <span className="min-w-0 truncate font-mono text-[10.5px] text-[#777266]">finance.refund.v4</span>
+            </div>
+            <motion.span
+              key={activeStates[visibleStep]}
+              aria-live="polite"
+              className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#2f5f66]"
+              initial={reduce ? false : { opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              {activeStates[visibleStep]}
+            </motion.span>
+          </div>
 
-          <div className="relative hidden min-h-[255px] md:block">
-            <div className="absolute left-0 right-0 top-[62px] h-px bg-[#d9d4c8]" />
+          <div className="relative hidden xl:block">
+            <div aria-hidden className="absolute left-[10%] right-[10%] top-[66px] h-px bg-[#d8d4c9]" />
             <motion.div
               aria-hidden
-              className="absolute left-[2%] top-[58px] h-[9px] w-20 rounded-full bg-[linear-gradient(90deg,rgba(58,116,124,0),rgba(58,116,124,0.86),rgba(58,116,124,0))]"
+              className="absolute left-[10%] top-[66px] h-px bg-[#3a747c]"
               initial={false}
-              animate={reduce ? { x: 0, opacity: 0.35 } : { x: ['0%', '980%'], opacity: [0, 1, 0] }}
-              transition={{ duration: 6.5, repeat: reduce ? 0 : Infinity, ease: 'linear' }}
+              animate={{ width: `${progress * 0.8}%` }}
+              transition={{ duration: 0.55, ease }}
             />
 
-            <div className="grid grid-cols-5 gap-3">
+            <ol aria-label="Zroky protected action control flow" className="grid grid-cols-5">
               {steps.map((step, index) => {
                 const Icon = step.icon;
+                const state = stageState(index);
+                const active = state === 'active';
+                const complete = state === 'complete';
                 return (
-                  <div key={step.label} className="relative min-w-0 pt-3">
-                    <div className="mx-auto flex h-[208px] max-w-[205px] flex-col border border-[#e1ddd3] bg-[#fbfaf6] p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
-                          <Icon size={17} />
-                        </span>
-                        <span className="font-mono text-[10px] font-semibold text-[#9b9588]">0{index + 1}</span>
-                      </div>
-                      <div className="mt-7">
-                        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">{step.label}</p>
-                        <h3 className="mt-2 min-h-[2.5rem] text-[0.95rem] font-semibold leading-snug text-[#171a15]">{step.title}</h3>
-                        <p className="mt-3 font-mono text-[10.5px] text-[#777266]">{step.meta}</p>
-                      </div>
+                  <li key={step.label} className={`relative min-w-0 px-5 pb-7 pt-7 ${index > 0 ? 'border-l border-[#e6e2d8]/80' : ''}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <motion.span
+                        className={`relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-[5px] border transition-colors duration-300 ${
+                          active
+                            ? 'border-[#7ca5aa] bg-[#2f5f66] text-white shadow-[0_10px_24px_-14px_rgba(47,95,102,0.8)]'
+                            : complete
+                              ? 'border-[#bdd2cf] bg-[#eaf1ef] text-[#2f5f66]'
+                              : 'border-[#d9d5ca] bg-[#fbfaf6] text-[#969084]'
+                        }`}
+                        animate={active && !reduce ? { y: [0, -2, 0] } : { y: 0 }}
+                        transition={{ duration: 1.7, repeat: active && !reduce ? Infinity : 0, ease: 'easeInOut' }}
+                      >
+                        {complete ? <Check size={17} strokeWidth={2.2} /> : <Icon size={18} strokeWidth={1.8} />}
+                      </motion.span>
+                      <span className="font-mono text-[10px] font-semibold text-[#9b9588]">0{index + 1}</span>
                     </div>
-                    <span className="absolute left-1/2 top-[54px] grid h-4 w-4 -translate-x-1/2 place-items-center border border-[#d9d4c8] bg-[#fffefa]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#3a747c]" />
-                    </span>
-                  </div>
+
+                    <div className="mt-7 min-w-0">
+                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">{step.label}</p>
+                      <h3 className="mt-2 min-h-[2.75rem] [overflow-wrap:anywhere] text-[0.96rem] font-semibold leading-[1.38] text-[#171a15]">{step.title}</h3>
+                      <p className="mt-3 [overflow-wrap:anywhere] font-mono text-[10.5px] leading-[1.55] text-[#777266]">{step.meta}</p>
+                    </div>
+
+                    {index === 1 ? (
+                      <div className={`mt-5 border-l-2 pl-3 transition-colors duration-300 ${active ? 'border-[#3a747c]' : 'border-[#d8d4c9]'}`}>
+                        <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-[#9a9488]">Conditional</p>
+                        <p className="mt-1 text-[0.78rem] font-medium text-[#51564f]">HOLD → human approval</p>
+                      </div>
+                    ) : null}
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
 
-          <div className="grid gap-2 md:hidden">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <div key={step.label} className="grid grid-cols-[2.5rem_1fr] gap-3 border border-[#e1ddd3] bg-[#fbfaf6] p-3">
-                  <span className="grid h-10 w-10 place-items-center border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
-                    <Icon size={17} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">
-                      0{index + 1} / {step.label}
-                    </p>
-                    <h3 className="mt-1 text-sm font-semibold text-[#171a15]">{step.title}</h3>
-                    <p className="mt-1 font-mono text-[10.5px] text-[#777266]">{step.meta}</p>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="relative px-4 py-1 xl:hidden">
+            <div aria-hidden className="absolute bottom-8 left-[38px] top-8 w-px bg-[#d8d4c9]" />
+            <motion.div
+              aria-hidden
+              className="absolute left-[38px] top-8 w-px bg-[#3a747c]"
+              initial={false}
+              animate={{ height: `calc((100% - 4rem) * ${progress / 100})` }}
+              transition={{ duration: 0.55, ease }}
+            />
+            <ol aria-label="Zroky protected action control flow" className="relative">
+              {steps.map((step, index) => {
+                const Icon = step.icon;
+                const state = stageState(index);
+                const active = state === 'active';
+                const complete = state === 'complete';
+                return (
+                  <li key={step.label} className={`grid grid-cols-[2.9rem_1fr] gap-3 py-5 ${index < steps.length - 1 ? 'border-b border-[#e6e2d8]/80' : ''}`}>
+                    <span
+                      className={`relative z-10 grid h-11 w-11 place-items-center rounded-[5px] border transition-colors duration-300 ${
+                        active
+                          ? 'border-[#7ca5aa] bg-[#2f5f66] text-white shadow-[0_10px_24px_-14px_rgba(47,95,102,0.8)]'
+                          : complete
+                            ? 'border-[#bdd2cf] bg-[#eaf1ef] text-[#2f5f66]'
+                            : 'border-[#d9d5ca] bg-[#fbfaf6] text-[#969084]'
+                      }`}
+                    >
+                      {complete ? <Check size={17} strokeWidth={2.2} /> : <Icon size={18} strokeWidth={1.8} />}
+                    </span>
+                    <div className="min-w-0 pt-0.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.13em] text-[#2f5f66]">{step.label}</p>
+                        <span className="font-mono text-[9.5px] font-semibold text-[#9b9588]">0{index + 1}</span>
+                      </div>
+                      <h3 className="mt-1.5 [overflow-wrap:anywhere] text-[0.92rem] font-semibold leading-snug text-[#171a15]">{step.title}</h3>
+                      <p className="mt-1.5 [overflow-wrap:anywhere] font-mono text-[10.5px] leading-relaxed text-[#777266]">{step.meta}</p>
+                      {index === 1 ? (
+                        <div className={`mt-3 border-l-2 pl-3 transition-colors duration-300 ${active ? 'border-[#3a747c]' : 'border-[#d8d4c9]'}`}>
+                          <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-[#9a9488]">Conditional</p>
+                          <p className="mt-1 text-xs font-medium text-[#51564f]">HOLD → human approval</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
 
+          <div className="flex flex-col gap-1.5 border-t border-[#ded9cf] bg-[#f8f7f2]/72 px-4 py-3 font-mono text-[9.5px] text-[#777266] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <span>Decision is durable before execution.</span>
+            <span>Verification and receipt run after execution.</span>
+          </div>
         </div>
       </Reveal>
     </Section>
@@ -228,58 +310,47 @@ function ControlFlowSection() {
 }
 
 function ConnectorWall() {
-  type LogoWallItem = {
+  type IntegrationItem = {
     name: string;
     icon?: IconType | LucideIcon;
     mark?: string;
     color: string;
   };
-  const connectors: LogoWallItem[] = [
+  const systems: IntegrationItem[] = [
     { name: 'PostgreSQL', icon: SiPostgresql, color: '#4169e1' },
     { name: 'HubSpot', icon: SiHubspot, color: '#ff5c35' },
     { name: 'Salesforce', icon: Cloud, color: '#1798c1' },
-    { name: 'Zendesk', icon: SiZendesk, color: '#03363d' },
-    { name: 'Intercom', icon: SiIntercom, color: '#0a7cff' },
-    { name: 'Freshdesk', icon: SiFresh, color: '#14a46f' },
-    { name: 'Jira', icon: SiJira, color: '#0052cc' },
-    { name: 'Linear', icon: SiLinear, color: '#5e6ad2' },
     { name: 'Stripe', icon: SiStripe, color: '#635bff' },
-    { name: 'Razorpay', icon: SiRazorpay, color: '#0b72e7' },
     { name: 'Shopify', icon: SiShopify, color: '#7ab55c' },
     { name: 'NetSuite', mark: 'NS', color: '#315b62' },
-    { name: 'QuickBooks', icon: SiQuickbooks, color: '#2ca01c' },
-    { name: 'Zoho', icon: SiZoho, color: '#d9232e' },
+    { name: 'Zendesk', icon: SiZendesk, color: '#03363d' },
+    { name: 'Private systems', icon: LockKeyhole, color: '#2f5f66' },
   ];
-  const frameworks: LogoWallItem[] = [
+  const frameworks: IntegrationItem[] = [
     { name: 'OpenAI Agents SDK', icon: Bot, color: '#171a15' },
     { name: 'LangGraph', icon: SiLangchain, color: '#1c7c54' },
     { name: 'CrewAI', icon: SiCrewai, color: '#171a15' },
     { name: 'AutoGen', icon: GitBranch, color: '#2f5f66' },
   ];
-  const tileBackground = {
-    backgroundImage:
-      'repeating-linear-gradient(-45deg, rgba(32,35,31,0.026) 0, rgba(32,35,31,0.026) 1px, transparent 1px, transparent 7px)',
-  };
-  const LogoTile = ({ item, framework = false }: { item: LogoWallItem; framework?: boolean }) => {
+  const controlSteps = [
+    { label: 'Intercept', detail: 'SDK / MCP', icon: GitBranch },
+    { label: 'Bind', detail: 'Versioned contract', icon: LockKeyhole },
+    { label: 'Decide', detail: 'Policy / approval', icon: ShieldCheck },
+    { label: 'Prove', detail: 'SOR / receipt', icon: ReceiptText },
+  ];
+  const IntegrationRow = ({ item }: { item: IntegrationItem }) => {
     const Icon = item.icon;
     return (
       <div
-        className="group relative -ml-px -mt-px flex min-h-[80px] items-center justify-center border border-[#ded9cf] bg-[#fffefa]/78 px-4 transition duration-200 hover:bg-[#fffdfa]"
-        style={tileBackground}
+        className="group flex min-w-0 items-center gap-3 border-b border-[#e6e1d8] px-4 py-3.5 last:border-b-0 sm:px-5"
         title={item.name}
-        aria-label={item.name}
       >
-        <div className="flex max-w-full items-center gap-2.5 text-[#60645d] opacity-[0.82] grayscale transition duration-200 group-hover:text-[#20241e] group-hover:opacity-100">
-          {Icon ? (
-            <Icon size={framework ? 19 : 20} className="shrink-0" style={{ color: 'currentColor' }} />
-          ) : (
-            <span className="shrink-0 font-mono text-[13px] font-semibold tracking-[0.08em] text-current">
-              {item.mark}
-            </span>
-          )}
-          <span className="truncate text-[0.88rem] font-semibold leading-none tracking-normal text-current">
-            {item.name}
-          </span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#ded9cf] bg-[#fffefa] text-[#3f4540] transition-colors duration-200 group-hover:border-[#b9cfca] group-hover:text-[#2f5f66]">
+          {Icon ? <Icon size={16} style={{ color: item.color }} /> : <span className="font-mono text-[10px] font-bold">{item.mark}</span>}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[0.82rem] font-semibold text-[#272b26]">{item.name}</p>
+          <p className="mt-0.5 font-mono text-[8.5px] uppercase tracking-[0.13em] text-[#918c81]">{item.name === 'Private systems' ? 'Outbound runner' : 'Integration endpoint'}</p>
         </div>
       </div>
     );
@@ -288,41 +359,106 @@ function ConnectorWall() {
   return (
     <Section id="connectors" className="bg-[#fbfcfa] py-14 md:py-20">
       <SectionHeader
-        eyebrow="Connectors + agents"
-        title="Connect every agent to governed proof."
-        copy="Zroky wraps agent frameworks and verifies outcomes against the systems they touch, so enterprises can scale autonomous work without losing policy, approval, or evidence control."
+        eyebrow="Integration fabric"
+        title="Connect agent frameworks to systems of record through one governed control rail."
+        copy="Use SDK or MCP to intercept protected actions, bind them to contracts, and verify outcomes through configured connectors and private enterprise systems."
         align="center"
       />
 
       <Reveal delay={0.08} className="mx-auto mt-10 max-w-6xl">
-        <div className="relative overflow-hidden border border-[#ded9cf] bg-[#fffefa]/72 shadow-[0_28px_80px_-64px_rgba(23,25,22,0.52)] backdrop-blur">
+        <div className="relative overflow-hidden border border-[#d8d4cb] bg-[#fffefa] shadow-[0_34px_90px_-62px_rgba(23,25,22,0.48)]">
           <span className="absolute -left-1.5 -top-1.5 h-3 w-3 border-l border-t border-[#cfc9bd]" />
           <span className="absolute -right-1.5 -top-1.5 h-3 w-3 border-r border-t border-[#cfc9bd]" />
           <span className="absolute -bottom-1.5 -left-1.5 h-3 w-3 border-b border-l border-[#cfc9bd]" />
           <span className="absolute -bottom-1.5 -right-1.5 h-3 w-3 border-b border-r border-[#cfc9bd]" />
 
-          <div className="relative z-10">
-            <div className="flex items-center justify-between border-b border-[#ded9cf] px-4 py-3 sm:px-5">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Connectors</span>
-              <span className="hidden font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8a867a] sm:inline">Systems of record</span>
+          <div className="flex items-center justify-between border-b border-[#ded9cf] bg-[#f7f7f3]/82 px-4 py-3 sm:px-5">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#159447] shadow-[0_0_0_4px_rgba(21,148,71,0.1)]" />
+              <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-[#4e554e]">Governed integration path</span>
+            </div>
+            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a867a]">Project scoped</span>
+          </div>
+
+          <div className="relative grid lg:grid-cols-[0.82fr_1.36fr_0.92fr]">
+            <div className="border-b border-[#ded9cf] bg-[#faf9f5] lg:border-b-0 lg:border-r">
+              <div className="border-b border-[#ded9cf] px-4 py-4 sm:px-5">
+                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#827d72]">01 / Action sources</p>
+                <h3 className="mt-1.5 text-[1.05rem] font-semibold text-[#20241e]">Agent frameworks</h3>
+              </div>
+              <div>
+                {frameworks.map((item) => <IntegrationRow key={item.name} item={item} />)}
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
-              {connectors.map((item) => (
-                <LogoTile key={item.name} item={item} />
-              ))}
+            <div className="relative border-b border-[#ded9cf] bg-[#f1f7f5] lg:border-b-0 lg:border-r">
+              <div className="pointer-events-none absolute inset-0 opacity-[0.32]" style={{ backgroundImage: 'linear-gradient(rgba(47,95,102,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(47,95,102,0.08) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+              <div className="relative px-5 py-5 sm:px-7 sm:py-6">
+                <div className="flex items-start justify-between gap-4 border-b border-[#cfe0dc] pb-5">
+                  <div>
+                    <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#2f5f66]">Zroky control rail</p>
+                    <h3 className="mt-2 max-w-[18rem] text-[1.45rem] font-semibold leading-[1.12] text-[#17221f]">Control before execution. Proof after.</h3>
+                  </div>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#b9d1cc] bg-[#fffefa] text-[#2f5f66] shadow-sm"><ShieldCheck size={20} /></span>
+                </div>
+
+                <ol className="relative mt-5 space-y-2.5">
+                  <span className="absolute bottom-5 left-[17px] top-5 w-px bg-[#bad1cc]" aria-hidden="true" />
+                  {controlSteps.map((step, index) => {
+                    const Icon = step.icon;
+                    return (
+                      <motion.li
+                        key={step.label}
+                        className="relative grid grid-cols-[36px_1fr_auto] items-center gap-3 border border-[#cadbd7] bg-[#fffefa]/95 px-3 py-3 shadow-[0_8px_20px_-18px_rgba(23,25,22,0.8)]"
+                        initial={{ opacity: 0, x: -8 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.4, delay: 0.12 + index * 0.07, ease }}
+                      >
+                        <span className="relative z-10 flex h-8 w-8 items-center justify-center border border-[#bad1cc] bg-[#edf5f2] text-[#2f5f66]"><Icon size={15} /></span>
+                        <span className="min-w-0">
+                          <span className="block text-[0.82rem] font-semibold text-[#202821]">{step.label}</span>
+                          <span className="block truncate font-mono text-[8.5px] uppercase tracking-[0.1em] text-[#777d76]">{step.detail}</span>
+                        </span>
+                        <Check size={14} className="text-[#159447]" />
+                      </motion.li>
+                    );
+                  })}
+                </ol>
+
+                <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#cfe0dc] pt-4 font-mono text-[8.5px] uppercase tracking-[0.12em] text-[#66716b]">
+                  <span>ALLOW / HOLD / DENY</span>
+                  <ArrowRight size={14} className="text-[#2f5f66]" />
+                  <span>Matched / mismatch</span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between border-y border-[#ded9cf] px-4 py-3 sm:px-5">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Agent frameworks</span>
-              <span className="hidden font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8a867a] sm:inline">Existing execution path</span>
+            <div className="bg-[#faf9f5]">
+              <div className="border-b border-[#ded9cf] px-4 py-4 sm:px-5">
+                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#827d72]">02 / Evidence sources</p>
+                <h3 className="mt-1.5 text-[1.05rem] font-semibold text-[#20241e]">Systems of record</h3>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-1">
+                {systems.map((item) => <IntegrationRow key={item.name} item={item} />)}
+              </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              {frameworks.map((item) => (
-                <LogoTile key={item.name} item={item} framework />
-              ))}
-            </div>
+          <div className="grid border-t border-[#ded9cf] bg-[#f7f7f3] sm:grid-cols-3">
+            {[
+              ['Certified connectors', 'Zroky maintained'],
+              ['Declarative manifests', 'Customer configured'],
+              ['Private runner', 'Inside your network'],
+            ].map(([title, detail], index) => (
+              <div key={title} className={`flex items-center gap-3 px-4 py-3.5 sm:px-5 ${index < 2 ? 'border-b border-[#ded9cf] sm:border-b-0 sm:border-r' : ''}`}>
+                <span className="font-mono text-[9px] font-semibold text-[#2f5f66]">0{index + 1}</span>
+                <span>
+                  <span className="block text-[0.76rem] font-semibold text-[#2a2e29]">{title}</span>
+                  <span className="block text-[0.7rem] text-[#858074]">{detail}</span>
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </Reveal>
