@@ -16,6 +16,10 @@ branch_labels = None
 depends_on = None
 
 
+def _table_exists(table_name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(table_name)
+
+
 def upgrade() -> None:
     op.create_table(
         "mcp_upstream_bindings",
@@ -88,6 +92,8 @@ def upgrade() -> None:
             "mcp_upstream_bindings",
             "mcp_gateway_sessions",
         ):
+            if not _table_exists(table_name):
+                continue
             policy_name = f"{table_name}_tenant_isolation"
             op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
             op.execute(f"ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY")
@@ -110,6 +116,8 @@ def downgrade() -> None:
             "mcp_upstream_bindings",
             "mcp_gateway_sessions",
         ):
+            if not _table_exists(table_name):
+                continue
             policy_name = f"{table_name}_tenant_isolation"
             op.execute(f"DROP POLICY IF EXISTS {policy_name} ON {table_name}")
             op.execute(f"ALTER TABLE {table_name} NO FORCE ROW LEVEL SECURITY")
