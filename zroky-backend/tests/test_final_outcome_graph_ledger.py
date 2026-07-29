@@ -169,6 +169,56 @@ def test_recheck_sweep_drains_pending_graph_to_verified(client: TestClient) -> N
     assert row.next_check_at is None
 
 
+def test_outcome_graph_recheck_due_endpoint_drains_pending_graph(client: TestClient) -> None:
+    now = datetime.now(timezone.utc)
+    with client.session_local() as session:
+        intent = _intent(intent_json={"refund_id": "rf_endpoint"})
+        pack = _pack()
+        session.add_all([intent, pack])
+        row = FinalOutcomeGraph(
+            project_id="proj_test",
+            environment="production",
+            intent_id=intent.id,
+            graph_digest="pending-endpoint",
+            graph_json=json.dumps(
+                {
+                    "workflow_key": "refund-workflow",
+                    "pack_version": "1.0.0",
+                    "intent_id": intent.id,
+                    "assurance_pack_id": pack.id,
+                    "observation_count": 0,
+                },
+                separators=(",", ":"),
+            ),
+            classification="pending",
+            verification_status="pending",
+            next_check_at=now - timedelta(seconds=1),
+        )
+        observation = FinalObservation(
+            project_id="proj_test",
+            environment="production",
+            intent_id=intent.id,
+            source_kind="generic_rest",
+            observed_object_ref="refund:rf_endpoint",
+            observation_digest="obs-endpoint",
+            observation_json=json.dumps(
+                {
+                    "observed_state": {"refund_id": "rf_endpoint", "status": "posted"},
+                    "provenance": {"source_binding": "ledger_refunds"},
+                    "read_at": now.isoformat(),
+                },
+                separators=(",", ":"),
+            ),
+            observed_at=now,
+        )
+        session.add_all([row, observation])
+        session.commit()
+
+    triggered = client.post("/v1/outcome-graphs/recheck-due")
+    assert triggered.status_code == 200, triggered.text
+    assert triggered.json() == {"checked": 1, "updated": 1}
+
+
 def test_outcome_graph_ledger_endpoints_filter_and_count_verified_only(client: TestClient) -> None:
     with client.session_local() as session:
         intent = _intent()

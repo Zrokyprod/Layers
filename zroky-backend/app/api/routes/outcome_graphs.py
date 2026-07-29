@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.api.dependencies.authorization import ROLE_RANK
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import FinalAgentRun, FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalWorkflowIntent
@@ -21,6 +22,7 @@ from app.services.final_outcome_graphs import (
     FINAL_OUTCOME_CLASSIFICATIONS,
     apply_outcome_graph_ledger_state,
     graph_digest,
+    recheck_due_outcome_graphs,
 )
 
 
@@ -55,6 +57,11 @@ class OutcomeGraphCoverageSummaryResponse(BaseModel):
     counts: dict[str, int]
     total: int
     coverage_percent: float
+
+
+class OutcomeGraphRecheckDueResponse(BaseModel):
+    checked: int
+    updated: int
 
 
 def _response(row: FinalOutcomeGraph) -> OutcomeGraphResponse:
@@ -116,6 +123,24 @@ def outcome_graph_coverage_summary(
     verified = counts["verified"]
     coverage = round((verified / total) * 100, 2) if total else 0.0
     return OutcomeGraphCoverageSummaryResponse(counts=counts, total=total, coverage_percent=coverage)
+
+
+@router.post("/v1/outcome-graphs/recheck-due", response_model=OutcomeGraphRecheckDueResponse)
+@limiter.limit("20/minute")
+def recheck_due_outcome_graphs_now(
+    request: Request,
+    limit: int = 100,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> OutcomeGraphRecheckDueResponse:
+    if ROLE_RANK[context.role] < ROLE_RANK["admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required.")
+    result = recheck_due_outcome_graphs(
+        db,
+        limit=max(1, min(int(limit), 100)),
+        verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
+    )
+    return OutcomeGraphRecheckDueResponse(**result)
 
 
 @router.post("/v1/runs/{run_id}/outcome-graph", response_model=OutcomeGraphResponse, status_code=status.HTTP_201_CREATED)
