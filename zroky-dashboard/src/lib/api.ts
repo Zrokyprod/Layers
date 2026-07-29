@@ -524,6 +524,49 @@ export interface EvidenceLedgerResponse {
   window_days: number;
 }
 
+export type OutcomeGraphClassification =
+  | "verified"
+  | "wrong"
+  | "missing"
+  | "stale"
+  | "duplicate"
+  | "conflicted"
+  | "forbidden"
+  | "unknown"
+  | "pending";
+
+export type OutcomeGraphReasonCode =
+  | "no_connector"
+  | "runner_offline"
+  | "no_sor_trace"
+  | "sor_unreachable";
+
+export interface OutcomeGraphRow {
+  id: string;
+  project_id: string;
+  environment: string;
+  intent_id: string;
+  graph_digest: string;
+  graph: Record<string, unknown>;
+  verification_status: string;
+  classification: OutcomeGraphClassification | null;
+  reason_code: OutcomeGraphReasonCode | null;
+  last_checked_at: string | null;
+  next_check_at: string | null;
+  verified_at: string | null;
+  created_at: string;
+}
+
+export interface OutcomeGraphListResponse {
+  items: OutcomeGraphRow[];
+}
+
+export interface OutcomeGraphCoverageSummary {
+  counts: Record<OutcomeGraphClassification, number>;
+  total: number;
+  coverage_percent: number;
+}
+
 export interface FinalEvidenceBundleResponse {
   id: string;
   project_id: string;
@@ -4340,6 +4383,26 @@ export function listOutcomeReconciliations(
     },
     signal,
   });
+}
+
+export function fetchOutcomeGraphs(
+  params: {
+    classification?: OutcomeGraphClassification;
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<OutcomeGraphListResponse> {
+  return request<OutcomeGraphListResponse>("/v1/outcome-graphs", {
+    query: {
+      ...(params.classification ? { classification: params.classification } : {}),
+      limit: String(params.limit ?? 50),
+    },
+    signal,
+  });
+}
+
+export function fetchOutcomeGraphCoverage(signal?: AbortSignal): Promise<OutcomeGraphCoverageSummary> {
+  return request<OutcomeGraphCoverageSummary>("/v1/outcome-graphs/coverage-summary", { signal });
 }
 
 export function listOutcomeMismatchResponses(

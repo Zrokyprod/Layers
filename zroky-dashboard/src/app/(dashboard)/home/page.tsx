@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import {
+  fetchOutcomeGraphCoverage,
   getHomeSummary,
   type ActionExecutionAttemptResponse,
   type ActionIntentResponse,
@@ -30,6 +31,7 @@ import {
   type AgentProfileListResponse,
   type AgentProfileResponse,
   type HomeSummaryResponse,
+  type OutcomeGraphCoverageSummary,
   type OutcomeReconciliationSummaryResponse,
   type OutcomeReconciliationView,
   type RuntimePolicyDecisionResponse,
@@ -57,6 +59,7 @@ type HomeData = {
   apiKeys: ApiKeyResponse[];
   billingUsage: BillingUsageResponse | null;
   homeSummary: HomeSummaryResponse | null;
+  outcomeGraphCoverage: OutcomeGraphCoverageSummary | null;
 };
 
 type HomeSource =
@@ -138,6 +141,7 @@ const EMPTY_DATA: HomeData = {
   apiKeys: [],
   billingUsage: null,
   homeSummary: null,
+  outcomeGraphCoverage: null,
 };
 
 const NO_SOURCES_AVAILABLE: HomeAvailability = {
@@ -350,6 +354,7 @@ function missionDataFromSummary(summary: HomeSummaryResponse): HomeData {
     apiKeys: details?.api_keys ?? [],
     billingUsage: details?.billing_usage ?? null,
     homeSummary: summary,
+    outcomeGraphCoverage: null,
   };
 }
 
@@ -381,6 +386,24 @@ function isUnauthorizedError(error: unknown): boolean {
 }
 
 function proofStats(data: HomeData): ProofStats {
+  if (data.outcomeGraphCoverage) {
+    const counts = data.outcomeGraphCoverage.counts;
+    const mismatches = (counts.wrong ?? 0) + (counts.missing ?? 0) + (counts.forbidden ?? 0) + (counts.duplicate ?? 0);
+    const unverifiable = (counts.pending ?? 0) + (counts.unknown ?? 0) + (counts.stale ?? 0) + (counts.conflicted ?? 0);
+    return {
+      totalActions: data.outcomeGraphCoverage.total,
+      proven: counts.verified ?? 0,
+      mismatches,
+      unverifiable,
+      pendingApprovals: Math.max(
+        data.homeSummary?.metrics.pending_approvals ?? 0,
+        data.approvals.filter((item) => item.status === "pending_approval").length,
+      ),
+      openIncidents: mismatches > 0 ? Math.min(2, mismatches) : 0,
+      blockedAttempts: data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length,
+      coveragePercent: Math.round(data.outcomeGraphCoverage.coverage_percent),
+    };
+  }
   const summary = data.homeSummary;
   const totalActions = Math.max(
     summary?.metrics.controlled_actions ?? 0,
@@ -1131,7 +1154,24 @@ export default function HomePage() {
       if (localDemoHomeEnabled()) {
         const summary = demoHomeSummary(summaryDays);
         if (signal?.aborted) return;
-        setData(missionDataFromSummary(summary));
+        setData({
+          ...missionDataFromSummary(summary),
+          outcomeGraphCoverage: {
+            counts: {
+              conflicted: 0,
+              duplicate: 0,
+              forbidden: 0,
+              missing: 0,
+              pending: 6,
+              stale: 0,
+              unknown: 0,
+              verified: 142,
+              wrong: 3,
+            },
+            coverage_percent: 94,
+            total: 151,
+          },
+        });
         setAvailability(availabilityFromSummary(summary));
         setLoadErrors(0);
         setLoadIssue(null);
@@ -1139,8 +1179,9 @@ export default function HomePage() {
         setProjectRole("owner");
         return;
       }
-      const [summary, projects] = await Promise.all([
+      const [summary, coverage, projects] = await Promise.all([
         getHomeSummary(summaryDays, signal),
+        fetchOutcomeGraphCoverage(signal).catch(() => null),
         listMyProjects(signal).catch(() => []),
       ]);
       if (signal?.aborted) return;
@@ -1148,7 +1189,7 @@ export default function HomePage() {
         ? projects.find((item) => item.project_id === selectedProject) ?? null
         : projects[0] ?? null;
       const nextAvailability = availabilityFromSummary(summary);
-      setData(missionDataFromSummary(summary));
+      setData({ ...missionDataFromSummary(summary), outcomeGraphCoverage: coverage });
       setAvailability(nextAvailability);
       setLoadErrors(unavailableSourceCount(nextAvailability));
       setLoadIssue(null);

@@ -17,7 +17,6 @@ type EvidenceVerdictHeroProps = {
   summaryTitle: string;
   title: string;
   tone: "danger" | "neutral" | "success" | "warning";
-  updatedLabel: string;
 };
 
 export function EvidenceVerdictHero({

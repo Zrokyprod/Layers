@@ -8,6 +8,7 @@ import type { CurrentUserProjectResponse } from "@/lib/types";
 import HomePage from "./page";
 
 const api = vi.hoisted(() => ({
+  fetchOutcomeGraphCoverage: vi.fn(),
   getHomeSummary: vi.fn(),
   listMyProjects: vi.fn(),
 }));
@@ -50,6 +51,7 @@ vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
+    fetchOutcomeGraphCoverage: api.fetchOutcomeGraphCoverage,
     getHomeSummary: api.getHomeSummary,
     listMyProjects: api.listMyProjects,
   };
@@ -292,8 +294,10 @@ function attempt() {
 
 describe("Home dashboard", () => {
   beforeEach(() => {
+    api.fetchOutcomeGraphCoverage.mockReset();
     api.getHomeSummary.mockReset();
     api.listMyProjects.mockReset();
+    api.fetchOutcomeGraphCoverage.mockResolvedValue(null);
     api.getHomeSummary.mockResolvedValue(summary());
     api.listMyProjects.mockResolvedValue([project()]);
     storeState.selectedProject = "proj_1";
