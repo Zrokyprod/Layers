@@ -91,7 +91,7 @@ export function FocusedProofPanel({ isExporting, onExport, row }: FocusedProofPa
         </div>
         <div className="ev-proof-actions">
           <DashboardButton icon={<Download />} disabled={!row || isExporting} onClick={onExport} variant="primary">
-            {isExporting ? "Exporting" : "Export graph JSON"}
+            {isExporting ? "Exporting" : "Export evidence pack"}
           </DashboardButton>
         </div>
         {row ? (

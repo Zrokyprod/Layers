@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -12,10 +13,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalWorkflowIntent
+from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalWorkflowIntent
 from app.db.session import get_db_session
 from app.main import app
+from app.services.action_receipts import action_receipt_public_key_payload
+from app.services.dsse import verify_envelope
 from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state, recheck_due_outcome_graphs
 
 
@@ -264,6 +268,97 @@ def test_outcome_graph_ledger_endpoints_filter_and_count_verified_only(client: T
     assert body["counts"]["pending"] == 1
     assert body["counts"]["unknown"] == 1
     assert body["coverage_percent"] == 25.0
+
+
+def test_outcome_graph_attestation_contains_canonical_subject_digest(client: TestClient) -> None:
+    graph = {
+        "workflow_key": "refund-workflow",
+        "pack_version": "1.0.0",
+        "expected_effects": [{"effect_key": "refund_posted"}],
+        "actual_effects": [{"effect_key": "refund_posted", "matched": True, "observation_digest": "obs_1"}],
+        "classification": "verified",
+    }
+    with client.session_local() as session:
+        intent = _intent(intent_json={"refund_id": "rf_private"})
+        session.add(intent)
+        row = FinalOutcomeGraph(
+            project_id="proj_test",
+            environment="production",
+            intent_id=intent.id,
+            graph_digest="digest",
+            graph_json=json.dumps(graph, sort_keys=True, separators=(",", ":")),
+            classification="verified",
+            verification_status="verified",
+            verified_at=datetime.now(timezone.utc),
+        )
+        session.add(row)
+        session.commit()
+        graph_id = row.id
+        intent_id = intent.id
+        intent_digest = intent.intent_digest
+
+    response = client.get(f"/v1/outcome-graphs/{graph_id}/attestation")
+    assert response.status_code == 200, response.text
+    statement = verify_envelope(response.json(), action_receipt_public_key_payload()["public_key"])
+    assert statement["subject"] == [
+        {
+            "name": f"outcome-graph/{graph_id}",
+            "digest": {"sha256": hashlib.sha256(json.dumps(graph, sort_keys=True, separators=(",", ":")).encode()).hexdigest()},
+        },
+        {"name": f"intent/{intent_id}", "digest": {"sha256": intent_digest}},
+    ]
+    assert statement["predicate"]["effects"] == [
+        {"effect_key": "refund_posted", "matched": True, "observation_digest": "obs_1"}
+    ]
+
+
+def test_outcome_graph_evidence_export_is_tenant_scoped(client: TestClient) -> None:
+    with client.session_local() as session:
+        intent = _intent()
+        session.add(intent)
+        other = FinalOutcomeGraph(
+            project_id="proj_other",
+            environment="production",
+            intent_id=intent.id,
+            graph_digest="digest",
+            graph_json="{}",
+            classification="verified",
+            verification_status="verified",
+        )
+        session.add(other)
+        session.commit()
+        graph_id = other.id
+
+    response = client.get(f"/v1/outcome-graphs/{graph_id}/evidence-export")
+    assert response.status_code == 404
+
+
+def test_outcome_graph_attestation_returns_503_without_prod_key(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    with client.session_local() as session:
+        intent = _intent()
+        session.add(intent)
+        row = FinalOutcomeGraph(
+            project_id="proj_test",
+            environment="production",
+            intent_id=intent.id,
+            graph_digest="digest",
+            graph_json="{}",
+            classification="verified",
+            verification_status="verified",
+        )
+        session.add(row)
+        session.commit()
+        graph_id = row.id
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("ACTION_RECEIPT_ED25519_PRIVATE_KEY", raising=False)
+    get_settings.cache_clear()
+    try:
+        response = client.get(f"/v1/outcome-graphs/{graph_id}/attestation")
+    finally:
+        get_settings.cache_clear()
+    assert response.status_code == 503
+    assert response.json()["detail"] == "attestation signing key not configured"
 
 
 def _intent(*, intent_json: dict | None = None) -> FinalWorkflowIntent:

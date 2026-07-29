@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
   fetchOutcomeGraphCoverage,
+  fetchOutcomeGraphEvidenceExport,
   fetchOutcomeGraphs,
   type OutcomeGraphClassification,
   type OutcomeGraphCoverageSummary,
@@ -271,12 +272,13 @@ export default function EvidencePage() {
     }
   }
 
-  function exportSelectedGraph() {
+  async function exportSelectedGraph() {
     if (!focusedRow) return;
     setExporting(true);
     try {
-      downloadJsonFile(focusedRow.graph ?? {}, `zroky-outcome-graph-${focusedRow.id}.json`);
-      setMessage("Outcome graph JSON exported.");
+      const evidencePack = await fetchOutcomeGraphEvidenceExport(focusedRow.id);
+      downloadJsonFile(evidencePack, `zroky-evidence-${focusedRow.id}.json`);
+      setMessage("Evidence pack exported.");
     } finally {
       setExporting(false);
     }
@@ -313,7 +315,7 @@ export default function EvidencePage() {
         right={(
           <FocusedProofPanel
             isExporting={exporting}
-            onExport={exportSelectedGraph}
+            onExport={() => void exportSelectedGraph()}
             row={focusedRow}
           />
         )}

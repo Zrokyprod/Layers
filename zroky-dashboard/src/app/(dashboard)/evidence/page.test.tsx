@@ -8,6 +8,7 @@ import type { OutcomeGraphCoverageSummary, OutcomeGraphRow } from "@/lib/api";
 
 const api = vi.hoisted(() => ({
   fetchOutcomeGraphCoverage: vi.fn(),
+  fetchOutcomeGraphEvidenceExport: vi.fn(),
   fetchOutcomeGraphs: vi.fn(),
 }));
 
@@ -96,6 +97,12 @@ describe("EvidencePage", () => {
     vi.clearAllMocks();
     window.history.pushState({}, "", "/evidence");
     api.fetchOutcomeGraphCoverage.mockResolvedValue(coverage());
+    api.fetchOutcomeGraphEvidenceExport.mockResolvedValue({
+      attestation: { payload: "e30=", payloadType: "application/vnd.in-toto+json", signatures: [{ keyid: "dev", sig: "sig" }] },
+      public_key: { algorithm: "ed25519", key_id: "dev", public_key: "pub", public_key_encoding: "base64-raw-ed25519" },
+      summary: { classification: "missing" },
+      verify_instructions: "python -m zroky.verify_attestation zroky-evidence-graph_1.json",
+    });
     api.fetchOutcomeGraphs.mockResolvedValue({ items: [graph()] });
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:evidence") });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
@@ -152,5 +159,16 @@ describe("EvidencePage", () => {
     expect(screen.getByText("Declare your first intent.")).toBeInTheDocument();
     expect(screen.getByText("Outcome graphs appear here once an agent run is verified against your systems of record.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Read setup docs" }).getAttribute("href")).toBe("/docs");
+  });
+
+  it("downloads a signed evidence pack for the focused graph", async () => {
+    renderEvidencePage();
+
+    const button = await screen.findByRole("button", { name: "Export evidence pack" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+
+    await waitFor(() => expect(api.fetchOutcomeGraphEvidenceExport).toHaveBeenCalledWith("graph_1"));
+    expect(await screen.findByText("Evidence pack exported.")).toBeInTheDocument();
   });
 });

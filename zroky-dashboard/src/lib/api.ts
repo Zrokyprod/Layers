@@ -567,6 +567,26 @@ export interface OutcomeGraphCoverageSummary {
   coverage_percent: number;
 }
 
+export interface DsseEnvelope {
+  payloadType: string;
+  payload: string;
+  signatures: Array<{ keyid: string; sig: string }>;
+}
+
+export interface AttestationPublicKey {
+  key_id: string;
+  algorithm: "ed25519";
+  public_key: string;
+  public_key_encoding: string;
+}
+
+export interface OutcomeGraphEvidenceExport {
+  attestation: DsseEnvelope;
+  public_key: AttestationPublicKey;
+  summary: Record<string, unknown>;
+  verify_instructions: string;
+}
+
 export interface FinalEvidenceBundleResponse {
   id: string;
   project_id: string;
@@ -4403,6 +4423,15 @@ export function fetchOutcomeGraphs(
 
 export function fetchOutcomeGraphCoverage(signal?: AbortSignal): Promise<OutcomeGraphCoverageSummary> {
   return request<OutcomeGraphCoverageSummary>("/v1/outcome-graphs/coverage-summary", { signal });
+}
+
+export function fetchOutcomeGraphEvidenceExport(
+  graphId: string,
+  signal?: AbortSignal,
+): Promise<OutcomeGraphEvidenceExport> {
+  return request<OutcomeGraphEvidenceExport>(`/v1/outcome-graphs/${encodeURIComponent(graphId)}/evidence-export`, {
+    signal,
+  });
 }
 
 export function listOutcomeMismatchResponses(
