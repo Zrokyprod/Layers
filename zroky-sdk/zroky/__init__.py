@@ -104,6 +104,7 @@ from zroky._telemetry import (  # noqa: F401
 )
 from zroky._verified_action import await_action_proof, verified_action  # noqa: F401
 from zroky._verify import verify_outcome  # noqa: F401
+from zroky.attestation import verify_attestation  # noqa: F401
 from zroky.intent import pre_execution_guard  # noqa: F401
 
 # Re-export preflight public API from preflight.py

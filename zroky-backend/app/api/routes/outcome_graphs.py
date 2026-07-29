@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from typing import Any
@@ -18,6 +19,8 @@ from app.db.models import FinalOutcomeIncident
 from app.db.session import get_db_session
 from app.domain.incident import build_incident_from_outcome_graph
 from app.domain.outcome_graph import build_outcome_graph_snapshot
+from app.services.action_receipts import ActionReceiptSigningError, action_receipt_public_key_payload
+from app.services.dsse import sign_envelope
 from app.services.final_outcome_graphs import (
     FINAL_OUTCOME_CLASSIFICATIONS,
     apply_outcome_graph_ledger_state,
@@ -64,6 +67,13 @@ class OutcomeGraphRecheckDueResponse(BaseModel):
     updated: int
 
 
+class AttestationPublicKeyResponse(BaseModel):
+    key_id: str
+    algorithm: str
+    public_key: str
+    public_key_encoding: str
+
+
 def _response(row: FinalOutcomeGraph) -> OutcomeGraphResponse:
     return OutcomeGraphResponse(
         id=row.id,
@@ -80,6 +90,114 @@ def _response(row: FinalOutcomeGraph) -> OutcomeGraphResponse:
         verified_at=row.verified_at,
         created_at=row.created_at,
     )
+
+
+def _signing_unavailable(exc: ActionReceiptSigningError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="attestation signing key not configured",
+    )
+
+
+def _public_key_payload() -> dict[str, Any]:
+    payload = action_receipt_public_key_payload()
+    return {
+        "key_id": payload["key_id"],
+        "algorithm": "ed25519",
+        "public_key": payload["public_key"],
+        "public_key_encoding": payload["public_key_encoding"],
+    }
+
+
+def _get_graph(db: Session, context: TenantContext, graph_id: str) -> FinalOutcomeGraph:
+    row = db.execute(
+        select(FinalOutcomeGraph).where(
+            FinalOutcomeGraph.id == graph_id,
+            FinalOutcomeGraph.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outcome graph not found.")
+    return row
+
+
+def _loads(value: str) -> dict[str, Any]:
+    loaded = json.loads(value)
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _canonical_graph_digest(graph: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(graph, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+
+
+def _outcome_graph_statement(db: Session, row: FinalOutcomeGraph) -> dict[str, Any]:
+    graph = _loads(row.graph_json)
+    intent = db.execute(
+        select(FinalWorkflowIntent).where(
+            FinalWorkflowIntent.id == row.intent_id,
+            FinalWorkflowIntent.project_id == row.project_id,
+        )
+    ).scalar_one_or_none()
+    if intent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trusted intent not found.")
+    incident = db.execute(
+        select(FinalOutcomeIncident)
+        .where(FinalOutcomeIncident.project_id == row.project_id, FinalOutcomeIncident.outcome_graph_id == row.id)
+        .order_by(FinalOutcomeIncident.created_at.desc())
+    ).scalars().first()
+    return {
+        "_type": "https://in-toto.io/Statement/v1",
+        "subject": [
+            {"name": f"outcome-graph/{row.id}", "digest": {"sha256": _canonical_graph_digest(graph)}},
+            {"name": f"intent/{row.intent_id}", "digest": {"sha256": intent.intent_digest}},
+        ],
+        "predicateType": "https://zroky.com/attestations/outcome-proof/v1",
+        "predicate": {
+            "workflow_key": graph.get("workflow_key"),
+            "pack_version": graph.get("pack_version"),
+            "classification": row.classification,
+            "verification_status": row.verification_status,
+            "effects": [
+                {
+                    "effect_key": effect.get("effect_key"),
+                    "matched": bool(effect.get("matched")),
+                    "observation_digest": effect.get("observation_digest"),
+                }
+                for effect in graph.get("actual_effects", [])
+                if isinstance(effect, dict)
+            ],
+            "verified_at": row.verified_at.isoformat() if row.verified_at else None,
+            "recovered": bool(incident and incident.status == "resolved"),
+            "incident_id": incident.id if incident else None,
+        },
+    }
+
+
+def _evidence_summary(row: FinalOutcomeGraph) -> dict[str, Any]:
+    graph = _loads(row.graph_json)
+    effects = [effect for effect in graph.get("actual_effects", []) if isinstance(effect, dict)]
+    return {
+        "workflow": graph.get("workflow_key"),
+        "claim": f"{len(graph.get('expected_effects', []))} expected effect(s)",
+        "observed": f"{sum(1 for effect in effects if effect.get('observed') is True)} observed effect(s)",
+        "classification": row.classification,
+        "verification_status": row.verification_status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "last_checked_at": row.last_checked_at.isoformat() if row.last_checked_at else None,
+        "verified_at": row.verified_at.isoformat() if row.verified_at else None,
+    }
+
+
+@router.get("/v1/attestations/public-key", response_model=AttestationPublicKeyResponse)
+@limiter.limit("120/minute")
+def get_attestation_public_key(
+    request: Request,
+    context: TenantContext = Depends(require_tenant_context),
+) -> AttestationPublicKeyResponse:
+    try:
+        return AttestationPublicKeyResponse(**_public_key_payload())
+    except ActionReceiptSigningError as exc:
+        raise _signing_unavailable(exc) from exc
 
 
 @router.get("/v1/outcome-graphs", response_model=OutcomeGraphListResponse)
@@ -142,6 +260,41 @@ def recheck_due_outcome_graphs_now(
         verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
     )
     return OutcomeGraphRecheckDueResponse(**result)
+
+
+@router.get("/v1/outcome-graphs/{graph_id}/attestation")
+@limiter.limit("120/minute")
+def get_outcome_graph_attestation(
+    request: Request,
+    graph_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    row = _get_graph(db, context, graph_id)
+    try:
+        return sign_envelope(_outcome_graph_statement(db, row))
+    except ActionReceiptSigningError as exc:
+        raise _signing_unavailable(exc) from exc
+
+
+@router.get("/v1/outcome-graphs/{graph_id}/evidence-export")
+@limiter.limit("60/minute")
+def get_outcome_graph_evidence_export(
+    request: Request,
+    graph_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    row = _get_graph(db, context, graph_id)
+    try:
+        return {
+            "attestation": sign_envelope(_outcome_graph_statement(db, row)),
+            "public_key": _public_key_payload(),
+            "summary": _evidence_summary(row),
+            "verify_instructions": "python -m zroky.verify_attestation zroky-evidence-%s.json" % row.id,
+        }
+    except ActionReceiptSigningError as exc:
+        raise _signing_unavailable(exc) from exc
 
 
 @router.post("/v1/runs/{run_id}/outcome-graph", response_model=OutcomeGraphResponse, status_code=status.HTTP_201_CREATED)
