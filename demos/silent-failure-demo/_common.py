@@ -43,7 +43,7 @@ class DemoConfig:
 
     @classmethod
     def from_env(cls) -> "DemoConfig":
-        return cls(
+        config = cls(
             api_base=os.environ.get("ZROKY_API_BASE", "https://api.zroky.com").rstrip("/"),
             dashboard_base=os.environ.get("ZROKY_DASHBOARD_URL", "https://zroky.com").rstrip("/"),
             project=_required("ZROKY_PROJECT"),
@@ -55,6 +55,9 @@ class DemoConfig:
             currency=os.environ.get("STRIPE_DEMO_CURRENCY", DEFAULT_CURRENCY).strip().lower(),
             use_project_header_context=os.environ.get("ZROKY_USE_PROJECT_HEADER_CONTEXT") == "1",
         )
+        if not config.stripe_secret_key.startswith(("sk_test_", "rk_test_")):
+            raise SystemExit("Demo refuses to run with a live Stripe key. Use a test-mode key (sk_test_...).")
+        return config
 
 
 def _required(name: str) -> str:
