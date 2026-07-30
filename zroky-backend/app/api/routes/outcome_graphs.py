@@ -257,6 +257,7 @@ def recheck_due_outcome_graphs_now(
         limit=max(1, min(int(limit), 100)),
         project_id=context.tenant_id,
         verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
+        observation_pull_max_per_sweep=get_settings().OBSERVATION_PULL_MAX_PER_SWEEP,
     )
     return OutcomeGraphRecheckDueResponse(**result)
 

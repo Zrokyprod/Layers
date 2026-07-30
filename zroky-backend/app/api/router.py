@@ -41,6 +41,7 @@ from app.api.routes.projects import router as projects_router
 from app.api.v1.relay_protocol import router as relay_protocol_router
 from app.api.v1.recovery import router as recovery_router
 from app.api.v1.runs import router as runs_router
+from app.api.v1.source_connectors import router as source_connectors_router
 from app.api.routes.providers import router as providers_router
 from app.api.routes.realtime_ws import router as realtime_ws_router
 from app.api.routes.security import router as security_router
@@ -91,6 +92,7 @@ api_router.include_router(integrations_router, tags=["integrations"])
 api_router.include_router(system_of_record_integrations_router, tags=["integrations"])
 api_router.include_router(notifications_router, tags=["notifications"])
 api_router.include_router(observations_router, tags=["observations"])
+api_router.include_router(source_connectors_router, tags=["source-connectors"])
 api_router.include_router(outcome_graphs_router, tags=["outcome-graphs"])
 api_router.include_router(settings_router, tags=["settings"])
 api_router.include_router(providers_router, tags=["providers"])

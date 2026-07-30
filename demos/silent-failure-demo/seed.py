@@ -81,6 +81,20 @@ def setup() -> dict:
         body={"bearer_token": config.stripe_secret_key},
     )
     print(f"Stripe refund connector configured: connected={connector.get('connected')}")
+    active_connector = api.request(
+        "POST",
+        "/v1/source-connectors",
+        admin=True,
+        body={
+            "environment": "production",
+            "capability": "stripe_refund.read",
+            "connector_kind": "stripe",
+            "secret_ref": config.stripe_secret_ref,
+            "config": {"purpose": "silent_failure_demo"},
+            "status": "active",
+        },
+    )
+    print(f"Active pull connector ready: {active_connector['capability']} via {active_connector['secret_ref']}")
 
     pack = api.request(
         "POST",

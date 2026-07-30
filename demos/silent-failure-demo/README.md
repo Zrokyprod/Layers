@@ -11,9 +11,11 @@ $env:ZROKY_PROJECT="<demo-project-id>"
 $env:ZROKY_API_KEY="<project-api-key>"
 $env:ZROKY_ADMIN_BEARER_TOKEN="<admin-or-owner-session-jwt>"
 $env:STRIPE_SECRET_KEY="sk_test_..."
+$env:ZROKY_STRIPE_SECRET_REF="STRIPE_KEY_PROJ_DEMO"
 ```
 
 For local backend only, set `ZROKY_USE_PROJECT_HEADER_CONTEXT=1` if local settings allow project header context. Production needs the admin bearer token for pack/config/recovery/sweep admin routes.
+For production active pull, set the same Stripe key value in Railway under the env var named by `ZROKY_STRIPE_SECRET_REF`; Zroky stores only that env var name.
 
 Use a clean demo project. The Evidence hero is project-wide, so old outcome graphs in the same project will still count.
 

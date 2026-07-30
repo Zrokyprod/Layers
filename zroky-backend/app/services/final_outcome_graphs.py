@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalWorkflowIntent
 from app.domain.outcome_graph import build_outcome_graph_snapshot, classify_outcome_graph_snapshot
 from app.services.audit_logs import AUDIT_ACTION_RESOLVED, add_audit_log
+from app.services.final_observation_pull import ObservationPullError, active_source_connector, pull_observation
 
 
 FINAL_OUTCOME_CLASSIFICATIONS = {
@@ -28,6 +29,7 @@ FINAL_OUTCOME_REASON_CODES = {"no_connector", "runner_offline", "no_sor_trace", 
 _TERMINAL_CLASSIFICATIONS = {"verified", "wrong", "missing", "forbidden"}
 _FAILED_CLASSIFICATIONS = {"wrong", "missing", "forbidden", "duplicate"}
 MAX_RECHECKS = 5
+RECHECK_BACKOFF_SECONDS = (60, 300, 900, 3600, 21600)
 
 
 def graph_digest(graph: dict[str, Any]) -> str:
@@ -48,11 +50,12 @@ def apply_outcome_graph_ledger_state(
     row.last_checked_at = current
     row.verification_status = _verification_status(classification)
     row.verified_at = current if classification == "verified" else None
-    row.next_check_at = (
-        current + timedelta(seconds=max(1, int(verification_window_seconds)))
-        if classification in {"pending", "unknown"}
-        else None
-    )
+    if classification in {"pending", "unknown"}:
+        row.next_check_at = current + timedelta(
+            seconds=recheck_backoff_seconds(int(graph.get("recheck_count") or 0), default_seconds=verification_window_seconds)
+        )
+    else:
+        row.next_check_at = None
 
 
 def recheck_due_outcome_graphs(
@@ -62,6 +65,7 @@ def recheck_due_outcome_graphs(
     limit: int = 100,
     project_id: str | None = None,
     verification_window_seconds: int,
+    observation_pull_max_per_sweep: int = 50,
 ) -> dict[str, Any]:
     current = now or datetime.now(timezone.utc)
     query = select(FinalOutcomeGraph).where(
@@ -77,6 +81,7 @@ def recheck_due_outcome_graphs(
         ).scalars()
     )
     updated = 0
+    pull_budget = max(0, int(observation_pull_max_per_sweep))
     for row in rows:
         previous_classification = row.classification
         graph = _loads(row.graph_json)
@@ -94,13 +99,21 @@ def recheck_due_outcome_graphs(
             db.add(row)
             updated += 1
             continue
-        snapshot = rebuild_outcome_graph_snapshot(db, row)
-        if snapshot is None:
+        pull_status = _pull_missing_observations(db, row, graph=graph, pull_budget=pull_budget)
+        pull_budget = pull_status["remaining_budget"]
+        if pull_status["error"]:
             graph["recheck_count"] = recheck_count
-            graph["reason_code"] = "no_sor_trace"
+            graph["reason_code"] = "sor_unreachable"
         else:
-            graph = snapshot
-            graph["recheck_count"] = recheck_count
+            snapshot = rebuild_outcome_graph_snapshot(db, row)
+            if snapshot is None:
+                graph["recheck_count"] = recheck_count
+                graph["reason_code"] = "no_connector" if pull_status["missing_connector"] else "no_sor_trace"
+            else:
+                graph = snapshot
+                graph["recheck_count"] = recheck_count
+                if pull_status["missing_connector"]:
+                    graph["reason_code"] = "no_connector"
         row.graph_json = _json(graph)
         row.graph_digest = graph_digest(graph)
         apply_outcome_graph_ledger_state(
@@ -116,6 +129,65 @@ def recheck_due_outcome_graphs(
     if updated:
         db.commit()
     return {"checked": len(rows), "updated": updated}
+
+
+def recheck_backoff_seconds(attempt_count: int, *, default_seconds: int = 300) -> int:
+    if attempt_count <= 0:
+        return max(1, int(default_seconds))
+    return RECHECK_BACKOFF_SECONDS[min(attempt_count - 1, len(RECHECK_BACKOFF_SECONDS) - 1)]
+
+
+def _pull_missing_observations(
+    db: Session,
+    row: FinalOutcomeGraph,
+    *,
+    graph: dict[str, Any],
+    pull_budget: int,
+) -> dict[str, Any]:
+    pack = _pack_for_graph(db, row, graph)
+    if pack is None:
+        return {"remaining_budget": pull_budget, "missing_connector": False, "error": False}
+    pack_payload = _loads(pack.pack_json)
+    bindings = [binding for binding in pack_payload.get("source_bindings", []) if isinstance(binding, dict)]
+    observations = _observation_payloads(
+        db,
+        project_id=row.project_id,
+        environment=row.environment,
+        intent_id=row.intent_id,
+    )
+    missing_connector = False
+    for binding in bindings:
+        if pull_budget <= 0:
+            break
+        if _has_fresh_observation(observations, str(binding.get("key") or "")):
+            continue
+        if active_source_connector(db, graph=row, binding=binding) is None:
+            missing_connector = True
+            continue
+        try:
+            pulled = pull_observation(db, graph=row, binding=binding)
+        except ObservationPullError:
+            return {"remaining_budget": pull_budget, "missing_connector": missing_connector, "error": True}
+        pull_budget -= 1
+        if pulled is not None:
+            payload = _loads(pulled.observation_json)
+            payload["observation_digest"] = pulled.observation_digest
+            observations.append(payload)
+    return {"remaining_budget": pull_budget, "missing_connector": missing_connector, "error": False}
+
+
+def _has_fresh_observation(observations: list[dict[str, Any]], source_binding: str) -> bool:
+    for observation in observations:
+        provenance = observation.get("provenance")
+        freshness = observation.get("freshness")
+        if (
+            isinstance(provenance, dict)
+            and provenance.get("source_binding") == source_binding
+            and isinstance(freshness, dict)
+            and freshness.get("fresh") is True
+        ):
+            return True
+    return False
 
 
 def _resolve_recovering_incidents(db: Session, row: FinalOutcomeGraph, *, now: datetime) -> None:

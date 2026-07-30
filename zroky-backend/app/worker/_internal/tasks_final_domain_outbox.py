@@ -35,6 +35,7 @@ def recheck_due_final_outcome_graphs(limit: int | None = None) -> dict:
             session,
             limit=int(limit) if limit and limit > 0 else int(settings.FINAL_OUTCOME_GRAPH_RECHECK_LIMIT),
             verification_window_seconds=int(settings.FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS),
+            observation_pull_max_per_sweep=int(settings.OBSERVATION_PULL_MAX_PER_SWEEP),
         )
     finally:
         session.close()
