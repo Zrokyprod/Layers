@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import FinalAgentRun, FinalObservation, FinalWorkflowIntent
 from app.db.session import get_db_session
+from app.services.final_observations import create_final_observation_row
 
 
 router = APIRouter(prefix="/v1/observations")
@@ -52,39 +53,6 @@ class ObservationResponse(BaseModel):
     observation: dict[str, Any]
     observed_at: datetime
     created_at: datetime
-
-
-def _json_default(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.astimezone(UTC).isoformat()
-    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
-
-
-def _digest(payload: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=_json_default).encode("utf-8")).hexdigest()
-
-
-def _freshness(observed_at: datetime, read_at: datetime, max_seconds: int) -> dict[str, Any]:
-    observed = observed_at.astimezone(UTC)
-    read = read_at.astimezone(UTC)
-    age = max(0, int((read - observed).total_seconds()))
-    return {"age_seconds": age, "max_freshness_seconds": max_seconds, "fresh": age <= max_seconds}
-
-
-def _payload(body: ObservationCreateRequest) -> dict[str, Any]:
-    read_at = body.read_at or datetime.now(UTC)
-    return {
-        "schema_version": "zroky.observation.v1",
-        "run_id": body.run_id,
-        "intent_id": body.intent_id,
-        "source_kind": body.source_kind,
-        "observed_object_ref": body.observed_object_ref,
-        "observed_state": body.observed_state,
-        "provenance": body.provenance,
-        "observed_at": body.observed_at,
-        "read_at": read_at,
-        "freshness": _freshness(body.observed_at, read_at, body.max_freshness_seconds),
-    }
 
 
 def _response(row: FinalObservation) -> ObservationResponse:
@@ -129,31 +97,20 @@ def _create_observation_row(
         if run is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
 
-    payload = _payload(body)
-    digest = _digest(payload)
-    existing = db.execute(
-        select(FinalObservation).where(
-            FinalObservation.project_id == context.tenant_id,
-            FinalObservation.environment == body.environment,
-            FinalObservation.observation_digest == digest,
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        return _response(existing)
-
-    row = FinalObservation(
+    row = create_final_observation_row(
+        db,
         project_id=context.tenant_id,
         environment=body.environment,
+        run_id=body.run_id,
         intent_id=body.intent_id,
         source_kind=body.source_kind,
         observed_object_ref=body.observed_object_ref,
-        observation_digest=digest,
-        observation_json=json.dumps(payload, sort_keys=True, separators=(",", ":"), default=_json_default),
+        observed_state=body.observed_state,
+        provenance=body.provenance,
         observed_at=body.observed_at,
+        read_at=body.read_at,
+        max_freshness_seconds=body.max_freshness_seconds,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
     return _response(row)
 
 

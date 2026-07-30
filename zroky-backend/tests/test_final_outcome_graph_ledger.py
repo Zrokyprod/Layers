@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
@@ -15,12 +16,14 @@ from sqlalchemy.pool import StaticPool
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalWorkflowIntent
+from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalSourceConnector, FinalWorkflowIntent
 from app.db.session import get_db_session
 from app.main import app
 from app.services.action_receipts import action_receipt_public_key_payload
 from app.services.dsse import verify_envelope
-from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state, recheck_due_outcome_graphs
+from app.services import final_observation_pull
+from app.services.final_observation_pull import ObservationPullError
+from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state, recheck_backoff_seconds, recheck_due_outcome_graphs
 
 
 @pytest.fixture()
@@ -171,6 +174,166 @@ def test_recheck_sweep_drains_pending_graph_to_verified(client: TestClient) -> N
     assert row.classification == "verified"
     assert row.verification_status == "verified"
     assert row.next_check_at is None
+
+
+def test_recheck_sweep_pulls_stripe_observation_and_verifies_without_client_push(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("STRIPE_KEY_PROJ_TEST", "sk_live_read_secret")
+
+    def fake_stripe_get(secret: str, url: str, *, params: dict[str, str] | None = None, secret_ref: str) -> dict:
+        assert secret == "sk_live_read_secret"
+        assert secret_ref == "STRIPE_KEY_PROJ_TEST"
+        assert url == "https://api.stripe.com/v1/refunds"
+        assert params == {"charge": "ch_verified", "limit": "10"}
+        return {
+            "data": [
+                {
+                    "id": "rf_verified",
+                    "charge": "ch_verified",
+                    "amount": 450000,
+                    "currency": "inr",
+                    "status": "succeeded",
+                    "created": int(now.timestamp()),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(final_observation_pull, "_stripe_get_json", fake_stripe_get)
+    with client.session_local() as session:
+        intent = _intent(intent_json={"charge_id": "ch_verified", "amount_minor": 450000, "currency": "inr"})
+        pack = _pack(
+            capability="stripe_refund.read",
+            predicate=(
+                "refund.status == 'posted' and refund.amount_minor == intent.amount_minor and "
+                "refund.currency == intent.currency and refund.charge_id == intent.charge_id"
+            ),
+        )
+        session.add_all([intent, pack, _connector(capability="stripe_refund.read")])
+        row = _pending_graph(intent, pack, now=now)
+        session.add(row)
+        session.commit()
+
+        result = recheck_due_outcome_graphs(
+            session,
+            now=now,
+            verification_window_seconds=300,
+            observation_pull_max_per_sweep=50,
+        )
+        session.refresh(row)
+        observations = session.query(FinalObservation).all()
+
+    assert result == {"checked": 1, "updated": 1}
+    assert row.classification == "verified"
+    assert row.next_check_at is None
+    assert observations[0].source_kind == "stripe_refund"
+    payload = json.loads(observations[0].observation_json)
+    assert payload["provenance"]["acquired_via"] == "server_pull"
+    assert payload["observed_state"]["refund_id"] == "rf_verified"
+    assert "sk_live_read_secret" not in observations[0].observation_json
+
+
+def test_recheck_sweep_pulls_stripe_no_record_and_marks_missing(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("STRIPE_KEY_PROJ_TEST", "sk_live_read_secret")
+    monkeypatch.setattr(
+        final_observation_pull,
+        "_stripe_get_json",
+        lambda *args, **kwargs: {"data": []},
+    )
+    with client.session_local() as session:
+        intent = _intent(intent_json={"charge_id": "ch_missing"})
+        pack = _pack(capability="stripe_refund.read")
+        session.add_all([intent, pack, _connector(capability="stripe_refund.read")])
+        row = _pending_graph(intent, pack, now=now)
+        session.add(row)
+        session.commit()
+
+        recheck_due_outcome_graphs(
+            session,
+            now=now,
+            verification_window_seconds=300,
+            observation_pull_max_per_sweep=50,
+        )
+        session.refresh(row)
+        observation = session.query(FinalObservation).one()
+
+    assert row.classification == "missing"
+    assert row.verification_status == "failed"
+    assert row.next_check_at is None
+    assert json.loads(observation.observation_json)["observed_state"] is None
+
+
+def test_recheck_sweep_fetch_failure_sets_sor_unreachable_with_backoff(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("STRIPE_KEY_PROJ_TEST", "super-secret-value")
+
+    def fail_fetch(*args, **kwargs):
+        raise ObservationPullError("Stripe fetch failed for secret_ref STRIPE_KEY_PROJ_TEST: HTTP 500")
+
+    monkeypatch.setattr(final_observation_pull, "_stripe_get_json", fail_fetch)
+    with client.session_local() as session:
+        intent = _intent(intent_json={"charge_id": "ch_fail"})
+        pack = _pack(capability="stripe_refund.read")
+        session.add_all([intent, pack, _connector(capability="stripe_refund.read")])
+        row = _pending_graph(intent, pack, now=now)
+        session.add(row)
+        session.commit()
+
+        recheck_due_outcome_graphs(
+            session,
+            now=now,
+            verification_window_seconds=300,
+            observation_pull_max_per_sweep=50,
+        )
+        session.refresh(row)
+
+    assert row.classification == "pending"
+    assert row.reason_code == "sor_unreachable"
+    assert row.next_check_at == now + timedelta(seconds=60)
+    assert "super-secret-value" not in row.graph_json
+
+
+def test_recheck_sweep_without_connector_sets_no_connector(client: TestClient) -> None:
+    now = datetime.now(timezone.utc)
+    with client.session_local() as session:
+        intent = _intent(intent_json={"charge_id": "ch_no_connector"})
+        pack = _pack(capability="stripe_refund.read")
+        session.add_all([intent, pack])
+        row = _pending_graph(intent, pack, now=now)
+        session.add(row)
+        session.commit()
+
+        recheck_due_outcome_graphs(
+            session,
+            now=now,
+            verification_window_seconds=300,
+            observation_pull_max_per_sweep=50,
+        )
+        session.refresh(row)
+
+    assert row.classification == "pending"
+    assert row.reason_code == "no_connector"
+    assert row.next_check_at == now + timedelta(seconds=60)
+
+
+def test_recheck_backoff_progression_is_exact() -> None:
+    assert [recheck_backoff_seconds(attempt) for attempt in range(1, 6)] == [60, 300, 900, 3600, 21600]
+    assert recheck_backoff_seconds(99) == 21600
+
+
+def test_observation_puller_has_no_post_path() -> None:
+    source = inspect.getsource(final_observation_pull)
+    assert ".post(" not in source
+    assert "httpx.post" not in source
 
 
 def test_outcome_graph_recheck_due_endpoint_drains_pending_graph(client: TestClient) -> None:
@@ -361,6 +524,60 @@ def test_outcome_graph_attestation_returns_503_without_prod_key(client: TestClie
     assert response.json()["detail"] == "attestation signing key not configured"
 
 
+def test_source_connector_crud_is_tenant_scoped_and_never_returns_secret_value(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("STRIPE_KEY_PROJ_TEST", "sk_live_secret_value")
+    created = client.post(
+        "/v1/source-connectors",
+        json={
+            "environment": "production",
+            "capability": "stripe_refund.read",
+            "connector_kind": "stripe",
+            "secret_ref": "STRIPE_KEY_PROJ_TEST",
+            "config": {"account": "acct_test"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["secret_ref"] == "STRIPE_KEY_PROJ_TEST"
+    assert "sk_live_secret_value" not in created.text
+
+    with client.session_local() as session:
+        session.add(
+            FinalSourceConnector(
+                project_id="proj_other",
+                environment="production",
+                capability="stripe_refund.read",
+                connector_kind="stripe",
+                secret_ref="STRIPE_KEY_OTHER",
+                config_json="{}",
+            )
+        )
+        session.commit()
+
+    listed = client.get("/v1/source-connectors")
+    assert listed.status_code == 200, listed.text
+    assert [item["project_id"] for item in listed.json()["items"]] == ["proj_test"]
+    assert "sk_live_secret_value" not in listed.text
+
+    app.dependency_overrides[require_tenant_context] = lambda: TenantContext(
+        tenant_id="proj_test",
+        role="viewer",
+        subject="viewer",
+    )
+    forbidden = client.post(
+        "/v1/source-connectors",
+        json={
+            "capability": "stripe_refund.read",
+            "connector_kind": "stripe",
+            "secret_ref": "STRIPE_KEY_PROJ_TEST",
+        },
+    )
+    assert forbidden.status_code == 403
+
+
 def _intent(*, intent_json: dict | None = None) -> FinalWorkflowIntent:
     return FinalWorkflowIntent(
         id=str(uuid4()),
@@ -372,17 +589,48 @@ def _intent(*, intent_json: dict | None = None) -> FinalWorkflowIntent:
     )
 
 
-def _pack() -> FinalAssurancePack:
+def _pending_graph(intent: FinalWorkflowIntent, pack: FinalAssurancePack, *, now: datetime) -> FinalOutcomeGraph:
+    graph = {
+        "workflow_key": pack.workflow_key,
+        "pack_version": pack.version,
+        "intent_id": intent.id,
+        "assurance_pack_id": pack.id,
+        "observation_count": 0,
+    }
+    return FinalOutcomeGraph(
+        project_id="proj_test",
+        environment="production",
+        intent_id=intent.id,
+        graph_digest="pending",
+        graph_json=json.dumps(graph, separators=(",", ":")),
+        classification="pending",
+        verification_status="pending",
+        next_check_at=now - timedelta(seconds=1),
+    )
+
+
+def _connector(*, capability: str = "refund.read") -> FinalSourceConnector:
+    return FinalSourceConnector(
+        project_id="proj_test",
+        environment="production",
+        capability=capability,
+        connector_kind="stripe",
+        secret_ref="STRIPE_KEY_PROJ_TEST",
+        config_json="{}",
+    )
+
+
+def _pack(*, capability: str = "refund.read", predicate: str = "refund.status == 'posted'") -> FinalAssurancePack:
     pack = {
         "schema_version": "zroky.workflow_assurance_pack.v1",
         "workflow_key": "refund-workflow",
         "version": "1.0.0",
         "object_types": [{"key": "refund", "schema": {"type": "object"}}],
-        "effects": [{"key": "refund_posted", "object_type": "refund", "predicate": "refund.status == 'posted'"}],
+        "effects": [{"key": "refund_posted", "object_type": "refund", "predicate": predicate}],
         "source_bindings": [
             {
                 "key": "ledger_refunds",
-                "connector_capability": "refund.read",
+                "connector_capability": capability,
                 "object_type": "refund",
                 "freshness_seconds": 300,
             }

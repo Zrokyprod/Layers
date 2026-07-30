@@ -15,8 +15,13 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 SDK_PATH = ROOT / "zroky-sdk"
+BACKEND_PATH = ROOT / "zroky-backend"
 if str(SDK_PATH) not in sys.path:
     sys.path.insert(0, str(SDK_PATH))
+if str(BACKEND_PATH) not in sys.path:
+    sys.path.insert(0, str(BACKEND_PATH))
+
+from app.services.stripe_refunds import refund_observation_state  # noqa: E402
 
 STATE_PATH = Path(__file__).with_name(".silent_failure_demo_state.json")
 WORKFLOW_KEY = "refund_flow_v1"
@@ -37,6 +42,7 @@ class DemoConfig:
     api_key: str
     admin_bearer_token: str | None
     stripe_secret_key: str
+    stripe_secret_ref: str
     amount_minor: int
     currency: str
     use_project_header_context: bool
@@ -51,6 +57,7 @@ class DemoConfig:
             admin_bearer_token=os.environ.get("ZROKY_ADMIN_BEARER_TOKEN")
             or os.environ.get("ZROKY_AUTH_TOKEN"),
             stripe_secret_key=_required("STRIPE_SECRET_KEY"),
+            stripe_secret_ref=os.environ.get("ZROKY_STRIPE_SECRET_REF", "STRIPE_SECRET_KEY").strip(),
             amount_minor=int(os.environ.get("STRIPE_DEMO_AMOUNT_MINOR", str(DEFAULT_AMOUNT_MINOR))),
             currency=os.environ.get("STRIPE_DEMO_CURRENCY", DEFAULT_CURRENCY).strip().lower(),
             use_project_header_context=os.environ.get("ZROKY_USE_PROJECT_HEADER_CONTEXT") == "1",
@@ -198,18 +205,6 @@ def latest_refund_for_charge(config: DemoConfig, charge_id: str, *, timeout_seco
             return refunds[0]
         time.sleep(2)
     raise RuntimeError(f"No Stripe refund appeared for charge {charge_id}.")
-
-
-def refund_observation_state(refund: dict[str, Any]) -> dict[str, Any]:
-    stripe_status = str(refund.get("status") or "")
-    return {
-        "refund_id": refund["id"],
-        "charge_id": refund.get("charge"),
-        "amount_minor": int(refund.get("amount") or 0),
-        "currency": str(refund.get("currency") or "").lower(),
-        "status": "posted" if stripe_status == "succeeded" else stripe_status,
-        "stripe_status": stripe_status,
-    }
 
 
 def evidence_url(config: DemoConfig, graph_id: str | None = None) -> str:

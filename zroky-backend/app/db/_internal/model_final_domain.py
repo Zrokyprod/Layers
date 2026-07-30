@@ -123,6 +123,28 @@ class FinalConnectorCapabilityDraft(Base):
     )
 
 
+class FinalSourceConnector(Base):
+    __tablename__ = "final_source_connectors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(64), nullable=False)
+    capability: Mapped[str] = mapped_column(String(255), nullable=False)
+    connector_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    secret_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'active'"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "environment", "capability", name="ux_final_source_connectors_scope_capability"),
+        CheckConstraint("connector_kind IN ('stripe')", name="ck_final_source_connectors_kind"),
+        CheckConstraint("status IN ('active','disabled')", name="ck_final_source_connectors_status"),
+        Index("ix_final_source_connectors_scope_status", "project_id", "environment", "status"),
+    )
+
+
 class FinalAssurancePack(Base):
     __tablename__ = "final_assurance_packs"
 
