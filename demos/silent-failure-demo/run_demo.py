@@ -3,19 +3,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import webbrowser
+from typing import Any
 
 from _common import (
     EXECUTOR_REF,
     PLAYBOOK_KEY,
     RUNNER_CREDENTIAL_REF,
-    SOURCE_BINDING,
     ApiClient,
     DemoConfig,
     evidence_url,
     latest_refund_for_charge,
-    now_iso,
-    refund_observation_state,
     refunds_for_charge,
     save_state,
     presenter_pause,
@@ -24,6 +23,25 @@ from lying_agent import declare_lie
 from seed import setup
 from zroky._runner import credential_env_name
 from zroky.recovery_runner import RecoveryRunner
+
+
+def wait_for_graph_classification(
+    api: ApiClient,
+    run_id: str,
+    expected: str,
+    *,
+    timeout_seconds: int = 360,
+    poll_seconds: int = 10,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        rows = api.request("GET", "/v1/outcome-graphs", query={"limit": 100})["items"]
+        graph = next((row for row in rows if row.get("graph", {}).get("run_id") == run_id), None)
+        if graph is not None and graph.get("classification") == expected:
+            return graph
+        api.request("POST", "/v1/outcome-graphs/recheck-due", admin=True)
+        time.sleep(poll_seconds)
+    raise RuntimeError(f"Outcome graph for run {run_id} did not become {expected} within {timeout_seconds}s.")
 
 
 def main() -> None:
@@ -58,7 +76,7 @@ def main() -> None:
         raise RuntimeError(f"Expected no refund before recovery, found {refunds[0]['id']}.")
     print("Stripe says: no refund exists for the charge.")
 
-    graph = api.request("POST", f"/v1/runs/{state['run_id']}/outcome-graph", body={})
+    graph = wait_for_graph_classification(api, state["run_id"], "missing")
     incidents = api.request("GET", "/v1/incidents")
     incident = next(item for item in incidents if item["outcome_graph_id"] == graph["id"])
     summary = api.request("GET", "/v1/outcome-graphs/coverage-summary")
@@ -121,31 +139,9 @@ def main() -> None:
         raise RuntimeError(f"Recovery runner did not succeed: {step_results}")
 
     refund = latest_refund_for_charge(config, state["charge_id"])
-    observed_state = refund_observation_state(refund)
-    observation = api.request(
-        "POST",
-        "/v1/observations",
-        body={
-            "environment": "production",
-            "run_id": state["run_id"],
-            "intent_id": state["intent_id"],
-            "source_kind": "stripe_refund",
-            "observed_object_ref": f"stripe:refund:{refund['id']}",
-            "observed_state": observed_state,
-            "provenance": {
-                "source_binding": SOURCE_BINDING,
-                "stripe_object": "refund",
-                "mode": "test",
-            },
-            "observed_at": now_iso(),
-            "read_at": now_iso(),
-        },
-    )
     print(f"Stripe refund observed: {refund['id']}")
-    print(f"Observation digest: {observation['observation_digest']}")
-
-    sweep = api.request("POST", "/v1/outcome-graphs/recheck-due", admin=True)
-    print(f"Proof recheck: checked={sweep['checked']} updated={sweep['updated']}")
+    verified_graph = wait_for_graph_classification(api, state["run_id"], "verified", timeout_seconds=90)
+    print(f"Proof recheck: classification={verified_graph['classification']}")
 
     final_incident = api.request("GET", f"/v1/incidents/{incident['id']}")
     final_summary = api.request("GET", "/v1/outcome-graphs/coverage-summary")

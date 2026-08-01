@@ -312,6 +312,11 @@ def recheck_due_outcome_graphs(
     for row in rows:
         previous_classification = row.classification
         graph = _loads(row.graph_json)
+        force_pull = row.classification == "pending" and str(graph.get("classification") or "") not in {
+            "",
+            "pending",
+            "unknown",
+        }
         recheck_count = int(graph.get("recheck_count") or 0) + 1
         if recheck_count > MAX_RECHECKS:
             graph["classification"] = "unknown"
@@ -327,7 +332,13 @@ def recheck_due_outcome_graphs(
             _open_actionable_incident(db, row, graph)
             updated += 1
             continue
-        pull_status = _pull_missing_observations(db, row, graph=graph, pull_budget=pull_budget)
+        pull_status = _pull_missing_observations(
+            db,
+            row,
+            graph=graph,
+            pull_budget=pull_budget,
+            force=force_pull,
+        )
         pull_budget = pull_status["remaining_budget"]
         if pull_status["error"]:
             graph["recheck_count"] = recheck_count
@@ -373,6 +384,7 @@ def _pull_missing_observations(
     *,
     graph: dict[str, Any],
     pull_budget: int,
+    force: bool = False,
 ) -> dict[str, Any]:
     pack = _pack_for_graph(db, row, graph)
     if pack is None:
@@ -389,7 +401,7 @@ def _pull_missing_observations(
     for binding in bindings:
         if pull_budget <= 0:
             break
-        if _has_fresh_observation(observations, str(binding.get("key") or "")):
+        if not force and _has_fresh_observation(observations, str(binding.get("key") or "")):
             continue
         if active_source_connector(db, graph=row, binding=binding) is None:
             missing_connector = True
