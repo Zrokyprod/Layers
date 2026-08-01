@@ -559,7 +559,7 @@ def test_stripe_refund_test_loop_verifies_real_sor_and_catches_false_success(cli
     assert graph_bad.json()["classification"] == "pending"
     incidents = client.get("/v1/incidents")
     assert incidents.status_code == 200
-    assert any(item["outcome_graph_id"] == graph_bad.json()["id"] and item["status"] == "open" for item in incidents.json())
+    assert all(item["outcome_graph_id"] != graph_bad.json()["id"] for item in incidents.json())
 
 
 def test_run_intake_declares_external_run_without_execution_ownership(client: TestClient) -> None:
@@ -785,8 +785,14 @@ def test_otlp_genai_trace_declares_one_run_and_bound_tool_intent_idempotently(cl
         assert runs[0].intent_id == intents[0].id
         assert intents[0].idempotency_key == "otlp:trace-genai-1:span-tool-bound"
         assert json.loads(intents[0].intent_json) == {"amount_minor": 450000, "charge_id": "ch_test_123", "currency": "inr"}
+        graphs = session.query(FinalOutcomeGraph).filter_by(project_id="proj_test").all()
+        assert len(graphs) == 1
+        assert graphs[0].classification == "pending"
+        assert graphs[0].idempotency_key == f"initial:{runs[0].id}:{intents[0].id}"
+        assert session.query(FinalOutcomeIncident).filter_by(project_id="proj_test").count() == 0
         run_id = runs[0].id
         intent_id = intents[0].id
+        graph_id = graphs[0].id
 
     observation = client.post(
         "/v1/observations",
@@ -805,6 +811,7 @@ def test_otlp_genai_trace_declares_one_run_and_bound_tool_intent_idempotently(cl
     assert observation.status_code == 201, observation.text
     graph = client.post(f"/v1/runs/{run_id}/outcome-graph", json={"assurance_pack_id": pack_id})
     assert graph.status_code == 201, graph.text
+    assert graph.json()["id"] == graph_id
     assert graph.json()["classification"] == "verified"
 
     retry = client.post("/v1/events/otlp/v1/traces", json=payload)
@@ -813,6 +820,50 @@ def test_otlp_genai_trace_declares_one_run_and_bound_tool_intent_idempotently(cl
     with client._session_factory() as session:  # type: ignore[attr-defined]
         assert session.query(FinalAgentRun).filter_by(project_id="proj_test").count() == 1
         assert session.query(FinalWorkflowIntent).filter_by(project_id="proj_test").count() == 1
+        assert session.query(FinalOutcomeGraph).filter_by(project_id="proj_test").count() == 1
+
+
+def test_otlp_multi_tool_trace_creates_one_graph_per_bound_intent(client: TestClient) -> None:
+    client.tenant_role["value"] = "admin"
+    pack = client.post(
+        "/v1/assurance-packs",
+        json={
+            "environment": "staging",
+            "pack": {
+                "schema_version": "zroky.workflow_assurance_pack.v1",
+                "workflow_key": "stripe-refund",
+                "version": "1.0.0",
+                "tool_bindings": ["stripe.refunds.create"],
+                "object_types": [{"key": "refund", "schema": {"type": "object"}}],
+                "effects": [{"key": "refund_posted", "object_type": "refund", "predicate": "refund.status == 'posted'"}],
+                "source_bindings": [
+                    {
+                        "key": "stripe_refunds",
+                        "connector_capability": "stripe.refund.read",
+                        "object_type": "refund",
+                        "freshness_seconds": 300,
+                    }
+                ],
+            },
+        },
+    )
+    assert pack.status_code == 201, pack.text
+    payload = _genai_otlp_payload(trace_id="trace-multi-tool")
+    second = dict(payload["resourceSpans"][0]["scopeSpans"][0]["spans"][1])
+    second["spanId"] = "span-tool-bound-2"
+    payload["resourceSpans"][0]["scopeSpans"][0]["spans"].append(second)
+
+    first = client.post("/v1/events/otlp/v1/traces", json=payload)
+    retry = client.post("/v1/events/otlp/v1/traces", json=payload)
+    assert first.status_code == 202, first.text
+    assert first.json()["intents_declared"] == 2
+    assert retry.status_code == 202, retry.text
+    assert retry.json()["intents_declared"] == 0
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        run = session.query(FinalAgentRun).filter_by(external_run_id="trace-multi-tool").one()
+        assert run.intent_id is None
+        assert session.query(FinalWorkflowIntent).filter_by(project_id="proj_test").count() == 2
+        assert session.query(FinalOutcomeGraph).filter_by(project_id="proj_test").count() == 2
 
 
 def test_otlp_zroky_agent_name_overrides_genai_agent_name(client: TestClient) -> None:
