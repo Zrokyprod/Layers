@@ -5,10 +5,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import exists, literal, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalWorkflowIntent
+from app.db.models import FinalAgentRun, FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalWorkflowIntent
+from app.domain.incident import build_incident_from_outcome_graph
 from app.domain.outcome_graph import build_outcome_graph_snapshot, classify_outcome_graph_snapshot
 from app.services.audit_logs import AUDIT_ACTION_RESOLVED, add_audit_log
 from app.services.final_observation_pull import ObservationPullError, active_source_connector, pull_observation
@@ -34,6 +36,231 @@ RECHECK_BACKOFF_SECONDS = (60, 300, 900, 3600, 21600)
 
 def graph_digest(graph: dict[str, Any]) -> str:
     return hashlib.sha256(_json(graph).encode("utf-8")).hexdigest()
+
+
+def active_assurance_pack(
+    db: Session,
+    *,
+    project_id: str,
+    environment: str,
+    workflow_key: str | None = None,
+    assurance_pack_id: str | None = None,
+) -> FinalAssurancePack | None:
+    query = select(FinalAssurancePack).where(
+        FinalAssurancePack.project_id == project_id,
+        FinalAssurancePack.environment == environment,
+        FinalAssurancePack.status == "active",
+    )
+    if assurance_pack_id:
+        query = query.where(FinalAssurancePack.id == assurance_pack_id)
+    elif workflow_key:
+        query = query.where(FinalAssurancePack.workflow_key == workflow_key)
+    else:
+        return None
+    return db.execute(query.order_by(FinalAssurancePack.created_at.desc())).scalars().first()
+
+
+def ensure_initial_outcome_graph(
+    db: Session,
+    *,
+    run: FinalAgentRun,
+    intent: FinalWorkflowIntent,
+    pack: FinalAssurancePack,
+    verification_window_seconds: int,
+    refresh_existing: bool = False,
+) -> tuple[FinalOutcomeGraph, bool]:
+    key = f"initial:{run.id}:{intent.id}"
+    existing = db.execute(
+        select(FinalOutcomeGraph).where(
+            FinalOutcomeGraph.project_id == run.project_id,
+            FinalOutcomeGraph.environment == run.environment,
+            FinalOutcomeGraph.idempotency_key == key,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if refresh_existing:
+            graph = _initial_graph_snapshot(db, run=run, intent=intent, pack=pack)
+            digest = graph_digest(graph)
+            if existing.classification not in {"pending", "unknown"} and existing.graph_digest != digest:
+                snapshot_key = f"snapshot:{run.id}:{intent.id}:{digest}"
+                snapshot = db.execute(
+                    select(FinalOutcomeGraph).where(
+                        FinalOutcomeGraph.project_id == run.project_id,
+                        FinalOutcomeGraph.environment == run.environment,
+                        FinalOutcomeGraph.idempotency_key == snapshot_key,
+                    )
+                ).scalar_one_or_none()
+                if snapshot is not None:
+                    return snapshot, False
+                snapshot = _new_graph_row(
+                    run=run,
+                    intent=intent,
+                    graph=graph,
+                    idempotency_key=snapshot_key,
+                    verification_window_seconds=verification_window_seconds,
+                )
+                try:
+                    with db.begin_nested():
+                        db.add(snapshot)
+                        db.flush()
+                        _open_actionable_incident(db, snapshot, graph)
+                except IntegrityError:
+                    snapshot = db.execute(
+                        select(FinalOutcomeGraph).where(
+                            FinalOutcomeGraph.project_id == run.project_id,
+                            FinalOutcomeGraph.environment == run.environment,
+                            FinalOutcomeGraph.idempotency_key == snapshot_key,
+                        )
+                    ).scalar_one()
+                    return snapshot, False
+                return snapshot, True
+            previous_classification = existing.classification
+            existing.graph_json = _json(graph)
+            existing.graph_digest = digest
+            apply_outcome_graph_ledger_state(
+                existing,
+                graph,
+                verification_window_seconds=verification_window_seconds,
+            )
+            db.add(existing)
+            if previous_classification != "verified" and existing.classification == "verified":
+                _resolve_recovering_incidents(
+                    db,
+                    existing,
+                    now=existing.last_checked_at or datetime.now(timezone.utc),
+                )
+            else:
+                _open_actionable_incident(db, existing, graph)
+        return existing, False
+
+    graph = _initial_graph_snapshot(db, run=run, intent=intent, pack=pack)
+    row = _new_graph_row(
+        run=run,
+        intent=intent,
+        graph=graph,
+        idempotency_key=key,
+        verification_window_seconds=verification_window_seconds,
+    )
+    try:
+        with db.begin_nested():
+            db.add(row)
+            db.flush()
+            _open_actionable_incident(db, row, graph)
+    except IntegrityError:
+        existing = db.execute(
+            select(FinalOutcomeGraph).where(
+                FinalOutcomeGraph.project_id == run.project_id,
+                FinalOutcomeGraph.environment == run.environment,
+                FinalOutcomeGraph.idempotency_key == key,
+            )
+        ).scalar_one()
+        return existing, False
+    return row, True
+
+
+def _new_graph_row(
+    *,
+    run: FinalAgentRun,
+    intent: FinalWorkflowIntent,
+    graph: dict[str, Any],
+    idempotency_key: str,
+    verification_window_seconds: int,
+) -> FinalOutcomeGraph:
+    row = FinalOutcomeGraph(
+        project_id=run.project_id,
+        environment=run.environment,
+        intent_id=intent.id,
+        idempotency_key=idempotency_key,
+        graph_digest=graph_digest(graph),
+        graph_json=_json(graph),
+    )
+    apply_outcome_graph_ledger_state(
+        row,
+        graph,
+        verification_window_seconds=verification_window_seconds,
+    )
+    return row
+
+
+def _initial_graph_snapshot(
+    db: Session,
+    *,
+    run: FinalAgentRun,
+    intent: FinalWorkflowIntent,
+    pack: FinalAssurancePack,
+) -> dict[str, Any]:
+    graph = build_outcome_graph_snapshot(
+        intent=_loads(intent.intent_json),
+        assurance_pack=_loads(pack.pack_json),
+        observations=_observation_payloads(
+            db,
+            project_id=run.project_id,
+            environment=run.environment,
+            intent_id=intent.id,
+        ),
+    )
+    graph.update({"run_id": run.id, "intent_id": intent.id, "assurance_pack_id": pack.id})
+    return graph
+
+
+def create_missing_outcome_graphs(
+    db: Session,
+    *,
+    limit: int,
+    verification_window_seconds: int,
+) -> int:
+    key = literal("initial:") + FinalAgentRun.id + literal(":") + FinalAgentRun.intent_id
+    rows = list(
+        db.execute(
+            select(FinalAgentRun, FinalWorkflowIntent)
+            .join(
+                FinalWorkflowIntent,
+                (FinalWorkflowIntent.id == FinalAgentRun.intent_id)
+                & (FinalWorkflowIntent.project_id == FinalAgentRun.project_id),
+            )
+            .where(
+                FinalAgentRun.intent_id.is_not(None),
+                exists(
+                    select(FinalAssurancePack.id).where(
+                        FinalAssurancePack.project_id == FinalAgentRun.project_id,
+                        FinalAssurancePack.environment == FinalAgentRun.environment,
+                        FinalAssurancePack.workflow_key == FinalAgentRun.workflow_key,
+                        FinalAssurancePack.status == "active",
+                    )
+                ),
+                ~exists(
+                    select(FinalOutcomeGraph.id).where(
+                        FinalOutcomeGraph.project_id == FinalAgentRun.project_id,
+                        FinalOutcomeGraph.environment == FinalAgentRun.environment,
+                        FinalOutcomeGraph.idempotency_key == key,
+                    )
+                ),
+            )
+            .order_by(FinalAgentRun.created_at)
+            .limit(max(1, min(int(limit), 100)))
+        ).all()
+    )
+    created = 0
+    for run, intent in rows:
+        pack = active_assurance_pack(
+            db,
+            project_id=run.project_id,
+            environment=run.environment,
+            workflow_key=run.workflow_key,
+        )
+        if pack is None:
+            continue
+        _, was_created = ensure_initial_outcome_graph(
+            db,
+            run=run,
+            intent=intent,
+            pack=pack,
+            verification_window_seconds=verification_window_seconds,
+        )
+        created += int(was_created)
+    if created:
+        db.commit()
+    return created
 
 
 def apply_outcome_graph_ledger_state(
@@ -97,6 +324,7 @@ def recheck_due_outcome_graphs(
             row.graph_json = _json(graph)
             row.graph_digest = graph_digest(graph)
             db.add(row)
+            _open_actionable_incident(db, row, graph)
             updated += 1
             continue
         pull_status = _pull_missing_observations(db, row, graph=graph, pull_budget=pull_budget)
@@ -125,6 +353,8 @@ def recheck_due_outcome_graphs(
         db.add(row)
         if previous_classification != "verified" and row.classification == "verified":
             _resolve_recovering_incidents(db, row, now=current)
+        else:
+            _open_actionable_incident(db, row, graph)
         updated += 1
     if updated:
         db.commit()
@@ -218,6 +448,31 @@ def _resolve_recovering_incidents(db: Session, row: FinalOutcomeGraph, *, now: d
             },
         )
         db.add(incident)
+
+
+def _open_actionable_incident(db: Session, row: FinalOutcomeGraph, graph: dict[str, Any]) -> None:
+    if row.classification in {None, "pending", "verified"}:
+        return
+    existing = db.execute(
+        select(FinalOutcomeIncident.id).where(
+            FinalOutcomeIncident.project_id == row.project_id,
+            FinalOutcomeIncident.environment == row.environment,
+            FinalOutcomeIncident.outcome_graph_id == row.id,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    incident = build_incident_from_outcome_graph(row.id, graph)
+    db.add(
+        FinalOutcomeIncident(
+            project_id=row.project_id,
+            environment=row.environment,
+            outcome_graph_id=row.id,
+            severity=incident["severity"],
+            status="open",
+            incident_json=_json(incident),
+        )
+    )
 
 
 def rebuild_outcome_graph_snapshot(db: Session, row: FinalOutcomeGraph) -> dict[str, Any] | None:

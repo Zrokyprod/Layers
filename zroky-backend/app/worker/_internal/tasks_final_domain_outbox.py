@@ -25,18 +25,25 @@ def process_final_domain_outbox_jobs(limit: int | None = None) -> dict:
     queue="verification_sweep",
 )
 def recheck_due_final_outcome_graphs(limit: int | None = None) -> dict:
-    """Rebuild pending/unknown outcome graphs after new observations arrive."""
-    from app.services.final_outcome_graphs import recheck_due_outcome_graphs
+    """Create missing graphs, then rebuild due pending/unknown graphs."""
+    from app.services.final_outcome_graphs import create_missing_outcome_graphs, recheck_due_outcome_graphs
 
     settings = get_settings()
     session = SessionLocal()
     try:
-        return recheck_due_outcome_graphs(
+        batch_limit = int(limit) if limit and limit > 0 else int(settings.FINAL_OUTCOME_GRAPH_RECHECK_LIMIT)
+        created = create_missing_outcome_graphs(
             session,
-            limit=int(limit) if limit and limit > 0 else int(settings.FINAL_OUTCOME_GRAPH_RECHECK_LIMIT),
+            limit=batch_limit,
+            verification_window_seconds=int(settings.FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS),
+        )
+        result = recheck_due_outcome_graphs(
+            session,
+            limit=batch_limit,
             verification_window_seconds=int(settings.FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS),
             observation_pull_max_per_sweep=int(settings.OBSERVATION_PULL_MAX_PER_SWEEP),
         )
+        return {"created": created, **result}
     finally:
         session.close()
 

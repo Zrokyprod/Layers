@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.api.routes.runs import AgentRunDeclareRequest, declare_run
+from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import FinalAgentRun, FinalAssurancePack, FinalConnectorCapabilityDraft, FinalWorkflowIntent
 from app.db.session import get_db_session
+from app.services.final_outcome_graphs import ensure_initial_outcome_graph
 
 
 router = APIRouter(prefix="/v1/events")
@@ -165,6 +167,13 @@ def ingest_otlp_traces(
                 attrs=item["attrs"],
             )
             intent_ids.append(intent.id)
+            ensure_initial_outcome_graph(
+                db,
+                run=run,
+                intent=intent,
+                pack=pack,
+                verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
+            )
             if created:
                 intents_declared += 1
         if len(intent_ids) == 1 and run.intent_id is None:

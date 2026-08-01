@@ -192,6 +192,7 @@ class FinalOutcomeGraph(Base):
     project_id: Mapped[str] = mapped_column(String(64), nullable=False)
     environment: Mapped[str] = mapped_column(String(64), nullable=False)
     intent_id: Mapped[str] = mapped_column(String(36), ForeignKey("final_workflow_intents.id", ondelete="CASCADE"), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     graph_digest: Mapped[str] = mapped_column(String(80), nullable=False)
     graph_json: Mapped[str] = mapped_column(Text, nullable=False)
     verification_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'pending'"))
@@ -203,6 +204,12 @@ class FinalOutcomeGraph(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "environment",
+            "idempotency_key",
+            name="ux_final_outcome_graphs_scope_idempotency",
+        ),
         CheckConstraint(
             "verification_status IN ('pending','verified','failed','inconclusive')",
             name="ck_final_outcome_graphs_verification_status",

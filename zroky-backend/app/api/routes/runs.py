@@ -11,9 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import FinalAgentRun, FinalWorkflowIntent
 from app.db.session import get_db_session
+from app.services.final_outcome_graphs import active_assurance_pack, ensure_initial_outcome_graph
 
 
 RunStatus = Literal["declared", "running", "succeeded", "failed", "cancelled", "unknown"]
@@ -94,6 +96,7 @@ def declare_run(
     if not idempotency_key or not idempotency_key.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Idempotency-Key header is required.")
 
+    intent = None
     if body.intent_id:
         intent = db.execute(
             select(FinalWorkflowIntent).where(
@@ -116,6 +119,9 @@ def declare_run(
     if existing is not None:
         if existing.run_digest != run_digest:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Idempotency-Key conflicts with an existing run.")
+        if intent is not None and existing.intent_id == intent.id:
+            _ensure_run_graph(db, run=existing, intent=intent)
+            db.commit()
         return _response(existing)
 
     row = FinalAgentRun(
@@ -133,9 +139,29 @@ def declare_run(
         finished_at=body.finished_at,
     )
     db.add(row)
+    db.flush()
+    if intent is not None:
+        _ensure_run_graph(db, run=row, intent=intent)
     db.commit()
     db.refresh(row)
     return _response(row)
+
+
+def _ensure_run_graph(db: Session, *, run: FinalAgentRun, intent: FinalWorkflowIntent) -> None:
+    pack = active_assurance_pack(
+        db,
+        project_id=run.project_id,
+        environment=run.environment,
+        workflow_key=run.workflow_key,
+    )
+    if pack is not None:
+        ensure_initial_outcome_graph(
+            db,
+            run=run,
+            intent=intent,
+            pack=pack,
+            verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
+        )
 
 
 @router.get("", response_model=AgentRunListResponse)

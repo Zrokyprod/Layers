@@ -14,17 +14,15 @@ from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.api.dependencies.authorization import ROLE_RANK
 from app.core.config import get_settings
 from app.core.limiter import limiter
-from app.db.models import FinalAgentRun, FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalWorkflowIntent
+from app.db.models import FinalAgentRun, FinalOutcomeGraph, FinalWorkflowIntent
 from app.db.models import FinalOutcomeIncident
 from app.db.session import get_db_session
-from app.domain.incident import build_incident_from_outcome_graph
-from app.domain.outcome_graph import build_outcome_graph_snapshot
 from app.services.action_receipts import ActionReceiptSigningError, action_receipt_public_key_payload
 from app.services.dsse import sign_envelope
 from app.services.final_outcome_graphs import (
     FINAL_OUTCOME_CLASSIFICATIONS,
-    apply_outcome_graph_ledger_state,
-    graph_digest,
+    active_assurance_pack,
+    ensure_initial_outcome_graph,
     recheck_due_outcome_graphs,
 )
 
@@ -320,65 +318,24 @@ def build_run_outcome_graph(
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trusted intent not found.")
 
-    pack_query = select(FinalAssurancePack).where(
-        FinalAssurancePack.project_id == context.tenant_id,
-        FinalAssurancePack.environment == run.environment,
-        FinalAssurancePack.status == "active",
+    pack = active_assurance_pack(
+        db,
+        project_id=context.tenant_id,
+        environment=run.environment,
+        workflow_key=run.workflow_key,
+        assurance_pack_id=body.assurance_pack_id if body else None,
     )
-    if body and body.assurance_pack_id:
-        pack_query = pack_query.where(FinalAssurancePack.id == body.assurance_pack_id)
-    elif run.workflow_key:
-        pack_query = pack_query.where(FinalAssurancePack.workflow_key == run.workflow_key)
-    pack = db.execute(pack_query.order_by(FinalAssurancePack.created_at.desc())).scalars().first()
     if pack is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active Assurance Pack not found.")
 
-    observations = db.execute(
-        select(FinalObservation).where(
-            FinalObservation.project_id == context.tenant_id,
-            FinalObservation.environment == run.environment,
-            FinalObservation.intent_id == run.intent_id,
-        )
-    ).scalars().all()
-    observation_payloads = []
-    for observation in observations:
-        payload = json.loads(observation.observation_json)
-        payload["observation_digest"] = observation.observation_digest
-        observation_payloads.append(payload)
-
-    graph = build_outcome_graph_snapshot(
-        intent=json.loads(intent.intent_json),
-        assurance_pack=json.loads(pack.pack_json),
-        observations=observation_payloads,
-    )
-    graph.update({"run_id": run.id, "intent_id": intent.id, "assurance_pack_id": pack.id})
-    digest = graph_digest(graph)
-    row = FinalOutcomeGraph(
-        project_id=context.tenant_id,
-        environment=run.environment,
-        intent_id=intent.id,
-        graph_digest=digest,
-        graph_json=json.dumps(graph, sort_keys=True, separators=(",", ":")),
-    )
-    apply_outcome_graph_ledger_state(
-        row,
-        graph,
+    row, _ = ensure_initial_outcome_graph(
+        db,
+        run=run,
+        intent=intent,
+        pack=pack,
         verification_window_seconds=get_settings().FINAL_OUTCOME_GRAPH_VERIFICATION_WINDOW_SECONDS,
+        refresh_existing=True,
     )
-    db.add(row)
-    db.flush()
-    if row.verification_status != "verified":
-        incident = build_incident_from_outcome_graph(row.id, graph)
-        db.add(
-            FinalOutcomeIncident(
-                project_id=context.tenant_id,
-                environment=run.environment,
-                outcome_graph_id=row.id,
-                severity=incident["severity"],
-                status="open",
-                incident_json=json.dumps(incident, sort_keys=True, separators=(",", ":")),
-            )
-        )
     db.commit()
     db.refresh(row)
     return _response(row)

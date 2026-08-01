@@ -16,14 +16,19 @@ from sqlalchemy.pool import StaticPool
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalSourceConnector, FinalWorkflowIntent
+from app.db.models import FinalAgentRun, FinalAssurancePack, FinalObservation, FinalOutcomeGraph, FinalOutcomeIncident, FinalSourceConnector, FinalWorkflowIntent
 from app.db.session import get_db_session
 from app.main import app
 from app.services.action_receipts import action_receipt_public_key_payload
 from app.services.dsse import verify_envelope
 from app.services import final_observation_pull
 from app.services.final_observation_pull import ObservationPullError
-from app.services.final_outcome_graphs import apply_outcome_graph_ledger_state, recheck_backoff_seconds, recheck_due_outcome_graphs
+from app.services.final_outcome_graphs import (
+    apply_outcome_graph_ledger_state,
+    create_missing_outcome_graphs,
+    recheck_backoff_seconds,
+    recheck_due_outcome_graphs,
+)
 
 
 @pytest.fixture()
@@ -118,6 +123,35 @@ def test_final_outcome_graph_pending_sets_next_check(client: TestClient) -> None
     assert row.verification_status == "pending"
     assert row.reason_code == "no_sor_trace"
     assert row.next_check_at is not None
+
+
+def test_missing_graph_sweep_backfills_linked_run_idempotently(client: TestClient) -> None:
+    with client.session_local() as session:
+        intent = _intent(intent_json={"refund_id": "rf_backfill"})
+        pack = _pack()
+        run = FinalAgentRun(
+            project_id="proj_test",
+            environment="production",
+            idempotency_key="run-backfill",
+            intent_id=intent.id,
+            workflow_key=pack.workflow_key,
+            status="succeeded",
+            run_digest="run-digest",
+            run_json="{}",
+        )
+        session.add_all([intent, pack, run])
+        session.commit()
+        run_id = run.id
+        intent_id = intent.id
+
+        first = create_missing_outcome_graphs(session, limit=100, verification_window_seconds=300)
+        second = create_missing_outcome_graphs(session, limit=100, verification_window_seconds=300)
+        graph = session.query(FinalOutcomeGraph).one()
+
+    assert first == 1
+    assert second == 0
+    assert graph.idempotency_key == f"initial:{run_id}:{intent_id}"
+    assert graph.classification == "pending"
 
 
 def test_recheck_sweep_drains_pending_graph_to_verified(client: TestClient) -> None:
@@ -262,10 +296,13 @@ def test_recheck_sweep_pulls_stripe_no_record_and_marks_missing(
         )
         session.refresh(row)
         observation = session.query(FinalObservation).one()
+        incident = session.query(FinalOutcomeIncident).filter_by(outcome_graph_id=row.id).one()
 
     assert row.classification == "missing"
     assert row.verification_status == "failed"
     assert row.next_check_at is None
+    assert incident.status == "open"
+    assert json.loads(incident.incident_json)["deviation_type"] == "missing"
     assert json.loads(observation.observation_json)["observed_state"] is None
 
 
