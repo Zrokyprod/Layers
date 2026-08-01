@@ -306,6 +306,60 @@ def test_recheck_sweep_pulls_stripe_no_record_and_marks_missing(
     assert json.loads(observation.observation_json)["observed_state"] is None
 
 
+def test_recovery_recheck_replaces_fresh_missing_proof_and_resolves(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("STRIPE_KEY_PROJ_TEST", "sk_live_read_secret")
+    responses = iter(
+        [
+            {"data": []},
+            {
+                "data": [
+                    {
+                        "id": "rf_recovered",
+                        "charge": "ch_recovered",
+                        "amount": 450000,
+                        "currency": "inr",
+                        "status": "succeeded",
+                        "created": int(now.timestamp()),
+                    }
+                ]
+            },
+        ]
+    )
+    monkeypatch.setattr(final_observation_pull, "_stripe_get_json", lambda *args, **kwargs: next(responses))
+
+    with client.session_local() as session:
+        intent = _intent(intent_json={"charge_id": "ch_recovered"})
+        pack = _pack(capability="stripe_refund.read")
+        row = _pending_graph(intent, pack, now=now)
+        session.add_all([intent, pack, _connector(capability="stripe_refund.read"), row])
+        session.commit()
+
+        recheck_due_outcome_graphs(session, now=now, verification_window_seconds=300)
+        incident = session.query(FinalOutcomeIncident).filter_by(outcome_graph_id=row.id).one()
+        assert row.classification == "missing"
+
+        incident.status = "recovering"
+        row.classification = "pending"
+        row.verification_status = "pending"
+        row.next_check_at = now
+        session.commit()
+
+        result = recheck_due_outcome_graphs(session, now=now, verification_window_seconds=300)
+        session.refresh(row)
+        session.refresh(incident)
+        observations = session.query(FinalObservation).order_by(FinalObservation.created_at).all()
+
+    assert result == {"checked": 1, "updated": 1}
+    assert row.classification == "verified"
+    assert incident.status == "resolved"
+    assert len(observations) == 2
+    assert len({item.observed_object_ref for item in observations}) == 1
+
+
 def test_recheck_sweep_fetch_failure_sets_sor_unreachable_with_backoff(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

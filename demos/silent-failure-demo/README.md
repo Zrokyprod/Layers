@@ -37,6 +37,8 @@ Act 2, the catch:
 
 "Now Zroky checks Stripe, not the agent log. Stripe has no refund for this charge. The outcome graph is missing, an incident opens, and the Evidence page shows Caught: 1. Agent ne bola ho gaya. Stripe ne bola nahi hua. Zroky ne farak pakda, bina customer complaint ke."
 
+The script waits for the automatically created graph and triggers only the normal due-recheck endpoint. It does not build a graph or push an observation itself.
+
 Act 3, the fix:
 
 "We compile the recovery plan. It includes only the missing refund effect. The private runner claims the job, resolves the Stripe key from local env, creates the real Stripe test-mode refund, and reports completion. Zroky still does not resolve the incident from the runner claim."

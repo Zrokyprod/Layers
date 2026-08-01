@@ -62,11 +62,7 @@ def pull_observation(db: Session, *, graph: FinalOutcomeGraph, binding: dict[str
     refund = _stripe_refund(secret, refund_id=refund_id, charge_id=charge_id, secret_ref=connector.secret_ref)
     observed_state = refund_observation_state(refund) if refund is not None else None
     observed_at = _stripe_time(refund.get("created")) if refund is not None else now
-    observed_ref = (
-        f"stripe:refund:{refund.get('id')}"
-        if refund is not None
-        else f"stripe:refund:{refund_id}" if refund_id else f"stripe:charge:{charge_id}:refunds"
-    )
+    observed_ref = f"stripe:refund:{refund_id}" if refund_id else f"stripe:charge:{charge_id}:refunds"
     return create_final_observation_row(
         db,
         project_id=graph.project_id,
