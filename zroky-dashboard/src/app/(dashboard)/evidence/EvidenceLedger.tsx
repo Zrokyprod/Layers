@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { ChevronDown, Download, Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
@@ -17,11 +17,14 @@ const filters: Array<{ label: string; value: EvidenceLedgerFilter }> = [
 
 type EvidenceLedgerProps = {
   filter: EvidenceLedgerFilter;
+  hasMore: boolean;
   isError: boolean;
   isExporting: boolean;
   isLoading: boolean;
+  isLoadingMore: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
   onExportManifest: () => void;
+  onLoadMore: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
   projectTotal: number;
@@ -38,11 +41,14 @@ function shortId(value: string | null | undefined): string {
 
 export function EvidenceLedger({
   filter,
+  hasMore,
   isError,
   isExporting,
   isLoading,
+  isLoadingMore,
   onFilterChange,
   onExportManifest,
+  onLoadMore,
   onSearchChange,
   onSelectRow,
   projectTotal,
@@ -136,59 +142,73 @@ export function EvidenceLedger({
       ) : filteredRows.length === 0 ? (
         <div className="ev-empty-state">No records match this filter or search.</div>
       ) : (
-        <div className="ev-ledger-table-wrap">
-          <table className="ev-ledger-table">
-            <thead>
-              <tr>
-                <th scope="col">Created</th>
-                <th scope="col">Workflow</th>
-                <th scope="col">Classification</th>
-                <th scope="col">Reason</th>
-                <th scope="col">Intent</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row) => {
-                const selected = row.id === selectedRowId;
-                return (
-                  <tr
-                    key={row.id}
-                    className="ev-ledger-row"
-                    data-focused={selected ? "true" : undefined}
-                    data-kind={row.kind}
-                    data-tone={row.tone}
-                    aria-current={selected ? "true" : undefined}
-                    onClick={() => onSelectRow(row)}
-                  >
-                    <td>
-                      <span className="ev-signed-cell">
-                        {timeSince(row.createdAt ?? row.checkedAt)}
-                        <small>{row.environment ?? "environment"}</small>
-                      </span>
-                    </td>
-                    <td>
-                      <span className="ev-proof-name">
-                        <span className="ev-proof-dot" aria-hidden="true" />
-                        <strong>{row.title}</strong>
-                      </span>
-                    </td>
-                    <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
-                    <td>
-                      {(row.classification === "pending" || row.classification === "unknown") && row.reasonCode ? (
-                        <code>{row.reasonCode}</code>
-                      ) : "-"}
-                    </td>
-                    <td>
-                      <Link href={`/operations?intent_id=${encodeURIComponent(row.intentId ?? "")}`} onClick={(event) => event.stopPropagation()}>
-                        <code>{shortId(row.intentId)}</code>
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="ev-ledger-table-wrap">
+            <table className="ev-ledger-table">
+              <thead>
+                <tr>
+                  <th scope="col">Created</th>
+                  <th scope="col">Workflow</th>
+                  <th scope="col">Classification</th>
+                  <th scope="col">Reason</th>
+                  <th scope="col">Intent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => {
+                  const selected = row.id === selectedRowId;
+                  return (
+                    <tr
+                      key={row.id}
+                      className="ev-ledger-row"
+                      data-focused={selected ? "true" : undefined}
+                      data-kind={row.kind}
+                      data-tone={row.tone}
+                      aria-current={selected ? "true" : undefined}
+                      onClick={() => onSelectRow(row)}
+                    >
+                      <td>
+                        <span className="ev-signed-cell">
+                          {timeSince(row.createdAt ?? row.checkedAt)}
+                          <small>{row.environment ?? "environment"}</small>
+                        </span>
+                      </td>
+                      <td>
+                        <span className="ev-proof-name">
+                          <span className="ev-proof-dot" aria-hidden="true" />
+                          <strong>{row.title}</strong>
+                        </span>
+                      </td>
+                      <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
+                      <td>
+                        {(row.classification === "pending" || row.classification === "unknown") && row.reasonCode ? (
+                          <code>{row.reasonCode}</code>
+                        ) : "-"}
+                      </td>
+                      <td>
+                        <Link href={`/operations?intent_id=${encodeURIComponent(row.intentId ?? "")}`} onClick={(event) => event.stopPropagation()}>
+                          <code>{shortId(row.intentId)}</code>
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {hasMore ? (
+            <div className="ev-ledger-load-more">
+              <DashboardButton
+                icon={<ChevronDown size={15} />}
+                loading={isLoadingMore}
+                onClick={onLoadMore}
+                variant="soft"
+              >
+                Load more
+              </DashboardButton>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   );

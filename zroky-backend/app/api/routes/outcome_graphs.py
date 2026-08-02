@@ -52,6 +52,9 @@ class OutcomeGraphResponse(BaseModel):
 
 class OutcomeGraphListResponse(BaseModel):
     items: list[OutcomeGraphResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class OutcomeGraphCoverageSummaryResponse(BaseModel):
@@ -203,18 +206,36 @@ def list_outcome_graphs(
     request: Request,
     classification: str | None = None,
     limit: int = 50,
+    offset: int = 0,
     context: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> OutcomeGraphListResponse:
-    if classification is not None and classification not in FINAL_OUTCOME_CLASSIFICATIONS:
+    classifications = tuple(
+        dict.fromkeys(value.strip() for value in (classification or "").split(",") if value.strip())
+    )
+    if classification is not None and (
+        not classifications or any(value not in FINAL_OUTCOME_CLASSIFICATIONS for value in classifications)
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid classification.")
-    query = select(FinalOutcomeGraph).where(FinalOutcomeGraph.project_id == context.tenant_id)
-    if classification is not None:
-        query = query.where(FinalOutcomeGraph.classification == classification)
+    conditions = [FinalOutcomeGraph.project_id == context.tenant_id]
+    if classifications:
+        conditions.append(FinalOutcomeGraph.classification.in_(classifications))
+    page_limit = max(1, min(int(limit), 100))
+    page_offset = max(0, int(offset))
+    total = db.scalar(select(func.count(FinalOutcomeGraph.id)).where(*conditions)) or 0
     rows = db.execute(
-        query.order_by(FinalOutcomeGraph.created_at.desc()).limit(max(1, min(int(limit), 100)))
+        select(FinalOutcomeGraph)
+        .where(*conditions)
+        .order_by(FinalOutcomeGraph.created_at.desc(), FinalOutcomeGraph.id.desc())
+        .offset(page_offset)
+        .limit(page_limit)
     ).scalars()
-    return OutcomeGraphListResponse(items=[_response(row) for row in rows])
+    return OutcomeGraphListResponse(
+        items=[_response(row) for row in rows],
+        total=int(total),
+        limit=page_limit,
+        offset=page_offset,
+    )
 
 
 @router.get("/v1/outcome-graphs/coverage-summary", response_model=OutcomeGraphCoverageSummaryResponse)

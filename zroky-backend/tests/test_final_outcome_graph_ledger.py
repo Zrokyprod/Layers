@@ -514,6 +514,28 @@ def test_outcome_graph_ledger_endpoints_filter_and_count_verified_only(client: T
     listed = client.get("/v1/outcome-graphs", params={"classification": "wrong", "limit": 50})
     assert listed.status_code == 200, listed.text
     assert [item["classification"] for item in listed.json()["items"]] == ["wrong"]
+    assert listed.json() | {"items": []} == {"items": [], "total": 1, "limit": 50, "offset": 0}
+
+    first_page = client.get(
+        "/v1/outcome-graphs",
+        params={"classification": "wrong,verified", "limit": 1},
+    )
+    second_page = client.get(
+        "/v1/outcome-graphs",
+        params={"classification": "wrong,verified", "limit": 1, "offset": 1},
+    )
+    assert first_page.status_code == 200, first_page.text
+    assert second_page.status_code == 200, second_page.text
+    assert first_page.json()["total"] == second_page.json()["total"] == 2
+    assert first_page.json()["offset"] == 0
+    assert second_page.json()["offset"] == 1
+    assert {
+        first_page.json()["items"][0]["classification"],
+        second_page.json()["items"][0]["classification"],
+    } == {"wrong", "verified"}
+
+    invalid = client.get("/v1/outcome-graphs", params={"classification": "wrong,not-real"})
+    assert invalid.status_code == 400
 
     summary = client.get("/v1/outcome-graphs/coverage-summary")
     assert summary.status_code == 200, summary.text

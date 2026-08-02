@@ -396,6 +396,19 @@ describe("Home dashboard", () => {
     expect(within(incidentCell as HTMLElement).getByText("0")).toBeInTheDocument();
   });
 
+  it("uses the exact summary count for pending approvals", async () => {
+    const response = summary();
+    response.metrics.pending_approvals = 2;
+    api.getHomeSummary.mockResolvedValue(response);
+
+    render(<HomePage />);
+
+    const metrics = await screen.findByLabelText("Proof metrics");
+    const approvalCell = within(metrics).getByText("Pending approvals").closest("a");
+    expect(approvalCell).not.toBeNull();
+    expect(within(approvalCell as HTMLElement).getByText("2")).toBeInTheDocument();
+  });
+
   it("refetches summary data when the Home window changes", async () => {
     const { rerender } = render(<HomePage />);
 
