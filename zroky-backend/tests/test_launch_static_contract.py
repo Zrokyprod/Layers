@@ -111,9 +111,7 @@ def test_static_launch_contract_rejects_old_domains_and_legacy_routes(
     _write_minimal_repo(tmp_path)
     (tmp_path / "README.md").write_text(
         "Old launch URL: "
-        + "https://app."
-        + "zroky"
-        + ".com and https://api."
+        + "https://api."
         + "zroky"
         + ".ai and https://api-staging."
         + "example"
@@ -127,9 +125,17 @@ def test_static_launch_contract_rejects_old_domains_and_legacy_routes(
 
     assert "old_api_domain" in rules
     assert "old_zroky_ai_domain" in rules
-    assert "old_app_subdomain" in rules
     assert "placeholder_staging_api_domain" in rules
     assert "dashboard_route_dirs" in rules
+
+
+def test_static_launch_contract_allows_canonical_dashboard_domain(tmp_path: Path) -> None:
+    module = _load_script()
+    _write_minimal_repo(tmp_path)
+    (tmp_path / "README.md").write_text("https://app.zroky.com/home\n", encoding="utf-8")
+
+    violations = module.check_static_contract(tmp_path)
+    assert not any(violation.rule in module.FORBIDDEN_DOMAIN_PATTERNS for violation in violations)
 
 
 def test_static_launch_contract_scans_launch_package_roots(tmp_path: Path) -> None:

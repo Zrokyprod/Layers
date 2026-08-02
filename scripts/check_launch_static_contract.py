@@ -24,7 +24,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 FORBIDDEN_DOMAIN_PATTERNS = {
     "old_api_domain": re.compile(r"api\.zroky\.ai", re.IGNORECASE),
     "old_zroky_ai_domain": re.compile(r"zroky\.ai", re.IGNORECASE),
-    "old_app_subdomain": re.compile(r"app\.zroky\.", re.IGNORECASE),
     "placeholder_staging_api_domain": re.compile(
         r"api-staging\." + r"example\.com", re.IGNORECASE
     ),
@@ -238,8 +237,8 @@ def check_forbidden_domains(root: Path) -> list[Violation]:
                         path=path,
                         line=_line_number(text, match.start()),
                         detail=(
-                            "production launch references must use zroky.com "
-                            "or api.zroky.com"
+                            "production launch references must use zroky.com, "
+                            "app.zroky.com, or api.zroky.com"
                         ),
                     )
                 )
