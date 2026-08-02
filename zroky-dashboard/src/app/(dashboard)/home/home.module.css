@@ -325,35 +325,6 @@
   letter-spacing: -0.055em;
 }
 
-.homeDashboard :global(.zh-sparkline) {
-  width: 100%;
-  height: 22px;
-}
-
-.homeDashboard :global(.zh-sparkline polyline) {
-  fill: none;
-  stroke: rgba(165, 180, 252, 0.74);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-}
-
-.homeDashboard :global(.zh-metric-cell[data-tone="critical"] .zh-sparkline polyline) {
-  stroke: var(--zk-danger);
-}
-
-.homeDashboard :global(.zh-metric-cell[data-tone="ready"] .zh-sparkline polyline) {
-  stroke: var(--zk-success);
-}
-
-.homeDashboard :global(.zh-metric-cell[data-tone="stale"] .zh-sparkline polyline) {
-  stroke: var(--zk-warning);
-}
-
-.homeDashboard :global(.zh-metric-cell[data-tone="pending"] .zh-sparkline polyline) {
-  stroke: var(--zk-orange);
-}
-
 .homeDashboard :global(.zh-operational-grid) {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -728,8 +699,7 @@
   font-size: 12px;
 }
 
-.homeDashboard :global(.zh-first-run),
-.homeDashboard :global(.zh-home-unavailable) {
+.homeDashboard :global(.zh-first-run) {
   display: grid;
   grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
   align-items: center;
@@ -739,8 +709,7 @@
   background: var(--surface);
 }
 
-.homeDashboard :global(.zh-first-run h2),
-.homeDashboard :global(.zh-home-unavailable h2) {
+.homeDashboard :global(.zh-first-run h2) {
   max-width: 760px;
   margin: 0;
   color: var(--text);
@@ -750,12 +719,46 @@
   letter-spacing: -0.07em;
 }
 
-.homeDashboard :global(.zh-first-run p:not(.zh-kicker)),
-.homeDashboard :global(.zh-home-unavailable p:not(.zh-kicker)) {
+.homeDashboard :global(.zh-first-run p:not(.zh-kicker)) {
   max-width: 580px;
   margin: 10px 0 16px;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.homeDashboard :global(.zh-home-unavailable) {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 760px);
+  min-height: 0;
+  margin: 40px auto 0;
+  padding: 18px;
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.homeDashboard :global(.zh-home-unavailable > svg) {
+  align-self: start;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.homeDashboard :global(.zh-home-unavailable h2) {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 720;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.homeDashboard :global(.zh-home-unavailable p:not(.zh-kicker)) {
+  max-width: 520px;
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .homeDashboard :global(.zh-first-run ol) {
@@ -821,11 +824,20 @@
 
   .homeDashboard :global(.zh-proof-actions),
   .homeDashboard :global(.zh-page-title),
-  .homeDashboard :global(.zh-first-run),
-  .homeDashboard :global(.zh-home-unavailable) {
+  .homeDashboard :global(.zh-first-run) {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: start;
+  }
+
+  .homeDashboard :global(.zh-home-unavailable) {
+    grid-template-columns: 24px minmax(0, 1fr);
+    margin-top: 16px;
+  }
+
+  .homeDashboard :global(.zh-home-unavailable .zh-btn) {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .homeDashboard :global(.zh-proof-summary) {

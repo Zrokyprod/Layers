@@ -8,12 +8,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   ChevronDown,
-  CreditCard,
   FileJson,
   FolderOpen,
   Gauge,
   Inbox,
-  KeyRound,
   LockKeyhole,
   LogOut,
   Menu,
@@ -60,13 +58,6 @@ const VISIBLE_NAV: NavItem[] = DASHBOARD_PRIMARY_ROUTES.map((route) => ({
   ...route,
   ...(NAV_META[route.id] ?? { subtitle: route.label, Icon: Inbox }),
 }));
-
-const SETTINGS_CHILD_LINKS = [
-  { href: "/settings/keys", label: "API Keys", Icon: KeyRound },
-  { href: "/settings/team", label: "Members", Icon: UserRound },
-  { href: "/settings/billing", label: "Plan & Billing", Icon: CreditCard },
-  { href: "/settings/workspace", label: "Workspace", Icon: FolderOpen },
-];
 
 type ShellMenu = "account" | "workspace";
 
@@ -179,23 +170,31 @@ function initials(name: string): string {
 
 function ProjectContextGate({
   isLoading,
+  isUnavailable,
   noProjects,
   requiresSelection,
   projects,
+  onRetry,
   onSelectProject,
 }: {
   isLoading: boolean;
+  isUnavailable: boolean;
   noProjects: boolean;
   requiresSelection: boolean;
   projects: { project_id: string; project_name: string; role: string }[];
+  onRetry: () => void;
   onSelectProject: (projectId: string) => void;
 }) {
-  const title = noProjects
+  const title = isUnavailable
+    ? "Workspace unavailable"
+    : noProjects
     ? "No active project found"
     : requiresSelection
       ? "Select a project to load this dashboard"
       : "Preparing workspace";
-  const body = noProjects
+  const body = isUnavailable
+    ? "We could not load your projects. Retry the request or sign in again."
+    : noProjects
     ? "Ask an owner to add your account to a project before dashboard modules can load data."
     : requiresSelection
       ? "Dashboard data is scoped by project. Choose the project you want to inspect."
@@ -211,7 +210,12 @@ function ProjectContextGate({
         {isLoading ? <span className="pill">Syncing</span> : null}
       </div>
 
-      {requiresSelection ? (
+      {isUnavailable ? (
+        <div className="project-context-recovery">
+          <button type="button" className="btn btn-soft" onClick={onRetry}>Retry</button>
+          <Link className="btn btn-primary" href="/login">Sign in again</Link>
+        </div>
+      ) : requiresSelection ? (
         <div className="project-context-actions">
           {projects.map((project) => (
             <button
@@ -242,7 +246,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const appShellRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
-  const [projectSearch, setProjectSearch] = useState("");
   const [compactShell, setCompactShell] = useState(false);
   const [, setCompactSidebarOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(false);
@@ -290,12 +293,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const myProjects = useMemo(() => myProjectsQuery.data ?? [], [myProjectsQuery.data]);
-  const showProjectSearch = myProjects.length >= 6;
-  const filteredProjects = useMemo(() => {
-    const query = projectSearch.trim().toLocaleLowerCase();
-    if (!query) return myProjects;
-    return myProjects.filter((project) => project.project_name.toLocaleLowerCase().includes(query));
-  }, [myProjects, projectSearch]);
   const myProjectIdsKey = myProjects.map((project) => project.project_id).join("|");
   const selectedProjectMembership = selectedProject
     ? myProjects.find((project) => project.project_id === selectedProject) ?? null
@@ -304,6 +301,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const noActiveProjects = Boolean(myProjectsQuery.data && myProjects.length === 0);
   const localProjectFallback = localPreview && (myProjectsQuery.isError || process.env.NODE_ENV !== "production");
   const projectContextLoading = !localProjectFallback && (myProjectsQuery.isLoading || (myProjects.length === 1 && !selectedProject));
+  const projectContextUnavailable = !localProjectFallback && (
+    myProjectsQuery.isError || (!myProjectsQuery.isLoading && myProjectsQuery.data === undefined)
+  );
   const projectContextReady = localProjectFallback || (Boolean(selectedProject)
     && !projectSelectionRequired
     && !noActiveProjects
@@ -368,7 +368,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const issuesCount = issuesQuery.data?.items?.length ?? 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
-  const settingsNavActive = pathname === "/settings" || pathname.startsWith("/settings/");
   const sidebarVisible = true;
 
   const badges: Record<string, number> = {};
@@ -383,10 +382,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const workspaceName =
     selectedProjectMembership?.project_name?.trim() ||
     (localProjectFallback ? "Local preview" : null) ||
+    (projectContextUnavailable ? "Workspace unavailable" : null) ||
     (projectSelectionRequired ? "Select project" : "ZROKY workspace");
 
   function toggleMenu(menu: ShellMenu) {
-    if (menu === "workspace" && openMenu !== "workspace") setProjectSearch("");
     setOpenMenu((current) => (current === menu ? null : menu));
   }
 
@@ -579,9 +578,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           ) : (
             <ProjectContextGate
               isLoading={projectContextLoading}
+              isUnavailable={projectContextUnavailable}
               noProjects={noActiveProjects}
               requiresSelection={projectSelectionRequired}
               projects={myProjects}
+              onRetry={() => void myProjectsQuery.refetch()}
               onSelectProject={switchProject}
             />
           )}

@@ -45,9 +45,17 @@ describe("DashboardLayout", () => {
     vi.mocked(redirect).mockClear();
   });
 
+  function setRequestHeaders(path: string, host = "zroky.com") {
+    headerState.get.mockImplementation((name: string) => {
+      if (name === "x-zroky-request-path") return path;
+      if (name === "host") return host;
+      return null;
+    });
+  }
+
   it("redirects unauthenticated dashboard access to login", async () => {
     cookieState.get.mockReturnValue(undefined);
-    headerState.get.mockReturnValue("/policies?tab=proof");
+    setRequestHeaders("/policies?tab=proof");
 
     await expect(DashboardLayout({ children: <main /> })).rejects.toThrow(
       "redirect:/login?next=%2Fpolicies%3Ftab%3Dproof",
@@ -58,7 +66,7 @@ describe("DashboardLayout", () => {
 
   it("redirects unverified email sessions before rendering the dashboard", async () => {
     cookieState.get.mockReturnValue({ value: "access-token" });
-    headerState.get.mockReturnValue("/policies");
+    setRequestHeaders("/policies");
     vi.mocked(checkDashboardSession).mockResolvedValue({
       status: "authenticated",
       user: {
@@ -74,5 +82,25 @@ describe("DashboardLayout", () => {
     );
     expect(checkDashboardSession).toHaveBeenCalledWith("access-token");
     expect(redirect).toHaveBeenCalledWith("/verify-email?next=%2Fpolicies&email=new%40example.com");
+  });
+
+  it("protects ordinary localhost dashboard routes", async () => {
+    cookieState.get.mockReturnValue(undefined);
+    setRequestHeaders("/home", "localhost:3000");
+
+    await expect(DashboardLayout({ children: <main /> })).rejects.toThrow(
+      "redirect:/login?next=%2Fhome",
+    );
+  });
+
+  it("keeps the explicit localhost demo route available", async () => {
+    cookieState.get.mockReturnValue(undefined);
+    setRequestHeaders("/home?demoHome=1", "localhost:3000");
+
+    const result = await DashboardLayout({ children: <main>demo</main> });
+
+    expect(result).toMatchObject({ type: expect.any(Function) });
+    expect(checkDashboardSession).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
   });
 });

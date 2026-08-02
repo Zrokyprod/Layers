@@ -753,6 +753,12 @@ pre,
   text-align: left;
 }
 
+.project-context-recovery {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .labs-page {
   display: grid;
   gap: var(--space-3);
@@ -29878,22 +29884,6 @@ body:has(.app-shell) {
 .app-shell[data-dashboard-system="control-v1"] .zh-home .zh-severity-dot[data-priority="P2"] {
   background: var(--zk-orange) !important;
   box-shadow: 0 0 0 4px var(--zk-orange-border) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .zh-home .zh-metric-cell[data-tone="critical"] .zh-sparkline polyline {
-  stroke: var(--zk-danger) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .zh-home .zh-metric-cell[data-tone="ready"] .zh-sparkline polyline {
-  stroke: var(--zk-success) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .zh-home .zh-metric-cell[data-tone="stale"] .zh-sparkline polyline {
-  stroke: var(--zk-warning) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .zh-home .zh-metric-cell[data-tone="pending"] .zh-sparkline polyline {
-  stroke: var(--zk-orange) !important;
 }
 
 @media (max-width: 1279px) {

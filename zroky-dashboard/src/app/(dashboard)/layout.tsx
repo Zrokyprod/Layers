@@ -24,18 +24,22 @@ function loginRedirectPath(nextPath: string, error?: string): string {
   return `/login?${params.toString()}`;
 }
 
-function isLocalPreviewHost(hostHeader: string | null): boolean {
+function isExplicitLocalPreview(hostHeader: string | null, nextPath: string): boolean {
   const host = hostHeader ?? "";
   const bracketedIpv6Match = host.match(/^\[([^\]]+)\](?::\d+)?$/);
   const hostname = bracketedIpv6Match?.[1] ?? host.split(":")[0] ?? "";
-  return LOCAL_PREVIEW_HOSTS.has(hostname);
+  if (!LOCAL_PREVIEW_HOSTS.has(hostname)) return false;
+  const url = new URL(nextPath, "http://zroky.local");
+  return ["demoHome", "demoOperations", "demoDashboard"].some(
+    (key) => url.searchParams.get(key) === "1",
+  );
 }
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
   const headerStore = await headers();
   const nextPath = safeNextPath(headerStore.get("x-zroky-request-path"));
-  if (isLocalPreviewHost(headerStore.get("host"))) {
+  if (isExplicitLocalPreview(headerStore.get("host"), nextPath)) {
     return <DashboardShell>{children}</DashboardShell>;
   }
 

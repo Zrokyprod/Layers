@@ -9,7 +9,10 @@ const ACCESS_TOKEN_COOKIE = "zroky_access_token";
 const LOCAL_PREVIEW_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function localDashboardPreviewEnabled(request: NextRequest): boolean {
-  return LOCAL_PREVIEW_HOSTS.has(request.nextUrl.hostname);
+  if (!LOCAL_PREVIEW_HOSTS.has(request.nextUrl.hostname)) return false;
+  return ["demoHome", "demoOperations", "demoDashboard"].some(
+    (key) => request.nextUrl.searchParams.get(key) === "1",
+  );
 }
 
 export function guardDashboardRoute(request: NextRequest): NextResponse {

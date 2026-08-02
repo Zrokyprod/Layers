@@ -64,4 +64,20 @@ describe("guardDashboardRoute", () => {
       );
     }
   });
+
+  it("does not expose dashboard data on localhost without an explicit demo flag", () => {
+    const response = guardDashboardRoute(request("http://localhost:3000/evidence"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/login?next=%2Fevidence",
+    );
+  });
+
+  it("allows explicit localhost demo routes without a session", () => {
+    const response = guardDashboardRoute(request("http://localhost:3000/home?demoHome=1"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
 });
