@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import EvidencePage from "./page";
-import type { OutcomeGraphCoverageSummary, OutcomeGraphRow } from "@/lib/api";
+import type { OutcomeGraphCoverageSummary, OutcomeGraphListResponse, OutcomeGraphRow } from "@/lib/api";
 
 const api = vi.hoisted(() => ({
   fetchOutcomeGraphCoverage: vi.fn(),
@@ -77,6 +77,13 @@ function graph(overrides: Partial<OutcomeGraphRow> = {}): OutcomeGraphRow {
   };
 }
 
+function graphPage(
+  items: OutcomeGraphRow[] = [graph()],
+  overrides: Partial<Omit<OutcomeGraphListResponse, "items">> = {},
+): OutcomeGraphListResponse {
+  return { items, total: items.length, limit: 100, offset: 0, ...overrides };
+}
+
 function renderEvidencePage() {
   const client = new QueryClient({
     defaultOptions: {
@@ -103,7 +110,7 @@ describe("EvidencePage", () => {
       summary: { classification: "missing" },
       verify_instructions: "python -m zroky.verify_attestation zroky-evidence-graph_1.json",
     });
-    api.fetchOutcomeGraphs.mockResolvedValue({ items: [graph()] });
+    api.fetchOutcomeGraphs.mockResolvedValue(graphPage());
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:evidence") });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
@@ -124,41 +131,60 @@ describe("EvidencePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Proven" }));
 
     await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenLastCalledWith(
-      expect.objectContaining({ classification: "verified", limit: 100 }),
+      expect.objectContaining({ classification: ["verified"], limit: 100, offset: 0 }),
       expect.any(AbortSignal),
     ));
   });
 
-  it("loads every indexed classification in a compound caught filter", async () => {
-    api.fetchOutcomeGraphs.mockImplementation(async ({ classification }) => ({
-      items: classification ? [graph({ classification, id: `graph_${classification}` })] : [graph()],
-    }));
+  it("loads a compound caught filter with one indexed request", async () => {
+    api.fetchOutcomeGraphs.mockImplementation(async ({ classification }) => {
+      const values = Array.isArray(classification) ? classification : [];
+      return graphPage(
+        values.map((value) => graph({ classification: value, id: `graph_${value}` })),
+        { total: values.length > 0 ? 8 : 22 },
+      );
+    });
     renderEvidencePage();
     await screen.findByRole("heading", { name: "8 actions claimed but not proven" });
 
     fireEvent.click(screen.getByRole("button", { name: "Caught" }));
 
-    await waitFor(() => {
-      for (const classification of ["wrong", "missing", "forbidden", "duplicate"]) {
-        expect(api.fetchOutcomeGraphs).toHaveBeenCalledWith(
-          expect.objectContaining({ classification, limit: 100 }),
-          expect.any(AbortSignal),
-        );
-      }
-    });
+    await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        classification: ["wrong", "missing", "forbidden", "duplicate"],
+        limit: 100,
+        offset: 0,
+      }),
+      expect.any(AbortSignal),
+    ));
     expect(await screen.findByText("4 of 8 shown")).toBeInTheDocument();
   });
 
+  it("loads older evidence pages on demand", async () => {
+    api.fetchOutcomeGraphs.mockImplementation(async ({ offset = 0 }) => graphPage(
+      [graph({ id: `graph_${offset}`, graph: { workflow_key: offset === 0 ? "first_workflow" : "older_workflow" } })],
+      { total: 2, offset },
+    ));
+    renderEvidencePage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+
+    await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 1 }),
+      expect.any(AbortSignal),
+    ));
+    expect(await screen.findByText("older_workflow")).toBeInTheDocument();
+    expect(screen.getByText("2 shown")).toBeInTheDocument();
+  });
+
   it("renders integrations CTA for a no_connector drill-down", async () => {
-    api.fetchOutcomeGraphs.mockResolvedValue({
-      items: [
+    api.fetchOutcomeGraphs.mockResolvedValue(graphPage([
         graph({
           classification: "unknown",
           reason_code: "no_connector",
           verification_status: "inconclusive",
         }),
-      ],
-    });
+      ]));
 
     renderEvidencePage();
 
@@ -171,7 +197,7 @@ describe("EvidencePage", () => {
 
   it("shows setup empty state when coverage total is zero", async () => {
     api.fetchOutcomeGraphCoverage.mockResolvedValue(coverage({ total: 0, coverage_percent: 0 }));
-    api.fetchOutcomeGraphs.mockResolvedValue({ items: [] });
+    api.fetchOutcomeGraphs.mockResolvedValue(graphPage([]));
 
     renderEvidencePage();
 

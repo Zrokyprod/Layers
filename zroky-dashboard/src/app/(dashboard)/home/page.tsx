@@ -416,10 +416,7 @@ function proofStats(data: HomeData): ProofStats {
       proven: counts.verified ?? 0,
       mismatches,
       unverifiable,
-      pendingApprovals: Math.max(
-        data.homeSummary?.metrics.pending_approvals ?? 0,
-        data.approvals.filter((item) => item.status === "pending_approval").length,
-      ),
+      pendingApprovals: data.homeSummary?.metrics.pending_approvals ?? 0,
       openIncidents: data.incidents.filter((item) => item.status !== "resolved").length,
       blockedAttempts: data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length,
       coveragePercent: Math.round(data.outcomeGraphCoverage.coverage_percent),
@@ -447,10 +444,7 @@ function proofStats(data: HomeData): ProofStats {
   );
   const checked = Math.max(summary?.metrics.outcome_checks ?? 0, data.outcomeSummary?.total ?? 0, data.outcomes.length);
   const unchecked = Math.max(0, totalActions - checked);
-  const pendingApprovals = Math.max(
-    summary?.metrics.pending_approvals ?? 0,
-    data.approvals.filter((item) => item.status === "pending_approval").length,
-  );
+  const pendingApprovals = summary?.metrics.pending_approvals ?? 0;
   const blockedAttempts =
     data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length +
     (summary?.metrics.bypass_mutations ?? 0);

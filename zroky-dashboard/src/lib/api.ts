@@ -558,6 +558,9 @@ export interface OutcomeGraphRow {
 
 export interface OutcomeGraphListResponse {
   items: OutcomeGraphRow[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface OutcomeGraphCoverageSummary {
@@ -4413,15 +4416,20 @@ export function listOutcomeReconciliations(
 
 export function fetchOutcomeGraphs(
   params: {
-    classification?: OutcomeGraphClassification;
+    classification?: OutcomeGraphClassification | OutcomeGraphClassification[];
     limit?: number;
+    offset?: number;
   } = {},
   signal?: AbortSignal,
 ): Promise<OutcomeGraphListResponse> {
+  const classification = Array.isArray(params.classification)
+    ? params.classification.join(",")
+    : params.classification;
   return request<OutcomeGraphListResponse>("/v1/outcome-graphs", {
     query: {
-      ...(params.classification ? { classification: params.classification } : {}),
+      ...(classification ? { classification } : {}),
       limit: String(params.limit ?? 50),
+      offset: String(params.offset ?? 0),
     },
     signal,
   });

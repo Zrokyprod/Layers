@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
@@ -32,6 +32,7 @@ type EvidenceVerdict = {
 
 const caughtClassifications: OutcomeGraphClassification[] = ["wrong", "missing", "forbidden", "duplicate"];
 const attentionClassifications: OutcomeGraphClassification[] = ["stale", "conflicted", "unknown"];
+const outcomeGraphPageSize = 100;
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
@@ -187,24 +188,13 @@ function metricsForSummary(summary: OutcomeGraphCoverageSummary | undefined): Ev
   ];
 }
 
-function totalForFilter(summary: OutcomeGraphCoverageSummary | undefined, filter: EvidenceLedgerFilter): number {
-  if (!summary) return 0;
-  if (filter === "all") return summary.total;
-  const value = counts(summary);
-  return classificationParams(filter).reduce((total, classification) => total + value[classification], 0);
-}
-
-async function fetchGraphsForFilter(filter: EvidenceLedgerFilter, signal?: AbortSignal) {
+async function fetchGraphsForFilter(filter: EvidenceLedgerFilter, offset: number, signal?: AbortSignal) {
   const classifications = classificationParams(filter);
-  if (classifications.length === 0) return fetchOutcomeGraphs({ limit: 100 }, signal);
-  const responses = await Promise.all(
-    classifications.map((classification) => fetchOutcomeGraphs({ classification, limit: 100 }, signal)),
-  );
-  return {
-    items: responses
-      .flatMap((response) => response.items)
-      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)),
-  };
+  return fetchOutcomeGraphs({
+    classification: classifications.length > 0 ? classifications : undefined,
+    limit: outcomeGraphPageSize,
+    offset,
+  }, signal);
 }
 
 function downloadJsonFile(payload: unknown, filename: string) {
@@ -226,16 +216,25 @@ export default function EvidencePage() {
   const [message, setMessage] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  const graphQuery = useQuery({
+  const graphQuery = useInfiniteQuery({
     queryKey: ["outcome-graphs", filter],
-    queryFn: ({ signal }) => fetchGraphsForFilter(filter, signal),
+    queryFn: ({ pageParam, signal }) => fetchGraphsForFilter(filter, pageParam, signal),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset = lastPage.offset + lastPage.items.length;
+      return lastPage.items.length > 0 && nextOffset < lastPage.total ? nextOffset : undefined;
+    },
   });
   const coverageQuery = useQuery({
     queryKey: ["outcome-graphs", "coverage-summary"],
     queryFn: ({ signal }) => fetchOutcomeGraphCoverage(signal),
   });
 
-  const rows = useMemo(() => buildOutcomeGraphLedgerRows(graphQuery.data?.items ?? []), [graphQuery.data?.items]);
+  const graphItems = useMemo(
+    () => graphQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [graphQuery.data?.pages],
+  );
+  const rows = useMemo(() => buildOutcomeGraphLedgerRows(graphItems), [graphItems]);
   const loading = graphQuery.isLoading || coverageQuery.isLoading;
   const error = graphQuery.error || coverageQuery.error;
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
@@ -244,7 +243,7 @@ export default function EvidencePage() {
   const metrics = metricsForSummary(coverageQuery.data);
   const caught = caughtCount(coverageQuery.data);
   const total = coverageQuery.data?.total ?? 0;
-  const filteredTotal = totalForFilter(coverageQuery.data, filter);
+  const filteredTotal = graphQuery.data?.pages[0]?.total ?? 0;
   const isRefreshing = graphQuery.isFetching || coverageQuery.isFetching;
 
   useEffect(() => {
@@ -310,11 +309,14 @@ export default function EvidencePage() {
         left={(
           <EvidenceLedger
             filter={filter}
+            hasMore={Boolean(graphQuery.hasNextPage)}
             isError={Boolean(error)}
             isExporting={exporting}
             isLoading={loading}
+            isLoadingMore={graphQuery.isFetchingNextPage}
             onFilterChange={applyFilter}
             onExportManifest={exportRows}
+            onLoadMore={() => void graphQuery.fetchNextPage()}
             onSearchChange={setSearch}
             onSelectRow={selectRow}
             projectTotal={total}
