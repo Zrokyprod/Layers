@@ -74,13 +74,6 @@ def setup() -> dict:
     charge = create_test_charge(config, run_id)
 
     print(f"Stripe test charge ready: {charge['id']} {config.currency.upper()} {config.amount_minor}")
-    connector = api.request(
-        "PUT",
-        "/v1/integrations/system-of-record/stripe-refund/config",
-        admin=True,
-        body={"bearer_token": config.stripe_secret_key},
-    )
-    print(f"Stripe refund connector configured: connected={connector.get('connected')}")
     active_connector = api.request(
         "POST",
         "/v1/source-connectors",
