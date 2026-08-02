@@ -365,9 +365,12 @@ describe("Home dashboard", () => {
     expect(within(proofMetrics).getByText("3")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Coverage")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("94%")).toBeInTheDocument();
+    const needsAttention = within(proofMetrics).getByText("Needs attention").closest("a");
+    expect(needsAttention).not.toBeNull();
+    expect(within(needsAttention as HTMLElement).getByText("0")).toBeInTheDocument();
 
     expect(screen.getByText("Connector test-read")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Resolve blocker" }).getAttribute("href")).toBe("/integrations");
+    expect(screen.getByRole("link", { name: "Open approvals" }).getAttribute("href")).toBe("/operations");
     expect(screen.queryByText("Good morning")).not.toBeInTheDocument();
     expect(screen.queryByText("Mission Control")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Agent health over time")).not.toBeInTheDocument();
@@ -427,8 +430,8 @@ describe("Home dashboard", () => {
 
     await screen.findByText("Proof posture");
     expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Resolve blocker" })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Resolve blocker")[0].getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("link", { name: "Open approvals" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Open approvals")[0].getAttribute("aria-disabled")).toBe("true");
   });
 
   it("uses a first-run layout without fake activity or fake chart", async () => {
@@ -516,9 +519,11 @@ describe("Home dashboard", () => {
     render(<HomePage />);
 
     await waitFor(() => expect(api.getHomeSummary).toHaveBeenCalled());
-    expect(await screen.findByText("Sign in to load proof posture")).toBeInTheDocument();
+    expect(await screen.findByText("Sign in to continue")).toBeInTheDocument();
     expect(screen.getByLabelText("Home authentication required")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/auth/login");
+    expect(screen.getByText("Your session has ended. Sign in again to view verified actions and incidents.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login?next=%2Fhome");
+    expect(screen.queryByText(/proof posture|proof surface/i)).not.toBeInTheDocument();
     expect(screen.queryByText("13 source feed unavailable")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Proof metrics")).not.toBeInTheDocument();
   });
@@ -531,7 +536,7 @@ describe("Home dashboard", () => {
     expect(await screen.findByText("3 mismatches caught")).toBeInTheDocument();
     expect(api.getHomeSummary).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
-    expect(screen.queryByText("Sign in to load proof posture")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in to continue")).not.toBeInTheDocument();
     expect(screen.queryByText("13 source feed unavailable")).not.toBeInTheDocument();
   });
 });

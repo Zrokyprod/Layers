@@ -55,6 +55,8 @@ const navState = vi.hoisted(() => ({
     updated_at: string;
   }>,
   myProjectsLoading: false,
+  myProjectsError: false,
+  refetchProjects: vi.fn(),
   meData: { email: "sanket@acme.com", display_name: "Sanket K." } as
     | { email: string | null; display_name: string | null }
     | undefined,
@@ -176,6 +178,8 @@ vi.mock("@/lib/hooks", () => ({
   useMyProjects: () => ({
     data: navState.myProjects,
     isLoading: navState.myProjectsLoading,
+    isError: navState.myProjectsError,
+    refetch: navState.refetchProjects,
   }),
 }));
 
@@ -255,6 +259,8 @@ describe("DashboardShell primary navigation", () => {
       },
     ];
     navState.myProjectsLoading = false;
+    navState.myProjectsError = false;
+    navState.refetchProjects.mockReset();
     navState.meData = { email: "sanket@acme.com", display_name: "Sanket K." };
     navState.meLoading = false;
     storeState.sidebarOpen = true;
@@ -394,6 +400,20 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
     expect(screen.queryByText("sanket@acme.com")).not.toBeInTheDocument();
     expect(screen.queryByText("Sanket K.")).not.toBeInTheDocument();
+  });
+
+  it("offers recovery when project loading fails", () => {
+    navState.myProjects = [];
+    navState.myProjectsError = true;
+    storeState.selectedProject = null;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByRole("heading", { name: "Workspace unavailable" })).toBeInTheDocument();
+    expect(screen.queryByText("Preparing workspace")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(navState.refetchProjects).toHaveBeenCalledOnce();
+    expect(screen.getByRole("link", { name: "Sign in again" }).getAttribute("href")).toBe("/login");
   });
 
   it("keeps project switching in the context gate instead of the global shell", () => {

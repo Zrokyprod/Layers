@@ -91,7 +91,7 @@ type ProofStats = {
   totalActions: number;
   proven: number;
   mismatches: number;
-  unverifiable: number;
+  needsAttention: number;
   pendingApprovals: number;
   openIncidents: number;
   blockedAttempts: number;
@@ -410,12 +410,12 @@ function proofStats(data: HomeData): ProofStats {
   if (data.outcomeGraphCoverage) {
     const counts = data.outcomeGraphCoverage.counts;
     const mismatches = (counts.wrong ?? 0) + (counts.missing ?? 0) + (counts.forbidden ?? 0) + (counts.duplicate ?? 0);
-    const unverifiable = (counts.pending ?? 0) + (counts.unknown ?? 0) + (counts.stale ?? 0) + (counts.conflicted ?? 0);
+    const needsAttention = (counts.unknown ?? 0) + (counts.stale ?? 0) + (counts.conflicted ?? 0);
     return {
       totalActions: data.outcomeGraphCoverage.total,
       proven: counts.verified ?? 0,
       mismatches,
-      unverifiable,
+      needsAttention,
       pendingApprovals: data.homeSummary?.metrics.pending_approvals ?? 0,
       openIncidents: data.incidents.filter((item) => item.status !== "resolved").length,
       blockedAttempts: data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length,
@@ -440,7 +440,7 @@ function proofStats(data: HomeData): ProofStats {
   );
   const explicitUnknown = Math.max(
     data.outcomeSummary?.not_verified ?? 0,
-    data.outcomes.filter((item) => ["not_verified", "unknown", "pending"].includes(String(item.verdict ?? item.verification_status ?? ""))).length,
+    data.outcomes.filter((item) => ["not_verified", "unknown"].includes(String(item.verdict ?? item.verification_status ?? ""))).length,
   );
   const checked = Math.max(summary?.metrics.outcome_checks ?? 0, data.outcomeSummary?.total ?? 0, data.outcomes.length);
   const unchecked = Math.max(0, totalActions - checked);
@@ -449,18 +449,18 @@ function proofStats(data: HomeData): ProofStats {
     data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length +
     (summary?.metrics.bypass_mutations ?? 0);
   const openIncidents = data.incidents.filter((item) => item.status !== "resolved").length;
-  const unverifiable = Math.max(explicitUnknown + data.staleAttempts.length, unchecked);
+  const needsAttention = Math.max(explicitUnknown + data.staleAttempts.length, unchecked);
   const coveragePercent = totalActions > 0 ? Math.round((proven / totalActions) * 100) : 0;
-  return { totalActions, proven, mismatches, unverifiable, pendingApprovals, openIncidents, blockedAttempts, coveragePercent };
+  return { totalActions, proven, mismatches, needsAttention, pendingApprovals, openIncidents, blockedAttempts, coveragePercent };
 }
 
 function homePosture(stats: ProofStats, unavailableCount: number, readiness: ReadinessRow[]): PostureStatus {
   if (stats.totalActions === 0) return "INACTIVE";
-  if (stats.openIncidents >= 5 || (stats.totalActions > 0 && stats.coveragePercent === 0 && stats.unverifiable > 0)) return "CRITICAL";
+  if (stats.openIncidents >= 5 || (stats.totalActions > 0 && stats.coveragePercent === 0 && stats.needsAttention > 0)) return "CRITICAL";
   if (
     stats.mismatches > 0 ||
     stats.openIncidents > 0 ||
-    stats.unverifiable > 0 ||
+    stats.needsAttention > 0 ||
     stats.pendingApprovals > 0 ||
     stats.blockedAttempts > 0 ||
     unavailableCount > 0 ||
@@ -489,7 +489,7 @@ function postureExplanation(status: PostureStatus): string {
 
 function primaryCta(status: PostureStatus, stats: ProofStats) {
   if (status === "INACTIVE") return { label: "Connect source", href: "/integrations" };
-  if (stats.pendingApprovals > Math.max(stats.mismatches, stats.unverifiable)) return { label: "Open approvals", href: "/operations" };
+  if (stats.pendingApprovals > Math.max(stats.mismatches, stats.needsAttention)) return { label: "Open approvals", href: "/operations" };
   if (status === "CRITICAL") return { label: "Review incidents", href: "/operations" };
   if (status === "DEGRADED") return { label: "Resolve blocker", href: "/integrations" };
   return { label: "View evidence", href: "/evidence" };
@@ -502,7 +502,7 @@ function heroHeadline(stats: ProofStats): string {
 }
 
 function denominatorLine(stats: ProofStats): string {
-  return `${formatCount(stats.totalActions)} actions · ${formatCount(stats.proven)} proven · ${formatCount(stats.mismatches)} mismatches · ${formatCount(stats.unverifiable)} unverifiable · ${formatCount(stats.pendingApprovals)} need approval`;
+  return `${formatCount(stats.totalActions)} actions · ${formatCount(stats.proven)} proven · ${formatCount(stats.mismatches)} mismatches · ${formatCount(stats.needsAttention)} need attention · ${formatCount(stats.pendingApprovals)} need approval`;
 }
 
 function quotaWarning(usage: BillingUsageResponse | null): string | null {
@@ -679,7 +679,7 @@ function buildAttentionRows(data: HomeData): AttentionRow[] {
 }
 
 function activityExists(stats: ProofStats): boolean {
-  return stats.totalActions > 0 || stats.proven > 0 || stats.mismatches > 0 || stats.pendingApprovals > 0 || stats.unverifiable > 0;
+  return stats.totalActions > 0 || stats.proven > 0 || stats.mismatches > 0 || stats.pendingApprovals > 0 || stats.needsAttention > 0;
 }
 
 function renderStatusIcon(status: BadgeStatus | PostureStatus, size = 12) {
@@ -815,7 +815,7 @@ function ProofMetricsStrip({ stats, loading }: { stats: ProofStats; loading: boo
   const cells = [
     { label: "Mismatches caught", value: stats.mismatches, href: "/operations", tone: "critical", Icon: ShieldAlert },
     { label: "Proven outcomes", value: stats.proven, href: "/evidence", tone: "ready", Icon: ShieldCheck },
-    { label: "Unverifiable", value: stats.unverifiable, href: "/operations", tone: "stale", Icon: AlertTriangle },
+    { label: "Needs attention", value: stats.needsAttention, href: "/evidence?filter=needs_attention", tone: "stale", Icon: AlertTriangle },
     { label: "Open incidents", value: stats.openIncidents, href: "/operations", tone: "critical", Icon: BellDot },
     { label: "Pending approvals", value: stats.pendingApprovals, href: "/operations", tone: "pending", Icon: LockKeyhole },
     { label: "Coverage", value: `${stats.coveragePercent}%`, href: "/evidence", tone: "neutral", Icon: BarChart3 },
@@ -973,8 +973,8 @@ function AgentRecoveryPressure({ stats }: { stats: ProofStats }) {
           <span>blocked</span>
         </div>
         <div>
-          <strong>{formatCount(stats.unverifiable)}</strong>
-          <span>unverifiable</span>
+          <strong>{formatCount(stats.needsAttention)}</strong>
+          <span>needs attention</span>
         </div>
       </div>
     </section>
@@ -1069,11 +1069,11 @@ function HomeAuthRequired() {
     <section className="zh-card zh-home-unavailable" aria-label="Home authentication required">
       <LockKeyhole size={18} aria-hidden="true" />
       <div>
-        <p className="zh-kicker">Proof posture locked</p>
-        <h2>Sign in to load proof posture</h2>
-        <p>ZROKY needs an active session before it can read the proof surface.</p>
+        <p className="zh-kicker">Session required</p>
+        <h2>Sign in to continue</h2>
+        <p>Your session has ended. Sign in again to view verified actions and incidents.</p>
       </div>
-      <Link className="zh-btn zh-btn-primary" href="/auth/login">
+      <Link className="zh-btn zh-btn-primary" href="/login?next=%2Fhome">
         Sign in
       </Link>
     </section>
