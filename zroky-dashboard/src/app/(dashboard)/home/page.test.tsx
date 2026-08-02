@@ -397,6 +397,17 @@ describe("Home dashboard", () => {
     const incidentCell = within(metrics).getByText("Open incidents").closest("a");
     expect(incidentCell).not.toBeNull();
     expect(within(incidentCell as HTMLElement).getByText("0")).toBeInTheDocument();
+    expect(incidentCell?.getAttribute("href")).toBe("/operations?view=incidents");
+  });
+
+  it("does not render proof numbers before ledger coverage is available", () => {
+    api.fetchOutcomeGraphCoverage.mockReturnValue(new Promise(() => undefined));
+
+    render(<HomePage />);
+
+    expect(screen.getByLabelText("Loading verified Home data")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Proof posture")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Proof metrics")).not.toBeInTheDocument();
   });
 
   it("uses the exact summary count for pending approvals", async () => {
@@ -500,6 +511,8 @@ describe("Home dashboard", () => {
     await waitFor(() => expect(api.getHomeSummary).toHaveBeenCalled());
     expect(await screen.findByText("13 source feed unavailable")).toBeInTheDocument();
     expect(screen.getByLabelText("Home unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Zroky could not load verified actions and incidents. No status is being inferred.")).toBeInTheDocument();
+    expect(screen.queryByText(/proof surface/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "INACTIVE" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Proof metrics")).not.toBeInTheDocument();
   });
