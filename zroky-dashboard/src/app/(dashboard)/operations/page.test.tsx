@@ -407,6 +407,14 @@ describe("OperationsPage", () => {
     expect(screen.getByRole("heading", { name: "Approval required: admin" })).toBeInTheDocument();
   });
 
+  it("opens the incidents view from a Home metric deep-link", async () => {
+    window.history.pushState(null, "", "/operations?view=incidents");
+
+    render(<OperationsPage />);
+
+    expect(await screen.findByLabelText("Incidents table")).toBeInTheDocument();
+  });
+
   it("applies cross-cutting filters without duplicating tab navigation", async () => {
     const user = userEvent.setup();
     render(<OperationsPage />);

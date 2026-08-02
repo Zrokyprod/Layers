@@ -406,52 +406,20 @@ function isUnauthorizedError(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { status?: unknown }).status === 401;
 }
 
-function proofStats(data: HomeData): ProofStats {
-  if (data.outcomeGraphCoverage) {
-    const counts = data.outcomeGraphCoverage.counts;
-    const mismatches = (counts.wrong ?? 0) + (counts.missing ?? 0) + (counts.forbidden ?? 0) + (counts.duplicate ?? 0);
-    const needsAttention = (counts.unknown ?? 0) + (counts.stale ?? 0) + (counts.conflicted ?? 0);
-    return {
-      totalActions: data.outcomeGraphCoverage.total,
-      proven: counts.verified ?? 0,
-      mismatches,
-      needsAttention,
-      pendingApprovals: data.homeSummary?.metrics.pending_approvals ?? 0,
-      openIncidents: data.incidents.filter((item) => item.status !== "resolved").length,
-      blockedAttempts: data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length,
-      coveragePercent: Math.round(data.outcomeGraphCoverage.coverage_percent),
-    };
-  }
-  const summary = data.homeSummary;
-  const totalActions = Math.max(
-    summary?.metrics.controlled_actions ?? 0,
-    data.intents.length,
-    data.outcomeSummary?.total ?? 0,
-    data.outcomes.length,
-  );
-  const proven = Math.max(
-    summary?.metrics.verified_outcomes ?? 0,
-    data.outcomeSummary?.matched ?? 0,
-    data.outcomes.filter((item) => item.verdict === "matched" || item.verification_status === "matched").length,
-  );
-  const mismatches = Math.max(
-    data.outcomeSummary?.mismatched ?? 0,
-    data.outcomes.filter((item) => item.verdict === "mismatched" || item.verification_status === "mismatched").length,
-  );
-  const explicitUnknown = Math.max(
-    data.outcomeSummary?.not_verified ?? 0,
-    data.outcomes.filter((item) => ["not_verified", "unknown"].includes(String(item.verdict ?? item.verification_status ?? ""))).length,
-  );
-  const checked = Math.max(summary?.metrics.outcome_checks ?? 0, data.outcomeSummary?.total ?? 0, data.outcomes.length);
-  const unchecked = Math.max(0, totalActions - checked);
-  const pendingApprovals = summary?.metrics.pending_approvals ?? 0;
-  const blockedAttempts =
-    data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length +
-    (summary?.metrics.bypass_mutations ?? 0);
-  const openIncidents = data.incidents.filter((item) => item.status !== "resolved").length;
-  const needsAttention = Math.max(explicitUnknown + data.staleAttempts.length, unchecked);
-  const coveragePercent = totalActions > 0 ? Math.round((proven / totalActions) * 100) : 0;
-  return { totalActions, proven, mismatches, needsAttention, pendingApprovals, openIncidents, blockedAttempts, coveragePercent };
+function proofStats(data: HomeData, coverage: NonNullable<HomeData["outcomeGraphCoverage"]>): ProofStats {
+  const counts = coverage.counts;
+  const mismatches = (counts.wrong ?? 0) + (counts.missing ?? 0) + (counts.forbidden ?? 0) + (counts.duplicate ?? 0);
+  const needsAttention = (counts.unknown ?? 0) + (counts.stale ?? 0) + (counts.conflicted ?? 0);
+  return {
+    totalActions: coverage.total,
+    proven: counts.verified ?? 0,
+    mismatches,
+    needsAttention,
+    pendingApprovals: data.homeSummary?.metrics.pending_approvals ?? 0,
+    openIncidents: data.incidents.filter((item) => item.status !== "resolved").length,
+    blockedAttempts: data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length,
+    coveragePercent: Math.round(coverage.coverage_percent),
+  };
 }
 
 function homePosture(stats: ProofStats, unavailableCount: number, readiness: ReadinessRow[]): PostureStatus {
@@ -816,7 +784,7 @@ function ProofMetricsStrip({ stats, loading }: { stats: ProofStats; loading: boo
     { label: "Mismatches caught", value: stats.mismatches, href: "/operations", tone: "critical", Icon: ShieldAlert },
     { label: "Proven outcomes", value: stats.proven, href: "/evidence", tone: "ready", Icon: ShieldCheck },
     { label: "Needs attention", value: stats.needsAttention, href: "/evidence?filter=needs_attention", tone: "stale", Icon: AlertTriangle },
-    { label: "Open incidents", value: stats.openIncidents, href: "/operations", tone: "critical", Icon: BellDot },
+    { label: "Open incidents", value: stats.openIncidents, href: "/operations?view=incidents", tone: "critical", Icon: BellDot },
     { label: "Pending approvals", value: stats.pendingApprovals, href: "/operations", tone: "pending", Icon: LockKeyhole },
     { label: "Coverage", value: `${stats.coveragePercent}%`, href: "/evidence", tone: "neutral", Icon: BarChart3 },
   ];
@@ -1055,7 +1023,7 @@ function HomeUnavailable({ errorCount, onRefresh }: { errorCount: number; onRefr
       <div>
         <p className="zh-kicker">Proof posture unavailable</p>
         <h2>{errorCount} source feed unavailable</h2>
-        <p>ZROKY could not load the proof surface. No safe or unsafe posture is being inferred.</p>
+        <p>Zroky could not load verified actions and incidents. No status is being inferred.</p>
       </div>
       <button className="zh-btn zh-btn-primary" type="button" onClick={onRefresh}>
         Retry
@@ -1191,11 +1159,11 @@ export default function HomePage() {
 
   const canAct = canChangeHomeSetup(projectRole);
   const demoMode = localDemoHomeEnabled();
-  const stats = proofStats(data);
+  const stats = data.outcomeGraphCoverage ? proofStats(data, data.outcomeGraphCoverage) : null;
   const readiness = buildReadinessRows(data, availability);
-  const status = homePosture(stats, loadErrors, readiness);
-  const blocker = blockerText(status, stats, readiness);
-  const active = activityExists(stats);
+  const status = stats ? homePosture(stats, loadErrors, readiness) : null;
+  const blocker = stats && status ? blockerText(status, stats, readiness) : "";
+  const active = stats ? activityExists(stats) : false;
   const attentionRows = buildAttentionRows(data);
   const displayedAttentionRows = demoMode ? DEMO_ATTENTION_ROWS : attentionRows;
   const proofEvents = buildProofEvents(data);
@@ -1203,7 +1171,7 @@ export default function HomePage() {
   const loading = isLoading && lastLoadedAt == null;
   const authRequired = loadIssue === "auth" && lastLoadedAt == null && !loading;
   const loadFailed = loadIssue === "source" && loadErrors > 0 && lastLoadedAt == null && !loading;
-  const firstRun = !active && !loading && !loadFailed && !authRequired;
+  const firstRun = stats !== null && !active && !loading && !loadFailed && !authRequired;
 
   function setWindowDays(days: number) {
     const to = new Date();
@@ -1224,8 +1192,17 @@ export default function HomePage() {
       {authRequired ? <HomeAuthRequired /> : null}
       {loadFailed ? <HomeUnavailable errorCount={loadErrors} onRefresh={() => void load()} /> : null}
       {firstRun ? <FirstRunSetup canAct={canAct} /> : null}
+      {loading && stats === null ? (
+        <section className="zh-card zh-home-unavailable" aria-label="Loading verified Home data" aria-busy="true">
+          <div>
+            <p className="zh-kicker">Loading</p>
+            <h2>Loading verified data</h2>
+            <p>Waiting for verified actions and incidents.</p>
+          </div>
+        </section>
+      ) : null}
 
-      {!firstRun && !loadFailed && !authRequired ? (
+      {stats !== null && status !== null && !firstRun && !loadFailed && !authRequired ? (
         <>
           <VerdictHero
             stats={stats}

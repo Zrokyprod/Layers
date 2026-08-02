@@ -581,7 +581,7 @@ function AgentFacet({
   );
 }
 
-function selectionFromUrl(): { id: string; tab: OpsTab } | null {
+function selectionFromUrl(): { id: string | null; tab: OpsTab } | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
   const incidentId = params.get("incident_id");
@@ -590,6 +590,8 @@ function selectionFromUrl(): { id: string; tab: OpsTab } | null {
   if (approvalId) return { id: approvalId, tab: "approvals" };
   const runId = params.get("run_id");
   if (runId) return { id: runId, tab: "runs" };
+  const view = params.get("view");
+  if (TABS.some((tab) => tab.id === view)) return { id: null, tab: view as OpsTab };
   return null;
 }
 
