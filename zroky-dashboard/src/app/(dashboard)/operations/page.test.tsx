@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { readdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDashboardStore } from "@/lib/store";
@@ -79,6 +81,13 @@ function operationViewButton(name: RegExp | string) {
   return within(screen.getByLabelText("Operations views")).getByRole("button", { name });
 }
 
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(directory, entry.name);
+    return entry.isDirectory() ? sourceFiles(path) : [path];
+  });
+}
+
 describe("OperationsPage", () => {
   beforeEach(() => {
     window.history.pushState(null, "", "/operations");
@@ -127,7 +136,7 @@ describe("OperationsPage", () => {
           agent_ref: "stripe-agent",
           status: "verified",
           run_digest: "run_digest_abcdef1234567890",
-          run: {},
+          run: { action_id: "action_1" },
           started_at: "2026-07-21T09:59:00Z",
           finished_at: "2026-07-21T10:00:00Z",
           created_at: "2026-07-21T10:00:00Z",
@@ -146,6 +155,7 @@ describe("OperationsPage", () => {
         resolved_at: null,
         incident: {
           deviation_type: "Mismatch in payroll export",
+          intent_id: "intent_incident_1",
           reason: "Source-of-truth file did not contain the claimed payroll export.",
           source_system: "Workday Payroll",
           agent_ref: "Payroll Export WF",
@@ -413,6 +423,47 @@ describe("OperationsPage", () => {
     render(<OperationsPage />);
 
     expect(await screen.findByLabelText("Incidents table")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["intent_id=intent_incident_1", "Incidents table", "Mismatch in payroll export"],
+    ["intent_id=intent_1", "Runs table", "refund-workflow"],
+    ["decision_id=policy_1", "Approvals table", "Approval required: admin"],
+    ["action_id=action_1", "Runs table", "refund-workflow"],
+  ])("resolves Operations deep-link %s to its exact row", async (query, tableLabel, heading) => {
+    window.history.pushState(null, "", `/operations?${query}`);
+
+    render(<OperationsPage />);
+
+    expect(await screen.findByLabelText(tableLabel)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
+  it("applies agent_name as a Runs facet", async () => {
+    window.history.pushState(null, "", "/operations?agent_name=stripe-agent");
+
+    render(<OperationsPage />);
+
+    expect(await screen.findByLabelText("Runs table")).toBeInTheDocument();
+    const agent = within(screen.getByLabelText("Agent summary")).getByRole("button", { name: /stripe-agent/i });
+    expect(agent.getAttribute("data-active")).toBe("true");
+  });
+
+  it("handles every Operations query parameter emitted by production source", () => {
+    const srcRoot = resolve(process.cwd(), "src");
+    const params = new Set<string>();
+    for (const file of sourceFiles(srcRoot).filter((path) => /\.(ts|tsx)$/.test(path) && !path.includes(".test."))) {
+      const source = readFileSync(file, "utf8");
+      for (const link of source.matchAll(/\/operations\?([^"'`\s]*)/g)) {
+        for (const query of link[1].matchAll(/(?:^|&)([a-z_]+)=/g)) params.add(query[1]);
+      }
+    }
+
+    const operationsSource = readFileSync(resolve(srcRoot, "app", "(dashboard)", "operations", "page.tsx"), "utf8");
+    expect([...params].sort()).toEqual([
+      "action_id", "agent_name", "approval_id", "decision_id", "incident_id", "intent_id", "run_id", "view",
+    ]);
+    for (const param of params) expect(operationsSource).toContain(`params.get("${param}")`);
   });
 
   it("applies cross-cutting filters without duplicating tab navigation", async () => {

@@ -581,17 +581,58 @@ function AgentFacet({
   );
 }
 
-function selectionFromUrl(): { id: string | null; tab: OpsTab } | null {
+type OperationsUrlSelection = { agentName: string | null; id: string | null; tab: OpsTab };
+
+function selectionFromUrl(
+  runs: FinalRunResponse[],
+  incidents: FinalIncidentResponse[],
+  approvals: FinalApprovalRequirementResponse[],
+): OperationsUrlSelection | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
   const incidentId = params.get("incident_id");
-  if (incidentId) return { id: incidentId, tab: "incidents" };
+  if (incidentId) return { agentName: null, id: incidentId, tab: "incidents" };
   const approvalId = params.get("approval_id");
-  if (approvalId) return { id: approvalId, tab: "approvals" };
+  if (approvalId) return { agentName: null, id: approvalId, tab: "approvals" };
   const runId = params.get("run_id");
-  if (runId) return { id: runId, tab: "runs" };
+  if (runId) return { agentName: null, id: runId, tab: "runs" };
+
+  const intentId = params.get("intent_id");
+  if (intentId) {
+    const incident = incidents.find((item) => recordOptionalText(item.incident, "intent_id") === intentId);
+    if (incident) return { agentName: null, id: incident.id, tab: "incidents" };
+    const run = runs.find((item) => item.intent_id === intentId);
+    if (run) return { agentName: null, id: run.id, tab: "runs" };
+    const approval = approvals.find((item) => item.intent_id === intentId);
+    return { agentName: null, id: approval?.id ?? intentId, tab: approval ? "approvals" : "runs" };
+  }
+
+  const decisionId = params.get("decision_id");
+  if (decisionId) {
+    const approval = approvals.find((item) => item.policy_decision_id === decisionId || item.id === decisionId);
+    return { agentName: null, id: approval?.id ?? decisionId, tab: "approvals" };
+  }
+
+  const actionId = params.get("action_id");
+  if (actionId) {
+    const run = runs.find((item) => {
+      const metadata = item.run.metadata;
+      const metadataRecord = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : {};
+      return [
+        item.external_run_id,
+        recordOptionalText(item.run, "action_id"),
+        recordOptionalText(item.run, "zroky_action_id"),
+        recordOptionalText(metadataRecord, "action_id"),
+        recordOptionalText(metadataRecord, "zroky_action_id"),
+      ].includes(actionId);
+    });
+    return { agentName: null, id: run?.id ?? actionId, tab: "runs" };
+  }
+
+  const agentName = params.get("agent_name");
+  if (agentName) return { agentName, id: null, tab: "runs" };
   const view = params.get("view");
-  if (TABS.some((tab) => tab.id === view)) return { id: null, tab: view as OpsTab };
+  if (TABS.some((tab) => tab.id === view)) return { agentName: null, id: null, tab: view as OpsTab };
   return null;
 }
 
@@ -919,6 +960,7 @@ function recoveryIdempotencyKey(incidentId: string): string {
 export default function OperationsPage() {
   const queryClient = useQueryClient();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const deepLinkHandled = useRef(false);
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const liveQueryOptions = { refetchInterval: realTimeEnabled ? 30_000 : false as const };
@@ -1024,7 +1066,9 @@ export default function OperationsPage() {
     },
     onError: (error) => setActionError(errorText(error)),
   });
-  const selectedRow = displayedRows.find((row) => row.id === selectedId) ?? displayedRows[0] ?? null;
+  const selectedRow = selectedId === null
+    ? displayedRows[0] ?? null
+    : displayedRows.find((row) => row.id === selectedId) ?? null;
   const openIncidents = incidentItems.filter((item) => item.status !== "resolved").length;
   const pendingApprovals = approvalItems.filter((item) => item.status === "pending").length;
   const unverifiable = rows.filter((row) => row.type === "Unverifiable").length;
@@ -1040,12 +1084,15 @@ export default function OperationsPage() {
   }, []);
 
   useEffect(() => {
-    const selection = selectionFromUrl();
+    if (deepLinkHandled.current || isLoading) return;
+    const selection = selectionFromUrl(runItems, incidentItems, approvalItems);
+    deepLinkHandled.current = true;
     if (selection) {
       setActiveTab(selection.tab);
       setSelectedId(selection.id);
+      setActiveAgent(selection.agentName);
     }
-  }, []);
+  }, [approvalItems, incidentItems, isLoading, runItems]);
 
   function selectRow(row: OpsRow) {
     setSelectedId(row.id);
