@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronRight, Database, FileJson, GitBranch, Rocket, ShieldCheck, Workflow } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import {
+  listAssurancePacks,
   publishAssurancePack,
   validateAssurancePack,
   type AssurancePackJson,
@@ -20,157 +21,43 @@ const STARTER_PACK: AssurancePackJson = {
   workflow_key: "refund_resolution",
   version: "1.0.0",
   intent_schema: {
-    required: ["customer_id", "amount_usd"],
+    type: "object",
+    required: ["charge_id", "amount_minor", "currency"],
     properties: {
-      customer_id: { type: "string" },
-      amount_usd: { type: "number" },
+      charge_id: { type: "string" },
+      amount_minor: { type: "integer" },
+      currency: { type: "string" },
     },
   },
   object_types: [
     {
-      name: "refund",
-      schema: {
-        required: ["id", "customer_id", "amount_usd", "status"],
-      },
+      key: "refund",
+      schema: { type: "object" },
     },
   ],
   effects: [
     {
-      name: "refund_created",
+      key: "refund_created",
       object_type: "refund",
-      cardinality: "exactly_one",
-      predicate: "refund.customer_id == intent.customer_id && refund.amount_usd == intent.amount_usd",
+      predicate: "refund.status == 'posted' && refund.amount_minor == intent.amount_minor && refund.currency == intent.currency && refund.charge_id == intent.charge_id",
     },
   ],
   source_bindings: [
     {
-      name: "ledger_refunds",
-      connector: "ledger",
+      key: "stripe_refund_read",
+      connector_capability: "stripe_refund.read",
       object_type: "refund",
       freshness_seconds: 300,
     },
   ],
   recovery_playbooks: [
     {
-      name: "manual_refund_review",
-      trigger: "missing_or_conflicting_refund",
-      steps: ["Hold downstream communication", "Open finance review ticket", "Attach evidence bundle"],
+      key: "reissue_refund",
+      incident_type: "missing_refund",
+      steps: [],
     },
   ],
 };
-
-type WorkflowCatalogItem = {
-  description: string;
-  owner: string;
-  pack: AssurancePackJson;
-  policy: string;
-  sla: string;
-  source: string;
-  status: "active" | "draft" | "needs_binding";
-  versions: string[];
-};
-
-const WORKFLOW_CATALOG: WorkflowCatalogItem[] = [
-  {
-    description: "Customer refund actions must match the ledger refund object before evidence is trusted.",
-    owner: "Finance Ops",
-    pack: STARTER_PACK,
-    policy: "High-value refunds require approval",
-    sla: "Resolve mismatches in 4h",
-    source: "stripe_refunds",
-    status: "draft",
-    versions: ["1.0.0"],
-  },
-  {
-    description: "Payroll exports must be independently observed in Workday before downstream release.",
-    owner: "People Ops",
-    pack: {
-      ...STARTER_PACK,
-      workflow_key: "payroll_export",
-      version: "0.9.0",
-      intent_schema: {
-        required: ["batch_id"],
-        properties: {
-          batch_id: { type: "string" },
-        },
-      },
-      object_types: [
-        {
-          name: "payroll_export",
-          schema: {
-            required: ["id", "batch_id", "status"],
-          },
-        },
-      ],
-      effects: [
-        {
-          name: "payroll_export_observed",
-          object_type: "payroll_export",
-          cardinality: "exactly_one",
-          predicate: "export.batch_id == intent.batch_id && export.status == 'complete'",
-        },
-      ],
-      source_bindings: [
-        {
-          name: "workday_payroll",
-          connector: "workday",
-          object_type: "payroll_export",
-          freshness_seconds: 600,
-        },
-      ],
-    },
-    policy: "Payroll exports require owner approval",
-    sla: "Investigate unverifiable exports in 1h",
-    source: "workday_payroll",
-    status: "needs_binding",
-    versions: ["0.8.0", "0.9.0"],
-  },
-  {
-    description: "Vendor payment claims must match the bank/payment system before proof is exportable.",
-    owner: "Finance Ops",
-    pack: {
-      ...STARTER_PACK,
-      workflow_key: "vendor_payment",
-      version: "1.2.0",
-      intent_schema: {
-        required: ["vendor_id", "amount_usd"],
-        properties: {
-          amount_usd: { type: "number" },
-          vendor_id: { type: "string" },
-        },
-      },
-      object_types: [
-        {
-          name: "payment",
-          schema: {
-            required: ["id", "vendor_id", "amount_usd", "status"],
-          },
-        },
-      ],
-      effects: [
-        {
-          name: "payment_settled",
-          object_type: "payment",
-          cardinality: "exactly_one",
-          predicate: "payment.vendor_id == intent.vendor_id && payment.amount_usd == intent.amount_usd",
-        },
-      ],
-      source_bindings: [
-        {
-          name: "payment_ledger",
-          connector: "stripe",
-          object_type: "payment",
-          freshness_seconds: 300,
-        },
-      ],
-    },
-    policy: "Exceptions require controller approval",
-    sla: "Contain mismatches in 30m",
-    source: "ap_system",
-    status: "active",
-    versions: ["1.0.0", "1.1.0", "1.2.0"],
-  },
-];
 
 type ResultState =
   | { type: "idle"; message: string }
@@ -251,28 +138,45 @@ function StatusBadge({ children, tone }: { children: string; tone: WorkflowTone 
   );
 }
 
-function Sparkline({ tone }: { tone: WorkflowTone }) {
-  return (
-    <svg className={styles.sparkline} viewBox="0 0 96 22" aria-hidden="true" data-tone={tone}>
-      <polyline points="3,16 20,13 37,15 54,8 72,10 93,5" />
-    </svg>
-  );
-}
-
 export default function WorkflowsPage() {
-  const [selectedWorkflowKey, setSelectedWorkflowKey] = useState("payroll_export");
-  const selectedWorkflow = WORKFLOW_CATALOG.find((workflow) => workflow.pack.workflow_key === selectedWorkflowKey) ?? WORKFLOW_CATALOG[0];
-  const [draft, setDraft] = useState(() => prettyJson(selectedWorkflow.pack));
+  const [packs, setPacks] = useState<AssurancePackResponse[]>([]);
+  const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
+  const [packsLoading, setPacksLoading] = useState(true);
+  const [packsError, setPacksError] = useState<string | null>(null);
+  const [draft, setDraft] = useState(() => prettyJson(STARTER_PACK));
   const [environment, setEnvironment] = useState("production");
   const [result, setResult] = useState<ResultState>({
     type: "idle",
     message: "No validation has run yet.",
   });
   const [busy, setBusy] = useState<"validate" | "publish" | null>(null);
+  const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? null;
 
-  function selectWorkflow(workflow: WorkflowCatalogItem) {
-    setSelectedWorkflowKey(String(workflow.pack.workflow_key ?? ""));
-    setDraft(prettyJson(workflow.pack));
+  useEffect(() => {
+    const controller = new AbortController();
+    setPacksLoading(true);
+    setPacksError(null);
+    setPacks([]);
+    setSelectedPackId(null);
+    void listAssurancePacks(environment, controller.signal)
+      .then((items) => {
+        setPacks(items);
+        const first = items[0] ?? null;
+        setSelectedPackId(first?.id ?? null);
+        setDraft(prettyJson(first?.pack ?? STARTER_PACK));
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setPacksError(errorMessage(error));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPacksLoading(false);
+      });
+    return () => controller.abort();
+  }, [environment]);
+
+  function selectWorkflow(pack: AssurancePackResponse) {
+    setSelectedPackId(pack.id);
+    setDraft(prettyJson(pack.pack));
     setResult({ type: "idle", message: "No validation has run yet." });
   }
 
@@ -285,65 +189,61 @@ export default function WorkflowsPage() {
     }
   }, [draft]);
 
-  const tone = statusTone(result, parsedDraft.error);
+  const tone = selectedPack && result.type === "idle" ? "ready" : statusTone(result, parsedDraft.error);
   const summary = parsedDraft.summary;
-  const validationLabel = parsedDraft.error ? "Invalid draft" : result.type === "published" ? "Published" : result.type === "validated" ? "Validated" : "Needs validation";
-  const activePacks = WORKFLOW_CATALOG.filter((workflow) => workflow.status === "active").length;
-  const needsBinding = WORKFLOW_CATALOG.filter((workflow) => workflow.status === "needs_binding").length;
+  const validationLabel = parsedDraft.error
+    ? "Invalid draft"
+    : result.type === "published"
+      ? "Published"
+      : result.type === "validated"
+        ? "Validated"
+        : selectedPack?.status ?? "Unpublished draft";
+  const activePacks = packs.filter((pack) => pack.status === "active").length;
+  const needsBinding = packs.filter((pack) => {
+    const item = packSummary(pack.pack);
+    return item.effects.length === 0 || item.sourceBindings.length === 0;
+  }).length;
   const sourceBindings = summary?.sourceBindings ?? [];
   const expectedEffects = summary?.effects ?? [];
   const recoveryPlaybooks = summary?.recoveryPlaybooks ?? [];
+  const selectedVersions = packs.filter((pack) => pack.workflow_key === summary?.workflowKey).map((pack) => pack.version);
   const workflowRows = [
     {
       label: "Expected outcome",
-      value: fieldValue(expectedEffects[0], "name", "No effect defined"),
+      value: fieldValue(expectedEffects[0], "key", "No effect defined"),
       detail: fieldValue(expectedEffects[0], "predicate", "Agent outcome cannot be verified without an expected effect."),
       status: expectedEffects.length > 0 ? "Ready" : "Blocked",
       tone: expectedEffects.length > 0 ? "ready" : "critical",
     },
     {
       label: "Source-of-truth binding",
-      value: fieldValue(sourceBindings[0], "name", "No source binding"),
+      value: fieldValue(sourceBindings[0], "key", "No source binding"),
       detail: sourceBindings.length > 0
-        ? `${fieldValue(sourceBindings[0], "connector")} · freshness ${fieldValue(sourceBindings[0], "freshness_seconds")}s`
+        ? `${fieldValue(sourceBindings[0], "connector_capability")} / freshness ${fieldValue(sourceBindings[0], "freshness_seconds")}s`
         : "Connectors must provide read-only proof access.",
       status: sourceBindings.length > 0 ? "Ready" : "Blocked",
       tone: sourceBindings.length > 0 ? "ready" : "critical",
     },
     {
-      label: "Policy guardrails",
-      value: "Bound at policy check",
-      detail: "Approval and deny rules are evaluated before execution.",
-      status: "Linked",
-      tone: "neutral",
-    },
-    {
-      label: "SLA / owner",
-      value: "Not defined in pack",
-      detail: "Add only when Operations needs real SLA breach math.",
-      status: "Missing",
-      tone: "warning",
-    },
-    {
       label: "Recovery path",
-      value: fieldValue(recoveryPlaybooks[0], "name", "No recovery playbook"),
-      detail: recoveryPlaybooks.length > 0 ? fieldValue(recoveryPlaybooks[0], "trigger") : "Mismatches will require manual handling.",
+      value: fieldValue(recoveryPlaybooks[0], "key", "No recovery playbook"),
+      detail: recoveryPlaybooks.length > 0 ? fieldValue(recoveryPlaybooks[0], "incident_type") : "Mismatches will require manual handling.",
       status: recoveryPlaybooks.length > 0 ? "Ready" : "Missing",
       tone: recoveryPlaybooks.length > 0 ? "ready" : "warning",
     },
   ] as const satisfies ReadonlyArray<{ detail: string; label: string; status: string; tone: WorkflowTone; value: string }>;
   const statusCards = [
     {
-      detail: needsBinding > 0 ? "Missing binding and SLA / owner." : "Ready to publish.",
-      status: needsBinding > 0 ? "Blocked" : "OK",
+      detail: sourceBindings.length > 0 && expectedEffects.length > 0 ? "Effect and source binding present." : "Binding or effect missing.",
+      status: sourceBindings.length > 0 && expectedEffects.length > 0 ? "OK" : "Blocked",
       title: "Publish gate",
-      tone: needsBinding > 0 ? "critical" as WorkflowTone : "ready" as WorkflowTone,
+      tone: sourceBindings.length > 0 && expectedEffects.length > 0 ? "ready" as WorkflowTone : "critical" as WorkflowTone,
     },
     {
-      detail: parsedDraft.error ?? (result.type === "idle" ? "Draft parse check passed." : result.message),
-      status: parsedDraft.error || result.type === "error" ? "Blocked" : "OK",
+      detail: packsError ?? parsedDraft.error ?? (result.type === "idle" ? "No validation run for this draft." : result.message),
+      status: packsError || parsedDraft.error || result.type === "error" ? "Blocked" : "OK",
       title: "Backend response",
-      tone: parsedDraft.error || result.type === "error" ? "critical" as WorkflowTone : "ready" as WorkflowTone,
+      tone: packsError || parsedDraft.error || result.type === "error" ? "critical" as WorkflowTone : "ready" as WorkflowTone,
     },
     {
       detail: sourceBindings.length > 0 && expectedEffects.length > 0 ? "Contract schema and bindings valid." : "Binding or effect missing.",
@@ -376,6 +276,8 @@ export default function WorkflowsPage() {
       const pack = parseDraft(draft);
       await validateAssurancePack(pack);
       const response = await publishAssurancePack(pack, environment);
+      setPacks((items) => [response, ...items.filter((item) => item.id !== response.id)]);
+      setSelectedPackId(response.id);
       setResult({
         type: "published",
         message: `${response.workflow_key}@${response.version} published to ${response.environment}.`,
@@ -404,10 +306,10 @@ export default function WorkflowsPage() {
             <h2>{summary?.workflowKey ?? "Assurance Pack draft"}</h2>
             <StatusBadge tone={tone}>{validationLabel}</StatusBadge>
           </div>
-          <p>Workflow for exporting payroll data with policy-bound approval and verification.</p>
+          <p>Expected effects and source bindings used to verify this workflow.</p>
           <code className={styles.denominator}>
             {summary
-              ? `${summary.workflowKey} · v${summary.version} · ${summary.effects.length} effects · ${summary.sourceBindings.length} sources · ${environment}`
+              ? `${summary.workflowKey} / v${summary.version} / ${summary.effects.length} effects / ${summary.sourceBindings.length} sources / ${environment}`
               : "Draft cannot be parsed yet"}
           </code>
         </div>
@@ -435,12 +337,12 @@ export default function WorkflowsPage() {
 
       <section className={styles.metricStrip} aria-label="Workflow contract metrics">
         {[
-          { label: "Assurance Packs", value: String(WORKFLOW_CATALOG.length), tone: "neutral" as WorkflowTone, icon: Workflow },
+          { label: "Assurance Packs", value: packsLoading ? "-" : String(packs.length), tone: "neutral" as WorkflowTone, icon: Workflow },
           { label: "Active packs", value: String(activePacks), tone: activePacks > 0 ? "ready" as WorkflowTone : "warning" as WorkflowTone, icon: ShieldCheck },
           { label: "Needs binding", value: String(needsBinding), tone: needsBinding > 0 ? "warning" as WorkflowTone : "ready" as WorkflowTone, icon: Database },
           { label: "Intent fields", value: String(summary?.intentFields.length ?? 0), tone: "neutral" as WorkflowTone, icon: FileJson },
-          { label: "Versions", value: String(selectedWorkflow.versions.length), tone: "neutral" as WorkflowTone, icon: GitBranch },
-          { label: "Publish state", value: result.type === "published" ? "active" : "draft", tone, icon: Rocket },
+          { label: "Versions", value: String(selectedVersions.length), tone: "neutral" as WorkflowTone, icon: GitBranch },
+          { label: "Publish state", value: selectedPack?.status ?? (result.type === "published" ? "active" : "draft"), tone, icon: Rocket },
         ].map(({ label, value, tone: itemTone, icon: Icon }) => (
           <article className={styles.metricCell} data-tone={itemTone} key={label}>
             <span>
@@ -448,7 +350,6 @@ export default function WorkflowsPage() {
               {label}
             </span>
             <strong>{value}</strong>
-            <Sparkline tone={itemTone} />
           </article>
         ))}
       </section>
@@ -465,32 +366,35 @@ export default function WorkflowsPage() {
               <span>Pack</span>
               <span>Status</span>
               <span>Source</span>
-              <span>Owner</span>
+              <span>Environment</span>
               <span>Version</span>
               <span>Action</span>
             </div>
-            {WORKFLOW_CATALOG.map((workflow) => {
-              const workflowKey = String(workflow.pack.workflow_key ?? "");
-              const selected = workflowKey === selectedWorkflowKey;
-              const itemTone: WorkflowTone = workflow.status === "active" ? "ready" : workflow.status === "needs_binding" ? "warning" : "neutral";
+            {packsLoading ? <p className={styles.packEmpty} role="status">Loading published packs...</p> : null}
+            {!packsLoading && packs.length === 0 ? <p className={styles.packEmpty}>No Assurance Packs published in {environment}.</p> : null}
+            {packs.map((pack) => {
+              const item = packSummary(pack.pack);
+              const source = fieldValue(item.sourceBindings[0], "connector_capability", "No source binding");
+              const selected = pack.id === selectedPackId;
+              const itemTone: WorkflowTone = pack.status === "active" ? "ready" : "neutral";
               return (
                 <button
                   className={styles.packRow}
                   data-selected={selected ? "true" : undefined}
-                  key={workflowKey}
-                  onClick={() => selectWorkflow(workflow)}
+                  key={pack.id}
+                  onClick={() => selectWorkflow(pack)}
                   type="button"
                 >
                   <span className={styles.packName}>
-                    <strong>{workflowKey}</strong>
-                    <small>{workflow.description}</small>
+                    <strong>{pack.workflow_key}</strong>
+                    <small>{item.effects.length} effects / {item.sourceBindings.length} sources</small>
                   </span>
                   <span>
-                    <StatusBadge tone={itemTone}>{workflow.status.replace("_", " ")}</StatusBadge>
+                    <StatusBadge tone={itemTone}>{pack.status}</StatusBadge>
                   </span>
-                  <code>{workflow.source}</code>
-                  <span>{workflow.owner}</span>
-                  <code>{String(workflow.pack.version ?? "-")}</code>
+                  <code>{source}</code>
+                  <span>{pack.environment}</span>
+                  <code>{pack.version}</code>
                   <span className={styles.packAction} aria-hidden="true">...</span>
                 </button>
               );
@@ -506,11 +410,11 @@ export default function WorkflowsPage() {
           </div>
           <div className={styles.bindingGrid}>
             {[
-              ["Source", selectedWorkflow.source],
-              ["Policy", selectedWorkflow.policy],
-              ["SLA", selectedWorkflow.sla],
-              ["Owner", selectedWorkflow.owner],
-              ["Versions", selectedWorkflow.versions.join(" -> ")],
+              ["Source", fieldValue(sourceBindings[0], "connector_capability", "No source binding")],
+              ["Environment", selectedPack?.environment ?? environment],
+              ["Digest", selectedPack?.pack_digest ?? "Unpublished draft"],
+              ["Versions", selectedVersions.join(" -> ") || "Unpublished"],
+              ["Status", selectedPack?.status ?? "draft"],
             ].map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>

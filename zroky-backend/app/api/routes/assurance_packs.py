@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -132,6 +132,21 @@ def create_pack(
     db.commit()
     db.refresh(row)
     return _response(row)
+
+
+@router.get("", response_model=list[AssurancePackResponse])
+@limiter.limit("120/minute")
+def list_packs(
+    request: Request,
+    environment: str | None = Query(default=None, min_length=1, max_length=64),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> list[AssurancePackResponse]:
+    statement = select(FinalAssurancePack).where(FinalAssurancePack.project_id == context.tenant_id)
+    if environment is not None:
+        statement = statement.where(FinalAssurancePack.environment == environment.strip().lower())
+    rows = db.execute(statement.order_by(FinalAssurancePack.created_at.desc())).scalars().all()
+    return [_response(row) for row in rows]
 
 
 @router.get("/{pack_id}", response_model=AssurancePackResponse)

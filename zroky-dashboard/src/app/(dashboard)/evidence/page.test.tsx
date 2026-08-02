@@ -129,6 +129,26 @@ describe("EvidencePage", () => {
     ));
   });
 
+  it("loads every indexed classification in a compound caught filter", async () => {
+    api.fetchOutcomeGraphs.mockImplementation(async ({ classification }) => ({
+      items: classification ? [graph({ classification, id: `graph_${classification}` })] : [graph()],
+    }));
+    renderEvidencePage();
+    await screen.findByRole("heading", { name: "8 actions claimed but not proven" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Caught" }));
+
+    await waitFor(() => {
+      for (const classification of ["wrong", "missing", "forbidden", "duplicate"]) {
+        expect(api.fetchOutcomeGraphs).toHaveBeenCalledWith(
+          expect.objectContaining({ classification, limit: 100 }),
+          expect.any(AbortSignal),
+        );
+      }
+    });
+    expect(await screen.findByText("4 of 8 shown")).toBeInTheDocument();
+  });
+
   it("renders integrations CTA for a no_connector drill-down", async () => {
     api.fetchOutcomeGraphs.mockResolvedValue({
       items: [
@@ -142,9 +162,9 @@ describe("EvidencePage", () => {
 
     renderEvidencePage();
 
-    await screen.findByText("Is system ka connector configured nahi hai");
+    await screen.findByText("This system does not have a configured connector");
     const panel = screen.getByLabelText("Focused proof panel");
-    expect(within(panel).getByText("Is system ka connector configured nahi hai")).toBeInTheDocument();
+    expect(within(panel).getByText("This system does not have a configured connector")).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "Open integrations" }).getAttribute("href")).toBe("/integrations");
     expect(within(panel).getByText("obs_digest_1")).toBeInTheDocument();
   });
