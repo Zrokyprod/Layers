@@ -290,6 +290,13 @@
   display: grid;
 }
 
+.packEmpty {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .packTableHead,
 .packRow {
   display: grid;

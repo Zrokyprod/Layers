@@ -1046,6 +1046,13 @@ def test_workflow_assurance_pack_schema_and_immutable_version(client: TestClient
     assert fetched.status_code == 200
     assert fetched.json()["pack"] == pack
 
+    listed = client.get("/v1/assurance-packs?environment=production")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [body["id"]]
+    client.tenant_project["value"] = "proj_other"
+    assert client.get("/v1/assurance-packs?environment=production").json() == []
+    client.tenant_project["value"] = "proj_test"
+
     playbooks = client.get("/v1/recovery/playbooks")
     assert playbooks.status_code == 200
     item = playbooks.json()["items"][0]

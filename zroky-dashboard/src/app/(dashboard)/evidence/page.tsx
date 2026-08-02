@@ -30,8 +30,8 @@ type EvidenceVerdict = {
   tone: "danger" | "neutral" | "success" | "warning";
 };
 
-const caughtClassifications = new Set<OutcomeGraphClassification>(["wrong", "missing", "forbidden", "duplicate"]);
-const attentionClassifications = new Set<OutcomeGraphClassification>(["stale", "conflicted", "unknown"]);
+const caughtClassifications: OutcomeGraphClassification[] = ["wrong", "missing", "forbidden", "duplicate"];
+const attentionClassifications: OutcomeGraphClassification[] = ["stale", "conflicted", "unknown"];
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
@@ -54,10 +54,12 @@ function replaceUrl(href: string) {
   }
 }
 
-function classificationParam(filter: EvidenceLedgerFilter): OutcomeGraphClassification | undefined {
-  if (filter === "proven") return "verified";
-  if (filter === "pending") return "pending";
-  return undefined;
+function classificationParams(filter: EvidenceLedgerFilter): OutcomeGraphClassification[] {
+  if (filter === "proven") return ["verified"];
+  if (filter === "caught") return caughtClassifications;
+  if (filter === "pending") return ["pending"];
+  if (filter === "needs_attention") return attentionClassifications;
+  return [];
 }
 
 function counts(summary: OutcomeGraphCoverageSummary | undefined): OutcomeGraphCoverageSummary["counts"] {
@@ -185,14 +187,24 @@ function metricsForSummary(summary: OutcomeGraphCoverageSummary | undefined): Ev
   ];
 }
 
-function clientFilter(rows: EvidenceLedgerRow[], filter: EvidenceLedgerFilter): EvidenceLedgerRow[] {
-  if (filter === "caught") {
-    return rows.filter((row) => caughtClassifications.has(row.classification ?? "unknown"));
-  }
-  if (filter === "needs_attention") {
-    return rows.filter((row) => attentionClassifications.has(row.classification ?? "unknown"));
-  }
-  return rows;
+function totalForFilter(summary: OutcomeGraphCoverageSummary | undefined, filter: EvidenceLedgerFilter): number {
+  if (!summary) return 0;
+  if (filter === "all") return summary.total;
+  const value = counts(summary);
+  return classificationParams(filter).reduce((total, classification) => total + value[classification], 0);
+}
+
+async function fetchGraphsForFilter(filter: EvidenceLedgerFilter, signal?: AbortSignal) {
+  const classifications = classificationParams(filter);
+  if (classifications.length === 0) return fetchOutcomeGraphs({ limit: 100 }, signal);
+  const responses = await Promise.all(
+    classifications.map((classification) => fetchOutcomeGraphs({ classification, limit: 100 }, signal)),
+  );
+  return {
+    items: responses
+      .flatMap((response) => response.items)
+      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)),
+  };
 }
 
 function downloadJsonFile(payload: unknown, filename: string) {
@@ -216,17 +228,14 @@ export default function EvidencePage() {
 
   const graphQuery = useQuery({
     queryKey: ["outcome-graphs", filter],
-    queryFn: ({ signal }) => fetchOutcomeGraphs({ classification: classificationParam(filter), limit: 100 }, signal),
+    queryFn: ({ signal }) => fetchGraphsForFilter(filter, signal),
   });
   const coverageQuery = useQuery({
     queryKey: ["outcome-graphs", "coverage-summary"],
     queryFn: ({ signal }) => fetchOutcomeGraphCoverage(signal),
   });
 
-  const rows = useMemo(
-    () => clientFilter(buildOutcomeGraphLedgerRows(graphQuery.data?.items ?? []), filter),
-    [filter, graphQuery.data?.items],
-  );
+  const rows = useMemo(() => buildOutcomeGraphLedgerRows(graphQuery.data?.items ?? []), [graphQuery.data?.items]);
   const loading = graphQuery.isLoading || coverageQuery.isLoading;
   const error = graphQuery.error || coverageQuery.error;
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
@@ -235,6 +244,7 @@ export default function EvidencePage() {
   const metrics = metricsForSummary(coverageQuery.data);
   const caught = caughtCount(coverageQuery.data);
   const total = coverageQuery.data?.total ?? 0;
+  const filteredTotal = totalForFilter(coverageQuery.data, filter);
   const isRefreshing = graphQuery.isFetching || coverageQuery.isFetching;
 
   useEffect(() => {
@@ -307,9 +317,11 @@ export default function EvidencePage() {
             onExportManifest={exportRows}
             onSearchChange={setSearch}
             onSelectRow={selectRow}
+            projectTotal={total}
             rows={rows}
             search={search}
             selectedRowId={focusedRow?.id ?? null}
+            totalCount={filteredTotal}
           />
         )}
         right={(

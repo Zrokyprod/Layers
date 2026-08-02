@@ -27,7 +27,7 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
   if (row.reasonCode === "no_connector") {
     return (
       <div className="ev-empty-state">
-        <strong>Is system ka connector configured nahi hai</strong>
+        <strong>This system does not have a configured connector</strong>
         <DashboardButtonLink href="/integrations" icon={<ExternalLink size={14} />} variant="primary">
           Open integrations
         </DashboardButtonLink>
@@ -37,7 +37,7 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
   if (row.reasonCode === "runner_offline") {
     return (
       <div className="ev-empty-state">
-        <strong>Private runner offline hai</strong>
+        <strong>The private runner is offline</strong>
         <DashboardButtonLink href="/operations" icon={<ExternalLink size={14} />} variant="primary">
           Open runner status
         </DashboardButtonLink>
@@ -47,7 +47,7 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
   if (row.reasonCode === "sor_unreachable") {
     return (
       <div className="ev-empty-state">
-        <strong>System reachable nahi tha, retry hoga</strong>
+        <strong>The system was unreachable; ZROKY will retry</strong>
         <span>Next check {timeUntil(row.nextCheckAt)}</span>
       </div>
     );
@@ -55,7 +55,7 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
   if (row.reasonCode === "no_sor_trace") {
     return (
       <div className="ev-empty-state">
-        <strong>System of record mein koi matching record nahi mila</strong>
+        <strong>No matching record was found in the system of record</strong>
         <span>This is the finding.</span>
       </div>
     );

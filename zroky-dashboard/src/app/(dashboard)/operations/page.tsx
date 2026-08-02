@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   BarChart3,
   BellDot,
-  ChevronRight,
   ExternalLink,
   LockKeyhole,
   RotateCcw,
@@ -490,18 +489,6 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-function sparklinePoints(seed: number): string {
-  const series = [
-    [4, 16, 22, 12, 34, 8],
-    [7, 18, 30, 42, 58, 76],
-    [11, 24, 18, 31, 22, 28],
-    [8, 36, 26, 48, 42, 54],
-    [4, 12, 8, 20, 16, 22],
-    [12, 20, 30, 44, 62, 72],
-  ][seed] ?? [8, 18, 28, 38, 48, 58];
-  return series.map((value, index) => `${index * 18 + 3},${20 - value / 4}`).join(" ");
-}
-
 function OperationsMetricStrip({
   openIncidents,
   pendingApprovals,
@@ -527,18 +514,14 @@ function OperationsMetricStrip({
   ];
   return (
     <section className={styles.metricStrip} aria-label="Operations metrics">
-      {cells.map(({ label, value, tone, Icon }, index) => (
-        <button className={styles.metricCell} data-tone={tone} type="button" key={label}>
+      {cells.map(({ label, value, tone, Icon }) => (
+        <article className={styles.metricCell} data-tone={tone} key={label}>
           <span>
             <Icon size={15} aria-hidden="true" />
             {label}
           </span>
           <strong>{value}</strong>
-          <svg viewBox="0 0 96 22" aria-hidden="true">
-            <polyline points={sparklinePoints(index)} />
-          </svg>
-          <small>Open detail <ChevronRight size={11} aria-hidden="true" /></small>
-        </button>
+        </article>
       ))}
     </section>
   );

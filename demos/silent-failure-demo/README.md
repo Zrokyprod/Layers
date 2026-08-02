@@ -6,7 +6,7 @@ Five-minute story: an agent says a refund was processed, Stripe says it was not,
 
 ```powershell
 $env:ZROKY_API_BASE="https://api.zroky.com"
-$env:ZROKY_DASHBOARD_URL="https://zroky.com"
+$env:ZROKY_DASHBOARD_URL="https://app.zroky.com"
 $env:ZROKY_PROJECT="<demo-project-id>"
 $env:ZROKY_API_KEY="<project-api-key>"
 $env:ZROKY_ADMIN_BEARER_TOKEN="<admin-or-owner-session-jwt>"

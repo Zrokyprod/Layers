@@ -340,7 +340,7 @@
   border-right: 1px solid var(--border);
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .metricCell:last-child {
@@ -366,47 +366,12 @@
   flex: 0 0 auto;
 }
 
-.metricCell small svg {
-  width: 11px;
-  height: 11px;
-  flex: 0 0 auto;
-}
-
 .metricCell strong {
   color: var(--text);
   font-family: var(--mono);
   font-size: 25px;
   font-weight: 760;
   letter-spacing: -0.055em;
-}
-
-.metricCell > svg {
-  width: 100%;
-  height: 22px;
-}
-
-.metricCell > svg polyline {
-  fill: none;
-  stroke: rgba(165, 180, 252, 0.74);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-}
-
-.metricCell[data-tone="critical"] > svg polyline {
-  stroke: var(--red);
-}
-
-.metricCell[data-tone="ready"] > svg polyline {
-  stroke: var(--green);
-}
-
-.metricCell[data-tone="stale"] > svg polyline {
-  stroke: var(--yellow);
-}
-
-.metricCell[data-tone="pending"] > svg polyline {
-  stroke: var(--zk-orange);
 }
 
 .field {

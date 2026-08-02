@@ -51,7 +51,7 @@ class DemoConfig:
     def from_env(cls) -> "DemoConfig":
         config = cls(
             api_base=os.environ.get("ZROKY_API_BASE", "https://api.zroky.com").rstrip("/"),
-            dashboard_base=os.environ.get("ZROKY_DASHBOARD_URL", "https://zroky.com").rstrip("/"),
+            dashboard_base=os.environ.get("ZROKY_DASHBOARD_URL", "https://app.zroky.com").rstrip("/"),
             project=_required("ZROKY_PROJECT"),
             api_key=_required("ZROKY_API_KEY"),
             admin_bearer_token=os.environ.get("ZROKY_ADMIN_BEARER_TOKEN")

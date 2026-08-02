@@ -10,6 +10,7 @@ import HomePage from "./page";
 const api = vi.hoisted(() => ({
   fetchOutcomeGraphCoverage: vi.fn(),
   getHomeSummary: vi.fn(),
+  listFinalIncidents: vi.fn(),
   listMyProjects: vi.fn(),
 }));
 
@@ -53,6 +54,7 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     fetchOutcomeGraphCoverage: api.fetchOutcomeGraphCoverage,
     getHomeSummary: api.getHomeSummary,
+    listFinalIncidents: api.listFinalIncidents,
     listMyProjects: api.listMyProjects,
   };
 });
@@ -296,9 +298,41 @@ describe("Home dashboard", () => {
   beforeEach(() => {
     api.fetchOutcomeGraphCoverage.mockReset();
     api.getHomeSummary.mockReset();
+    api.listFinalIncidents.mockReset();
     api.listMyProjects.mockReset();
-    api.fetchOutcomeGraphCoverage.mockResolvedValue(null);
+    api.fetchOutcomeGraphCoverage.mockResolvedValue({
+      counts: {
+        conflicted: 0,
+        duplicate: 0,
+        forbidden: 0,
+        missing: 0,
+        pending: 6,
+        stale: 0,
+        unknown: 0,
+        verified: 142,
+        wrong: 3,
+      },
+      coverage_percent: 94,
+      total: 151,
+    });
     api.getHomeSummary.mockResolvedValue(summary());
+    api.listFinalIncidents.mockResolvedValue([
+      {
+        id: "incident_1",
+        project_id: "proj_1",
+        environment: "production",
+        outcome_graph_id: "graph_1",
+        severity: "high",
+        status: "open",
+        incident: {
+          deviation_type: "Mismatch in payroll export",
+          source_system: "Workday Payroll",
+          workflow_key: "Payroll Export WF",
+        },
+        created_at: now,
+        resolved_at: null,
+      },
+    ]);
     api.listMyProjects.mockResolvedValue([project()]);
     storeState.selectedProject = "proj_1";
     storeState.realTimeEnabled = false;
@@ -318,7 +352,7 @@ describe("Home dashboard", () => {
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Attention queue")).toBeInTheDocument();
     expect(screen.getByLabelText("Trust-machine health")).toBeInTheDocument();
-    expect(screen.getByLabelText("Recent proof")).toBeInTheDocument();
+    expect(screen.getByLabelText("Recent control events")).toBeInTheDocument();
     expect(screen.queryByLabelText("Quick actions")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Verification readiness")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Trust Advisor")).not.toBeInTheDocument();
@@ -330,7 +364,7 @@ describe("Home dashboard", () => {
     expect(within(proofMetrics).getByText("Mismatches caught")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("3")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Coverage")).toBeInTheDocument();
-    expect(within(proofMetrics).getByText("47%")).toBeInTheDocument();
+    expect(within(proofMetrics).getByText("94%")).toBeInTheDocument();
 
     expect(screen.getByText("Connector test-read")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Resolve blocker" }).getAttribute("href")).toBe("/integrations");
@@ -349,6 +383,17 @@ describe("Home dashboard", () => {
     expect(within(queue).getByText("Mismatch in payroll export")).toBeInTheDocument();
     expect(within(queue).getAllByText("Approval required: policy exception").length).toBeGreaterThan(0);
     expect(within(queue).getByText("Recovery job failed")).toBeInTheDocument();
+  });
+
+  it("uses persisted incident status instead of guessing from mismatch counts", async () => {
+    api.listFinalIncidents.mockResolvedValue([]);
+
+    render(<HomePage />);
+
+    const metrics = await screen.findByLabelText("Proof metrics");
+    const incidentCell = within(metrics).getByText("Open incidents").closest("a");
+    expect(incidentCell).not.toBeNull();
+    expect(within(incidentCell as HTMLElement).getByText("0")).toBeInTheDocument();
   });
 
   it("refetches summary data when the Home window changes", async () => {
@@ -374,6 +419,11 @@ describe("Home dashboard", () => {
   });
 
   it("uses a first-run layout without fake activity or fake chart", async () => {
+    api.fetchOutcomeGraphCoverage.mockResolvedValue({
+      counts: { conflicted: 0, duplicate: 0, forbidden: 0, missing: 0, pending: 0, stale: 0, unknown: 0, verified: 0, wrong: 0 },
+      coverage_percent: 0,
+      total: 0,
+    });
     api.getHomeSummary.mockResolvedValue(
       summary({
         metrics: {
@@ -432,9 +482,18 @@ describe("Home dashboard", () => {
     render(<HomePage />);
 
     await waitFor(() => expect(api.getHomeSummary).toHaveBeenCalled());
-    expect(await screen.findByText("12 source feed unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("13 source feed unavailable")).toBeInTheDocument();
     expect(screen.getByLabelText("Home unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "INACTIVE" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Proof metrics")).not.toBeInTheDocument();
+  });
+
+  it("does not fall back to legacy outcome totals when ledger coverage is unavailable", async () => {
+    api.fetchOutcomeGraphCoverage.mockRejectedValue(new Error("ledger unavailable"));
+
+    render(<HomePage />);
+
+    expect(await screen.findByLabelText("Home unavailable")).toBeInTheDocument();
     expect(screen.queryByLabelText("Proof metrics")).not.toBeInTheDocument();
   });
 
@@ -447,7 +506,7 @@ describe("Home dashboard", () => {
     expect(await screen.findByText("Sign in to load proof posture")).toBeInTheDocument();
     expect(screen.getByLabelText("Home authentication required")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/auth/login");
-    expect(screen.queryByText("12 source feed unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("13 source feed unavailable")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Proof metrics")).not.toBeInTheDocument();
   });
 
@@ -460,6 +519,6 @@ describe("Home dashboard", () => {
     expect(api.getHomeSummary).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.queryByText("Sign in to load proof posture")).not.toBeInTheDocument();
-    expect(screen.queryByText("12 source feed unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("13 source feed unavailable")).not.toBeInTheDocument();
   });
 });

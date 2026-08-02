@@ -284,7 +284,6 @@ export interface AssurancePackResponse {
   pack_digest: string;
   status: string;
   pack: AssurancePackJson;
-  created_at: string;
 }
 
 export interface FinalRunResponse {
@@ -1320,6 +1319,13 @@ export function publishAssurancePack(
   return request<AssurancePackResponse>("/v1/assurance-packs", {
     method: "POST",
     body: { pack, environment } satisfies AssurancePackCreatePayload,
+  });
+}
+
+export function listAssurancePacks(environment?: string, signal?: AbortSignal): Promise<AssurancePackResponse[]> {
+  return request<AssurancePackResponse[]>("/v1/assurance-packs", {
+    query: { environment },
+    signal,
   });
 }
 

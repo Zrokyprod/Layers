@@ -24,9 +24,11 @@ type EvidenceLedgerProps = {
   onExportManifest: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
+  projectTotal: number;
   rows: EvidenceLedgerRow[];
   search: string;
   selectedRowId: string | null;
+  totalCount: number;
 };
 
 function shortId(value: string | null | undefined): string {
@@ -43,9 +45,11 @@ export function EvidenceLedger({
   onExportManifest,
   onSearchChange,
   onSelectRow,
+  projectTotal,
   rows,
   search,
   selectedRowId,
+  totalCount,
 }: EvidenceLedgerProps) {
   const filteredRows = filterEvidenceLedger(rows, filter, search);
   const exportableCount = filteredRows.filter((row) => row.exportable).length;
@@ -58,7 +62,13 @@ export function EvidenceLedger({
           <h2>Proof records</h2>
           <p>Select an outcome graph to inspect source-of-record proof.</p>
         </div>
-        <strong>{filteredRows.length} shown</strong>
+        <strong>
+          {search.trim()
+            ? `${filteredRows.length} shown`
+            : rows.length < totalCount
+              ? `${rows.length} of ${totalCount} shown`
+              : `${rows.length} shown`}
+        </strong>
       </header>
 
       <div className="ev-ledger-toolbar">
@@ -109,7 +119,7 @@ export function EvidenceLedger({
         </div>
       ) : isError ? (
         <div className="ev-empty-state">Evidence could not load. Verify backend connectivity and project access.</div>
-      ) : rows.length === 0 ? (
+      ) : projectTotal === 0 ? (
         <div className="ev-empty-state">
           <strong>Declare your first intent.</strong>
           <span>Outcome graphs appear here once an agent run is verified against your systems of record.</span>
@@ -121,6 +131,8 @@ export function EvidenceLedger({
           </div>
           <a href="/docs">Read setup docs</a>
         </div>
+      ) : rows.length === 0 ? (
+        <div className="ev-empty-state">No records match this classification.</div>
       ) : filteredRows.length === 0 ? (
         <div className="ev-empty-state">No records match this filter or search.</div>
       ) : (

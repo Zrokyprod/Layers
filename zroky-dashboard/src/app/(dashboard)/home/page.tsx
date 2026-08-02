@@ -25,12 +25,14 @@ import {
 import {
   fetchOutcomeGraphCoverage,
   getHomeSummary,
+  listFinalIncidents,
   type ActionExecutionAttemptResponse,
   type ActionIntentResponse,
   type ActionRunnerResponse,
   type AgentProfileListResponse,
   type AgentProfileResponse,
   type HomeSummaryResponse,
+  type FinalIncidentResponse,
   type OutcomeGraphCoverageSummary,
   type OutcomeReconciliationSummaryResponse,
   type OutcomeReconciliationView,
@@ -60,10 +62,12 @@ type HomeData = {
   billingUsage: BillingUsageResponse | null;
   homeSummary: HomeSummaryResponse | null;
   outcomeGraphCoverage: OutcomeGraphCoverageSummary | null;
+  incidents: FinalIncidentResponse[];
 };
 
 type HomeSource =
   | "homeSummary"
+  | "incidents"
   | "intents"
   | "approvals"
   | "outcomes"
@@ -142,10 +146,12 @@ const EMPTY_DATA: HomeData = {
   billingUsage: null,
   homeSummary: null,
   outcomeGraphCoverage: null,
+  incidents: [],
 };
 
 const NO_SOURCES_AVAILABLE: HomeAvailability = {
   homeSummary: false,
+  incidents: false,
   intents: false,
   approvals: false,
   outcomes: false,
@@ -161,6 +167,7 @@ const NO_SOURCES_AVAILABLE: HomeAvailability = {
 
 const ALL_SOURCES_AVAILABLE: HomeAvailability = {
   homeSummary: true,
+  incidents: true,
   intents: true,
   approvals: true,
   outcomes: true,
@@ -240,6 +247,18 @@ function demoHomeSummary(days: number): HomeSummaryResponse {
       action_runners: [],
       api_keys: [],
       billing_usage: null,
+      control_health: {
+        active_agents: 24,
+        policy_enforced_agents: 24,
+        configured_action_packs: 3,
+        online_runners: 2,
+        active_sor_connectors: 8,
+        tested_sor_connectors: 7,
+        mcp_gateway_status: "active",
+        mcp_gateway_test_status: "succeeded",
+        runtime_enabled: true,
+        kill_switch_enabled: false,
+      },
     },
   };
 }
@@ -355,6 +374,7 @@ function missionDataFromSummary(summary: HomeSummaryResponse): HomeData {
     billingUsage: details?.billing_usage ?? null,
     homeSummary: summary,
     outcomeGraphCoverage: null,
+    incidents: [],
   };
 }
 
@@ -363,6 +383,7 @@ function availabilityFromSummary(summary: HomeSummaryResponse): HomeAvailability
   if (!sources) return ALL_SOURCES_AVAILABLE;
   return {
     homeSummary: sources.home_summary,
+    incidents: true,
     intents: sources.intents,
     approvals: sources.approvals,
     outcomes: sources.outcomes,
@@ -399,7 +420,7 @@ function proofStats(data: HomeData): ProofStats {
         data.homeSummary?.metrics.pending_approvals ?? 0,
         data.approvals.filter((item) => item.status === "pending_approval").length,
       ),
-      openIncidents: mismatches > 0 ? Math.min(2, mismatches) : 0,
+      openIncidents: data.incidents.filter((item) => item.status !== "resolved").length,
       blockedAttempts: data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length,
       coveragePercent: Math.round(data.outcomeGraphCoverage.coverage_percent),
     };
@@ -433,10 +454,7 @@ function proofStats(data: HomeData): ProofStats {
   const blockedAttempts =
     data.approvals.filter((item) => ["blocked", "rejected", "expired"].includes(item.status)).length +
     (summary?.metrics.bypass_mutations ?? 0);
-  const incidentSignals = data.mutations.filter((item) =>
-    ["policy_bypass", "unmanaged_agent_action", "unknown_actor"].includes(item.classification),
-  ).length;
-  const openIncidents = incidentSignals > 0 ? incidentSignals : mismatches > 0 ? Math.min(2, mismatches) : 0;
+  const openIncidents = data.incidents.filter((item) => item.status !== "resolved").length;
   const unverifiable = Math.max(explicitUnknown + data.staleAttempts.length, unchecked);
   const coveragePercent = totalActions > 0 ? Math.round((proven / totalActions) * 100) : 0;
   return { totalActions, proven, mismatches, unverifiable, pendingApprovals, openIncidents, blockedAttempts, coveragePercent };
@@ -516,15 +534,19 @@ function quotaWarning(usage: BillingUsageResponse | null): string | null {
 function buildReadinessRows(data: HomeData, availability: HomeAvailability): ReadinessRow[] {
   const connectedFeeds = data.sourceSummary?.connected_feeds ?? 0;
   const successfulPollers = data.sourceSummary?.successful_pollers ?? 0;
-  const runnerTotal = data.actionRunners.length;
-  const runnerOnline = data.actionRunners.filter((runner) => runner.status === "online").length;
+  const health = data.homeSummary?.data?.control_health ?? null;
   const receipts = data.homeSummary?.metrics.receipts_generated ?? data.intents.filter((intent) => intent.receipt_status === "generated").length;
-  const outcomeChecks = data.homeSummary?.metrics.outcome_checks ?? data.outcomeSummary?.total ?? data.outcomes.length;
-  const policiesLoaded = Math.max(data.approvals.length, data.agentProfiles.filter((profile) => profile.default_policy_id).length);
-  const hasAssurancePack =
-    data.intents.length > 0 ||
-    data.outcomes.length > 0 ||
-    data.agentProfiles.some((profile) => profile.verification_connectors.length > 0);
+  const activeConnectors = health?.active_sor_connectors ?? 0;
+  const testedConnectors = health?.tested_sor_connectors ?? 0;
+  const configuredPacks = health?.configured_action_packs ?? 0;
+  const onlineRunners = health?.online_runners ?? 0;
+  const policyReady = Boolean(
+    health
+    && health.active_agents > 0
+    && health.policy_enforced_agents >= health.active_agents
+    && health.runtime_enabled
+    && !health.kill_switch_enabled,
+  );
 
   return [
     {
@@ -533,53 +555,57 @@ function buildReadinessRows(data: HomeData, availability: HomeAvailability): Rea
       details:
         connectedFeeds === 0
           ? "No source connected"
-          : successfulPollers < connectedFeeds
-            ? `Last sync 47m ago for ${Math.max(1, connectedFeeds - successfulPollers)} source${connectedFeeds - successfulPollers === 1 ? "" : "s"}`
-            : `${successfulPollers}/${connectedFeeds} sources fresh`,
+          : `${successfulPollers}/${connectedFeeds} source pollers successful`,
       action: "Review",
       href: "/integrations",
     },
     {
       component: "Connector test-read",
-      status: outcomeChecks > 0 ? "Ready" : "Blocked",
-      details: outcomeChecks > 0 ? `${formatCount(outcomeChecks)} test reads passing` : "Test-read missing for 1 connector",
+      status: !health ? "Stale" : activeConnectors > 0 && testedConnectors >= activeConnectors ? "Ready" : "Blocked",
+      details: !health
+        ? "Control health unavailable"
+        : `${formatCount(testedConnectors)} of ${formatCount(activeConnectors)} connectors tested`,
       action: "Fix",
       href: "/integrations",
       ownerOnly: true,
     },
     {
       component: "Evidence signer",
-      status: receipts > 0 ? "Ready" : "Ready",
-      details: receipts > 0 ? `${formatCount(receipts)} signed bundles generated` : "KMS signer reachable",
+      status: receipts > 0 ? "Ready" : "Missing",
+      details: receipts > 0 ? `${formatCount(receipts)} signed bundles generated` : "No signed receipt generated yet",
       action: "View",
       href: "/evidence",
     },
     {
       component: "Executor / recovery rail",
-      status: runnerTotal === 0 ? "Missing" : runnerOnline < runnerTotal ? "Stale" : "Ready",
-      details: runnerTotal === 0 ? "Runner not connected" : runnerOnline < runnerTotal ? "Executor offline in 1 region" : "Runner healthy",
+      status: !health ? "Stale" : onlineRunners > 0 ? "Ready" : "Missing",
+      details: !health ? "Control health unavailable" : `${formatCount(onlineRunners)} runners online`,
       action: "View",
       href: "/operations",
     },
     {
       component: "Policy engine",
-      status: "Ready",
-      details: `${formatCount(Math.max(23, policiesLoaded))} policies loaded`,
+      status: !health ? "Stale" : policyReady ? "Ready" : "Blocked",
+      details: !health
+        ? "Control health unavailable"
+        : health.kill_switch_enabled
+          ? "Kill switch enabled"
+          : `${formatCount(health.policy_enforced_agents)} of ${formatCount(health.active_agents)} agents enforced`,
       action: "Inspect",
       href: "/policies",
     },
     {
       component: "Assurance Pack binding",
-      status: hasAssurancePack ? "Ready" : "Missing",
-      details: hasAssurancePack ? "Active workflow bindings found" : "Payroll workflow unbound",
+      status: !health ? "Stale" : configuredPacks > 0 ? "Ready" : "Missing",
+      details: !health ? "Control health unavailable" : `${formatCount(configuredPacks)} configured action packs`,
       action: "Bind",
       href: "/workflows",
       ownerOnly: true,
     },
     {
       component: "Observation intake",
-      status: availability.mutations || availability.outcomes ? "Ready" : "Stale",
-      details: availability.mutations || availability.outcomes ? "Streaming events healthy" : "Observation feed unavailable",
+      status: !health ? "Stale" : activeConnectors > 0 ? "Ready" : "Missing",
+      details: !health ? "Control health unavailable" : `${formatCount(activeConnectors)} active source connectors`,
       action: "Open",
       href: "/operations",
     },
@@ -597,16 +623,17 @@ function buildReadinessRows(data: HomeData, availability: HomeAvailability): Rea
 function buildAttentionRows(data: HomeData): AttentionRow[] {
   const rows: AttentionRow[] = [];
 
-  data.outcomes
-    .filter((outcome) => outcome.verdict === "mismatched" || outcome.verification_status === "mismatched")
+  data.incidents
+    .filter((incident) => incident.status !== "resolved")
     .slice(0, 2)
-    .forEach((outcome) => {
+    .forEach((incident) => {
+      const detail = incident.incident;
       rows.push({
-        priority: "P1",
-        item: `Mismatch in ${outcome.action_type ?? "agent action"}`,
-        source: outcome.connector_type || "Source of truth",
-        workflow: outcome.system_ref ?? outcome.trace_id ?? "Workflow",
-        age: timeSince(outcome.checked_at),
+        priority: incident.severity === "critical" || incident.severity === "high" ? "P1" : "P2",
+        item: typeof detail.deviation_type === "string" ? detail.deviation_type : "Outcome proof requires attention",
+        source: typeof detail.source_system === "string" ? detail.source_system : "Source of truth",
+        workflow: typeof detail.workflow_key === "string" ? detail.workflow_key : incident.outcome_graph_id,
+        age: timeSince(incident.created_at),
         action: "Investigate",
         href: "/operations",
       });
@@ -802,33 +829,18 @@ function ProofMetricsStrip({ stats, loading }: { stats: ProofStats; loading: boo
 
   return (
     <section className="zh-metric-strip" aria-label="Proof metrics">
-      {cells.map(({ label, value, href, tone, Icon }, index) => (
+      {cells.map(({ label, value, href, tone, Icon }) => (
         <Link className="zh-metric-cell" data-tone={tone} href={href} key={label}>
           <span>
             <Icon size={15} aria-hidden="true" />
             {label}
           </span>
           <strong>{loading ? "—" : typeof value === "number" ? formatCount(value) : value}</strong>
-          <svg className="zh-sparkline" viewBox="0 0 96 22" aria-hidden="true">
-            <polyline points={sparklinePoints(index)} />
-          </svg>
           <small>Open detail <ChevronRight size={11} aria-hidden="true" /></small>
         </Link>
       ))}
     </section>
   );
-}
-
-function sparklinePoints(seed: number): string {
-  const series = [
-    [4, 16, 22, 12, 34, 8],
-    [7, 18, 30, 42, 58, 76],
-    [11, 24, 18, 31, 22, 28],
-    [8, 36, 26, 48, 42, 54],
-    [4, 12, 8, 20, 16, 22],
-    [12, 20, 30, 44, 62, 72],
-  ][seed] ?? [8, 18, 28, 38, 48, 58];
-  return series.map((value, index) => `${index * 18 + 3},${20 - value / 4}`).join(" ");
 }
 
 function CompactAttentionQueue({ rows, canAct, loading }: { rows: AttentionRow[]; canAct: boolean; loading: boolean }) {
@@ -898,8 +910,8 @@ function TrustMachineHealth({ rows }: { rows: ReadinessRow[] }) {
 
 function RecentProof({ events, empty }: { events: ProofEvent[]; empty: boolean }) {
   return (
-    <section className="zh-card zh-side-card" aria-label="Recent proof">
-      <PanelHeader title="Recent proof" action="Evidence" href="/evidence" />
+    <section className="zh-card zh-side-card" aria-label="Recent control events">
+      <PanelHeader title="Recent control events" action="Operations" href="/operations" />
       {empty ? (
         <div className="zh-empty-inline">
           <FileCheck2 size={18} aria-hidden="true" />
@@ -923,8 +935,8 @@ function RecentProof({ events, empty }: { events: ProofEvent[]; empty: boolean }
             })}
           </div>
           <div className="zh-proof-footer">
-            <span>KMS chain valid</span>
-            <time>Latest proof {events[0]?.time}</time>
+            <span>Durable records</span>
+            <time>Latest event {events[0]?.time}</time>
           </div>
         </>
       )}
@@ -949,87 +961,27 @@ function PanelHeader({ title, meta, action, href }: { title: string; meta?: stri
   );
 }
 
-function chartPoints(values: number[], maxValue: number) {
-  const left = 0;
-  const right = 420;
-  const top = 16;
-  const bottom = 184;
-  const span = right - left;
-  return values.map((value, index) => ({
-    x: left + (span / Math.max(1, values.length - 1)) * index,
-    y: bottom - (Math.max(0, value) / Math.max(1, maxValue)) * (bottom - top),
-  }));
-}
-
-function smoothPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return "";
-  return points.slice(1).reduce((path, point, index) => {
-    const previous = points[index];
-    const middleX = (previous.x + point.x) / 2;
-    return `${path} C${middleX} ${previous.y}, ${middleX} ${point.y}, ${point.x} ${point.y}`;
-  }, `M${points[0].x} ${points[0].y}`);
-}
-
-function areaPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return "";
-  return `${smoothPath(points)} L${points.at(-1)?.x ?? 402} 188 L${points[0].x} 188 Z`;
-}
-
-function bandPath(topPoints: Array<{ x: number; y: number }>, bottomPoints: Array<{ x: number; y: number }>): string {
-  if (topPoints.length === 0 || bottomPoints.length === 0) return "";
-  return `${smoothPath(topPoints)} ${bottomPoints.slice().reverse().map((point) => `L${point.x} ${point.y}`).join(" ")} Z`;
-}
-
 function AgentRecoveryPressure({ stats }: { stats: ProofStats }) {
-  const detected = stats.mismatches + stats.openIncidents + stats.blockedAttempts + Math.min(stats.unverifiable, 1);
-  const open = stats.openIncidents;
-  const contained = Math.max(0, detected - open);
-  const recoveryRate = detected > 0 ? Math.round((contained / detected) * 100) : 100;
-  const failureSeries = [detected - 6, detected - 2, detected - 5, detected + 4, detected - 1, detected + 3, detected].map((value) =>
-    Math.max(0, value),
-  );
-  const containedSeries = [contained - 8, contained - 5, contained - 6, contained - 2, contained + 1, contained - 1, contained].map((value) =>
-    Math.max(0, value),
-  );
-  const maxValue = Math.max(...failureSeries, ...containedSeries, 1);
-  const failurePoints = chartPoints(failureSeries, maxValue);
-  const containedPoints = chartPoints(containedSeries, maxValue);
-  const latestFailure = failurePoints.at(-1);
-  const latestContained = containedPoints.at(-1);
-
   return (
-    <section className="zh-card zh-side-card zh-recovery-pressure" aria-label="Agent recovery pressure">
-      <PanelHeader title="Agent recovery pressure" meta="Failures vs ZROKY containment" action="Operations" href="/operations" />
-      <div className="zh-pressure-summary" aria-label={`${detected} failures detected, ${contained} contained, ${open} open, ${recoveryRate}% recovery rate`}>
+    <section className="zh-card zh-side-card zh-recovery-pressure" aria-label="Recovery snapshot">
+      <PanelHeader title="Recovery snapshot" meta="Current durable state" action="Operations" href="/operations" />
+      <div className="zh-pressure-summary">
         <div>
-          <strong>{formatCount(detected)}</strong>
-          <span>failures</span>
-        </div>
-        <div>
-          <strong>{formatCount(contained)}</strong>
-          <span>contained</span>
+          <strong>{formatCount(stats.mismatches)}</strong>
+          <span>mismatches</span>
         </div>
         <div>
-          <strong>{formatCount(open)}</strong>
-          <span>open</span>
+          <strong>{formatCount(stats.openIncidents)}</strong>
+          <span>open incidents</span>
         </div>
-        <div className="zh-pressure-rate">
-          <strong>{recoveryRate}%</strong>
-          <span>recovery rate</span>
+        <div>
+          <strong>{formatCount(stats.blockedAttempts)}</strong>
+          <span>blocked</span>
         </div>
-      </div>
-      <div className="zh-pressure-frame">
-        <svg className="zh-pressure-chart" viewBox="0 0 420 204" role="img" aria-label="Agent failures detected compared with ZROKY contained actions">
-          <path className="zh-pressure-grid" d="M0 36H420M0 84H420M0 132H420M0 184H420" />
-          <path className="zh-pressure-band" d={bandPath(failurePoints, containedPoints)} />
-          <path className="zh-pressure-fill" d={areaPath(containedPoints)} />
-          <path className="zh-pressure-line is-contained" d={smoothPath(containedPoints)} />
-          <path className="zh-pressure-line is-failure" d={smoothPath(failurePoints)} />
-          {latestContained ? <circle className="zh-pressure-point is-contained" cx={latestContained.x} cy={latestContained.y} r="4" /> : null}
-          {latestFailure ? <circle className="zh-pressure-point is-failure" cx={latestFailure.x} cy={latestFailure.y} r="4" /> : null}
-          <text x="6" y="198">7d</text>
-          <text x="388" y="198">now</text>
-        </svg>
+        <div>
+          <strong>{formatCount(stats.unverifiable)}</strong>
+          <span>unverifiable</span>
+        </div>
       </div>
     </section>
   );
@@ -1044,7 +996,7 @@ function buildProofEvents(data: HomeData): ProofEvent[] {
         ? `Mismatch caught in ${outcome.action_type ?? "agent action"}`
         : `Action verified: ${outcome.action_type ?? "agent action"}`,
     outcome: outcome.verdict === "mismatched" ? "mismatch" : "verified",
-    signature: outcome.idempotency_key ?? `sig:${outcome.id.slice(0, 8)}`,
+    signature: outcome.idempotency_key ?? outcome.id,
     time: timeSince(outcome.checked_at),
     href: "/evidence",
   }));
@@ -1053,7 +1005,7 @@ function buildProofEvents(data: HomeData): ProofEvent[] {
     id: approval.id,
     label: approval.status === "approved" ? "Approval granted: budget exception" : "Approval required: policy exception",
     outcome: approval.status.replaceAll("_", " "),
-    signature: `sig:${approval.id.slice(0, 8)}`,
+    signature: approval.id,
     time: timeSince(approval.created_at),
     href: "/operations",
   }));
@@ -1171,6 +1123,23 @@ export default function HomePage() {
             coverage_percent: 94,
             total: 151,
           },
+          incidents: [
+            {
+              id: "incident_demo_payroll",
+              project_id: "demo_project",
+              environment: "production",
+              outcome_graph_id: "graph_demo_payroll",
+              severity: "high",
+              status: "open",
+              incident: {
+                deviation_type: "Mismatch in payroll export",
+                source_system: "Workday Payroll",
+                workflow_key: "Payroll Export WF",
+              },
+              created_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+              resolved_at: null,
+            },
+          ],
         });
         setAvailability(availabilityFromSummary(summary));
         setLoadErrors(0);
@@ -1179,17 +1148,21 @@ export default function HomePage() {
         setProjectRole("owner");
         return;
       }
-      const [summary, coverage, projects] = await Promise.all([
+      const [summary, coverage, incidents, projects] = await Promise.all([
         getHomeSummary(summaryDays, signal),
         fetchOutcomeGraphCoverage(signal).catch(() => null),
+        listFinalIncidents(signal).catch(() => null),
         listMyProjects(signal).catch(() => []),
       ]);
       if (signal?.aborted) return;
+      if (coverage === null || incidents === null) {
+        throw new Error("Proof ledger summary is unavailable.");
+      }
       const project = selectedProject
         ? projects.find((item) => item.project_id === selectedProject) ?? null
         : projects[0] ?? null;
       const nextAvailability = availabilityFromSummary(summary);
-      setData({ ...missionDataFromSummary(summary), outcomeGraphCoverage: coverage });
+      setData({ ...missionDataFromSummary(summary), outcomeGraphCoverage: coverage, incidents });
       setAvailability(nextAvailability);
       setLoadErrors(unavailableSourceCount(nextAvailability));
       setLoadIssue(null);
@@ -1223,15 +1196,16 @@ export default function HomePage() {
   }, [load, realTimeEnabled]);
 
   const canAct = canChangeHomeSetup(projectRole);
+  const demoMode = localDemoHomeEnabled();
   const stats = proofStats(data);
   const readiness = buildReadinessRows(data, availability);
   const status = homePosture(stats, loadErrors, readiness);
   const blocker = blockerText(status, stats, readiness);
   const active = activityExists(stats);
   const attentionRows = buildAttentionRows(data);
-  const displayedAttentionRows = active && attentionRows.length === 0 ? DEMO_ATTENTION_ROWS : attentionRows;
+  const displayedAttentionRows = demoMode ? DEMO_ATTENTION_ROWS : attentionRows;
   const proofEvents = buildProofEvents(data);
-  const displayedProofEvents = active && proofEvents.length === 0 ? DEMO_PROOF_EVENTS : proofEvents;
+  const displayedProofEvents = demoMode ? DEMO_PROOF_EVENTS : proofEvents;
   const loading = isLoading && lastLoadedAt == null;
   const authRequired = loadIssue === "auth" && lastLoadedAt == null && !loading;
   const loadFailed = loadIssue === "source" && loadErrors > 0 && lastLoadedAt == null && !loading;
