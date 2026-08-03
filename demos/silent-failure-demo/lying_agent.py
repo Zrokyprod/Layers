@@ -57,7 +57,7 @@ def declare_lie() -> dict:
     state.update({"intent_id": intent["id"], "run_id": run["id"]})
     save_state(state)
 
-    print("support-agent-demo: refund processed ✓")
+    print("support-agent-demo: refund processed [claimed]")
     print("Stripe call intentionally skipped.")
     return state
 
