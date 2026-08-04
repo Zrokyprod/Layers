@@ -12,6 +12,9 @@ from typing import Any
 
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/]{80,}={0,2}$")
 _DATA_URL_RE = re.compile(r"^data:[^;,\s]+;base64,", re.IGNORECASE)
+_UUID_RE = re.compile(
+    r"(?i)(?<![0-9a-f])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-f])"
+)
 _STREET_SUFFIXES = (
     "street",
     "st",
@@ -151,9 +154,11 @@ def mask_text(text: str) -> str:
     stripped = text.strip()
     if _DATA_URL_RE.match(stripped) or _BASE64_RE.match(stripped):
         return "[REDACTED]"
-    for pattern, replacement in _PATTERNS:
-        text = pattern.sub(replacement, text)
-    return text
+    parts = _UUID_RE.split(text)
+    for index in range(0, len(parts), 2):
+        for pattern, replacement in _PATTERNS:
+            parts[index] = pattern.sub(replacement, parts[index])
+    return "".join(parts)
 
 
 def mask_value(value: Any) -> Any:

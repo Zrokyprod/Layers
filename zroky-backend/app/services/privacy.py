@@ -8,6 +8,9 @@ from typing import Any, Mapping
 
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/]{80,}={0,2}$")
 _DATA_URL_RE = re.compile(r"^data:[^;,\s]+;base64,", re.IGNORECASE)
+_UUID_RE = re.compile(
+    r"(?i)(?<![0-9a-f])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-f])"
+)
 _SENSITIVE_KEY_MARKERS = (
     "api_key",
     "apikey",
@@ -179,11 +182,15 @@ def mask_text(value: str, *, custom_patterns: list[str] | tuple[str, ...] | None
     stripped = value.strip()
     if _DATA_URL_RE.match(stripped) or _BASE64_RE.match(stripped):
         return "[REDACTED]"
-    for pattern, replacement in _PATTERNS:
-        value = pattern.sub(replacement, value)
-    for pattern in _compile_custom_patterns(custom_patterns):
-        value = pattern.sub("[REDACTED]", value)
-    return value
+    parts = _UUID_RE.split(value)
+    compiled_custom_patterns = _compile_custom_patterns(custom_patterns)
+    for index in range(0, len(parts), 2):
+        for pattern, replacement in _PATTERNS:
+            parts[index] = pattern.sub(replacement, parts[index])
+    masked = "".join(parts)
+    for pattern in compiled_custom_patterns:
+        masked = pattern.sub("[REDACTED]", masked)
+    return masked
 
 
 def hash_identifier(value: Any) -> str | None:

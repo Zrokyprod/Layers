@@ -158,6 +158,15 @@ def test_does_not_mask_unformatted_12_digit_run_without_aadhaar_context():
     assert "123456789012" in masked
 
 
+def test_preserves_uuid_that_contains_aadhaar_shaped_groups():
+    identifier = "12345678-1234-1234-1234-123456789012"
+
+    masked = mask_text(f"run {identifier} belongs to user@example.com")
+
+    assert identifier in masked
+    assert "user@example.com" not in masked
+
+
 def test_masks_pan_number():
     masked = mask_text("My PAN is ABCDE1234F for tax filing.")
     assert "ABCDE1234F" not in masked
