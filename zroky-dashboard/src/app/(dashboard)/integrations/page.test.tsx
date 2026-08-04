@@ -43,6 +43,7 @@ const api = vi.hoisted(() => ({
   getZohoCrmConnectorStatus: vi.fn(),
   getSlackInstallStatus: vi.fn(),
   getToolRegistry: vi.fn(),
+  listSourceConnectors: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
   preflightMcpUpstream: vi.fn(),
   saveGenericRestConnectorConfig: vi.fn(),
@@ -73,6 +74,7 @@ const api = vi.hoisted(() => ({
   testStripeRefundConnector: vi.fn(),
   testZendeskTicketConnector: vi.fn(),
   testZohoCrmConnector: vi.fn(),
+  upsertSourceConnector: vi.fn(),
 }));
 
 const clipboardWrite = vi.fn();
@@ -117,6 +119,7 @@ vi.mock("@/lib/api", async () => {
     getZohoCrmConnectorStatus: api.getZohoCrmConnectorStatus,
     getSlackInstallStatus: api.getSlackInstallStatus,
     getToolRegistry: api.getToolRegistry,
+    listSourceConnectors: api.listSourceConnectors,
     listOutcomeReconciliations: api.listOutcomeReconciliations,
     preflightMcpUpstream: api.preflightMcpUpstream,
     saveGenericRestConnectorConfig: api.saveGenericRestConnectorConfig,
@@ -147,6 +150,7 @@ vi.mock("@/lib/api", async () => {
     testStripeRefundConnector: api.testStripeRefundConnector,
     testZendeskTicketConnector: api.testZendeskTicketConnector,
     testZohoCrmConnector: api.testZohoCrmConnector,
+    upsertSourceConnector: api.upsertSourceConnector,
   };
 });
 
@@ -157,6 +161,24 @@ vi.mock("./system-of-record-connectors", () => ({
     </section>
   ),
 }));
+
+function mcpStatus(overrides: Partial<McpUpstreamBindingResponse> = {}): McpUpstreamBindingResponse {
+  return {
+    endpoint_url: "https://mcp.example.com/mcp",
+    protocol_version: "2025-06-18",
+    credential_configured: true,
+    allowed_tools: ["refund.create"],
+    status: "draft",
+    test_status: "not_tested",
+    tested_at: null,
+    last_test_error: null,
+    activated_at: null,
+    version: 1,
+    created_at: "2026-07-11T09:00:00Z",
+    updated_at: "2026-07-11T09:00:00Z",
+    ...overrides,
+  };
+}
 
 function toolRegistry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryResponse {
   return {
@@ -827,6 +849,7 @@ describe("IntegrationsPage", () => {
       total_in_page: 1,
     });
     api.getToolRegistry.mockResolvedValue(toolRegistry());
+    api.listSourceConnectors.mockResolvedValue({ items: [] });
     api.saveGenericRestConnectorConfig.mockResolvedValue(genericStatus({
       connected: true,
       base_url: "https://internal.example.com/api",
@@ -1230,12 +1253,13 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("heading", { name: "Connect a system" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Available systems" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Payments · Transactions · Refunds").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Missing / Not connected").length).toBeGreaterThan(0);
     clickFirstButton("Connect Stripe");
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
+    await waitFor(() => expect(api.listSourceConnectors).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
@@ -1264,9 +1288,9 @@ describe("IntegrationsPage", () => {
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "OAuth" } });
     expect(screen.getByRole("button", { name: /GitHub.*One-click OAuth/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Slack.*One-click OAuth/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Zoho CRM.*OAuth/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Jira.*One-click OAuth/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Slack.*One-click OAuth/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Zoho CRM.*OAuth/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Jira.*Available/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Stripe.*Restricted key/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
@@ -1457,6 +1481,66 @@ describe("IntegrationsPage", () => {
       });
     });
     expect(await screen.findByText("Stripe payment verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("configures automatic Stripe refund proof using only a credential reference", async () => {
+    const connector = {
+      id: "source_connector_1",
+      project_id: "project_1",
+      environment: "production",
+      capability: "stripe_refund.read",
+      connector_kind: "stripe",
+      secret_ref: "STRIPE_KEY_OLD",
+      config: {},
+      status: "disabled",
+      created_at: "2026-08-04T09:00:00Z",
+      updated_at: "2026-08-04T09:00:00Z",
+    };
+    api.listSourceConnectors.mockResolvedValueOnce({ items: [connector] });
+    api.upsertSourceConnector
+      .mockResolvedValueOnce({ ...connector, secret_ref: "STRIPE_KEY_DEMO", status: "active" })
+      .mockResolvedValueOnce({ ...connector, secret_ref: "STRIPE_KEY_DEMO", status: "disabled" });
+
+    renderWithConnector("stripe_refund");
+    await screen.findByRole("heading", { name: "Connectors" });
+    clickFirstButton("Connect Stripe");
+
+    const panel = await screen.findByRole("region", { name: "Stripe refund automatic source check" });
+    await waitFor(() => {
+      expect(api.listSourceConnectors).toHaveBeenCalledWith(
+        { environment: "production", capability: "stripe_refund.read" },
+        expect.any(AbortSignal),
+      );
+      expect((within(panel).getByLabelText("Credential environment variable") as HTMLInputElement).value).toBe("STRIPE_KEY_OLD");
+    });
+
+    fireEvent.change(within(panel).getByLabelText("Credential environment variable"), {
+      target: { value: "STRIPE_KEY_DEMO" },
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: "Enable automatic checks" }));
+
+    await waitFor(() => {
+      expect(api.upsertSourceConnector).toHaveBeenCalledWith({
+        environment: "production",
+        capability: "stripe_refund.read",
+        connector_kind: "stripe",
+        secret_ref: "STRIPE_KEY_DEMO",
+        config: {},
+        status: "active",
+      });
+    });
+
+    fireEvent.click(await within(panel).findByRole("button", { name: "Disable automatic checks" }));
+    await waitFor(() => {
+      expect(api.upsertSourceConnector).toHaveBeenLastCalledWith({
+        environment: "production",
+        capability: "stripe_refund.read",
+        connector_kind: "stripe",
+        secret_ref: "STRIPE_KEY_DEMO",
+        config: {},
+        status: "disabled",
+      });
+    });
   });
 
   it("saves and tests the native Shopify Admin verifier setup path", async () => {

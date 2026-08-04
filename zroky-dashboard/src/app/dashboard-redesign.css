@@ -26998,13 +26998,17 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   text-transform: none !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form :where(input, textarea) {
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form :where(input, select, textarea) {
   border-color: var(--mc-border) !important;
   border-radius: 8px !important;
   font-size: 0.82rem !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form input {
+  min-height: 38px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form select {
   min-height: 38px !important;
 }
 

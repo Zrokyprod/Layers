@@ -569,6 +569,30 @@ export interface OutcomeGraphCoverageSummary {
   coverage_percent: number;
 }
 
+export type SourceConnectorStatus = "active" | "disabled";
+
+export interface SourceConnector {
+  id: string;
+  project_id: string;
+  environment: string;
+  capability: string;
+  connector_kind: "stripe";
+  secret_ref: string;
+  config: Record<string, unknown>;
+  status: SourceConnectorStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SourceConnectorUpsertPayload {
+  environment: string;
+  capability: string;
+  connector_kind: "stripe";
+  secret_ref: string;
+  config: Record<string, unknown>;
+  status: SourceConnectorStatus;
+}
+
 export interface DsseEnvelope {
   payloadType: string;
   payload: string;
@@ -1329,6 +1353,23 @@ export function listAssurancePacks(environment?: string, signal?: AbortSignal): 
   return request<AssurancePackResponse[]>("/v1/assurance-packs", {
     query: { environment },
     signal,
+  });
+}
+
+export function listSourceConnectors(
+  params: { environment?: string; capability?: string } = {},
+  signal?: AbortSignal,
+): Promise<{ items: SourceConnector[] }> {
+  return request<{ items: SourceConnector[] }>("/v1/source-connectors", {
+    query: params,
+    signal,
+  });
+}
+
+export function upsertSourceConnector(body: SourceConnectorUpsertPayload): Promise<SourceConnector> {
+  return request<SourceConnector>("/v1/source-connectors", {
+    method: "POST",
+    body,
   });
 }
 

@@ -42,6 +42,7 @@ import {
   getStripePaymentConnectorStatus,
   getStripeRefundConnectorStatus,
   getToolRegistry,
+  listSourceConnectors,
   listOutcomeReconciliations,
   preflightMcpUpstream,
   saveGenericRestConnectorConfig,
@@ -72,6 +73,7 @@ import {
   testStripeRefundConnector,
   testZendeskTicketConnector,
   testZohoCrmConnector,
+  upsertSourceConnector,
   type GenericRestConnectorStatusResponse,
   type HubSpotCrmConnectorStatusResponse,
   type JiraIssueConnectorStatusResponse,
@@ -84,6 +86,7 @@ import {
   type ShopifyConnectorStatusResponse,
   type StripePaymentConnectorStatusResponse,
   type StripeRefundConnectorStatusResponse,
+  type SourceConnector,
   type ToolRegistryResponse,
   type ZendeskTicketConnectorStatusResponse,
   type ZohoCrmConnectorStatusResponse,
@@ -1535,6 +1538,121 @@ function StripeRefundSetupPanel({
       title="Native Stripe refund verification"
       onStatusChange={onStatusChange}
     />
+  );
+}
+
+const STRIPE_REFUND_READ_CAPABILITY = "stripe_refund.read";
+
+function StripeRefundPullSetupPanel() {
+  const [environment, setEnvironment] = useState("production");
+  const [connector, setConnector] = useState<SourceConnector | null>(null);
+  const [secretRef, setSecretRef] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    void listSourceConnectors(
+      { environment, capability: STRIPE_REFUND_READ_CAPABILITY },
+      controller.signal,
+    )
+      .then(({ items }) => {
+        const current = items[0] ?? null;
+        setConnector(current);
+        setSecretRef(current?.secret_ref ?? "");
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : "Failed to load automatic source check.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [environment]);
+
+  const save = async (status: "active" | "disabled") => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await upsertSourceConnector({
+        environment,
+        capability: STRIPE_REFUND_READ_CAPABILITY,
+        connector_kind: "stripe",
+        secret_ref: status === "disabled" ? connector?.secret_ref ?? secretRef : secretRef,
+        config: {},
+        status,
+      });
+      setConnector(saved);
+      setMessage(status === "active" ? "Automatic source checks enabled." : "Automatic source checks disabled.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update automatic source check.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Stripe refund automatic source check">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Automatic source check</span>
+          <h2>Pull Stripe refund proof</h2>
+          <p>Let Zroky read Stripe when an outcome needs fresh proof.</p>
+        </div>
+        <StatusPill value={connector?.status ?? "not_configured"} />
+      </div>
+      <form
+        className="connectors-generic-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save("active");
+        }}
+      >
+        <div className="connectors-generic-form-head">
+          <strong>3. Automatic source check</strong>
+          <span>Zroky stores the variable name, never the Stripe key.</span>
+        </div>
+        <label>
+          <span>Environment</span>
+          <select disabled={loading || saving} onChange={(event) => setEnvironment(event.target.value)} value={environment}>
+            <option value="production">production</option>
+            <option value="staging">staging</option>
+            <option value="development">development</option>
+          </select>
+        </label>
+        <label>
+          <span>Credential environment variable</span>
+          <input
+            autoComplete="off"
+            disabled={loading || saving}
+            onChange={(event) => setSecretRef(event.target.value)}
+            pattern="[A-Z_][A-Z0-9_]*"
+            placeholder="STRIPE_KEY_PROJ_ABC"
+            required
+            title="Use an uppercase environment variable name, not a Stripe key."
+            value={secretRef}
+          />
+        </label>
+        <DashboardButton disabled={loading || saving || !secretRef} icon={<Power />} loading={saving} type="submit">
+          {connector?.status === "active" ? "Save automatic checks" : "Enable automatic checks"}
+        </DashboardButton>
+        {connector?.status === "active" ? (
+          <DashboardButton disabled={saving} icon={<PowerOff />} onClick={() => void save("disabled")} type="button" variant="soft">
+            Disable automatic checks
+          </DashboardButton>
+        ) : null}
+      </form>
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+    </section>
   );
 }
 
@@ -3591,11 +3709,14 @@ function ConnectorInspector({
                 />
               ) : null}
               {row.id === "stripe_refund" ? (
-                <StripeRefundSetupPanel
-                  latestCheck={row.latestCheck}
-                  onStatusChange={onStripeStatusChange}
-                  status={stripeStatus}
-                />
+                <>
+                  <StripeRefundSetupPanel
+                    latestCheck={row.latestCheck}
+                    onStatusChange={onStripeStatusChange}
+                    status={stripeStatus}
+                  />
+                  <StripeRefundPullSetupPanel />
+                </>
               ) : null}
               {row.id === "stripe_payment" ? (
                 <StripePaymentSetupPanel
