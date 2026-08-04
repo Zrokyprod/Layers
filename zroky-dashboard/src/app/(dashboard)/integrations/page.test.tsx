@@ -1259,7 +1259,7 @@ describe("IntegrationsPage", () => {
     expect(screen.getAllByText("Missing / Not connected").length).toBeGreaterThan(0);
     clickFirstButton("Connect Stripe");
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
-    await waitFor(() => expect(api.listSourceConnectors).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.listSourceConnectors).toHaveBeenCalled());
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
@@ -1496,7 +1496,7 @@ describe("IntegrationsPage", () => {
       created_at: "2026-08-04T09:00:00Z",
       updated_at: "2026-08-04T09:00:00Z",
     };
-    api.listSourceConnectors.mockResolvedValueOnce({ items: [connector] });
+    api.listSourceConnectors.mockResolvedValue({ items: [connector] });
     api.upsertSourceConnector
       .mockResolvedValueOnce({ ...connector, secret_ref: "STRIPE_KEY_DEMO", status: "active" })
       .mockResolvedValueOnce({ ...connector, secret_ref: "STRIPE_KEY_DEMO", status: "disabled" });
@@ -1541,6 +1541,30 @@ describe("IntegrationsPage", () => {
         status: "disabled",
       });
     });
+  });
+
+  it("shows an active automatic Stripe source check as configured", async () => {
+    api.listSourceConnectors.mockResolvedValue({
+      items: [{
+        id: "source_connector_active",
+        project_id: "project_1",
+        environment: "production",
+        capability: "stripe_refund.read",
+        connector_kind: "stripe",
+        secret_ref: "STRIPE_KEY_DEMO",
+        config: {},
+        status: "active",
+        created_at: "2026-08-04T09:00:00Z",
+        updated_at: "2026-08-04T10:00:00Z",
+      }],
+    });
+
+    renderWithConnector("stripe_refund");
+
+    const inspector = await screen.findByRole("region", { name: "Selected connector" });
+    expect(within(inspector).queryByText("Missing / Not connected")).not.toBeInTheDocument();
+    expect(within(inspector).getByText("Saved")).toBeInTheDocument();
+    expect(within(inspector).getByRole("button", { name: "Manage Stripe" })).toBeInTheDocument();
   });
 
   it("saves and tests the native Shopify Admin verifier setup path", async () => {

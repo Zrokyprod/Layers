@@ -124,6 +124,28 @@ describe("EvidencePage", () => {
     expect(screen.getByText("36.36% verified in system of record")).toBeInTheDocument();
   });
 
+  it("uses singular copy when exactly one action is caught", async () => {
+    api.fetchOutcomeGraphCoverage.mockResolvedValue(coverage({
+      counts: {
+        conflicted: 0,
+        duplicate: 0,
+        forbidden: 0,
+        missing: 1,
+        pending: 0,
+        stale: 0,
+        unknown: 0,
+        verified: 2,
+        wrong: 0,
+      },
+      coverage_percent: 66.67,
+      total: 3,
+    }));
+
+    renderEvidencePage();
+
+    expect(await screen.findByRole("heading", { name: "1 action claimed but not proven" })).toBeInTheDocument();
+  });
+
   it("passes classification when a filter chip maps to an API filter", async () => {
     renderEvidencePage();
     await screen.findByRole("heading", { name: "8 actions claimed but not proven" });
