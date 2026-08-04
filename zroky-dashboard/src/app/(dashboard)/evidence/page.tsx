@@ -83,6 +83,10 @@ function caughtCount(summary: OutcomeGraphCoverageSummary | undefined): number {
   return value.wrong + value.missing + value.forbidden + value.duplicate;
 }
 
+function actionCountLabel(count: number): string {
+  return `${formatCount(count)} action${count === 1 ? "" : "s"}`;
+}
+
 function buildVerdict({
   error,
   loading,
@@ -126,10 +130,10 @@ function buildVerdict({
   if (caught === 0) {
     return {
       badge: "All proven",
-      copy: `${formatCount(summary?.total ?? 0)} actions checked against the system of record.`,
+      copy: `${actionCountLabel(summary?.total ?? 0)} checked against the system of record.`,
       ctaHref: "/evidence?filter=proven",
       ctaLabel: "Review proven",
-      title: `All ${formatCount(summary?.total ?? 0)} actions proven`,
+      title: `All ${actionCountLabel(summary?.total ?? 0)} proven`,
       tone: "success",
     };
   }
@@ -138,7 +142,7 @@ function buildVerdict({
     copy: "Actions claimed but not proven in this period.",
     ctaHref: "/evidence?filter=caught",
     ctaLabel: `Review ${formatCount(caught)}`,
-    title: `${formatCount(caught)} actions claimed but not proven`,
+    title: `${actionCountLabel(caught)} claimed but not proven`,
     tone: "danger",
   };
 }
@@ -303,7 +307,7 @@ export default function EvidencePage() {
         onMetricClick={applyFilterHref}
         onRefresh={() => void refreshEvidence()}
         summaryDetail={total === 0 ? "Declare your first intent" : `${coverageQuery.data?.coverage_percent ?? 0}% verified in system of record`}
-        summaryTitle={total === 0 ? "No outcome graphs yet" : `${formatCount(caught)} actions claimed but not proven`}
+        summaryTitle={total === 0 ? "No outcome graphs yet" : `${actionCountLabel(caught)} claimed but not proven`}
       />
       <DashboardWorkspace
         left={(

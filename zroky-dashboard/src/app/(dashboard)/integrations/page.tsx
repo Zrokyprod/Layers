@@ -668,7 +668,33 @@ function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
   if (row.id === "generic_rest") return "Connect custom REST";
   if (row.id === "postgres_read") return "Connect database";
   if (row.id === "ledger_template" || row.id === "customer_template") return "Connect template";
-  return `Connect ${connectorSystemLabel(row)}`;
+  return `${row.connected ? "Manage" : "Connect"} ${connectorSystemLabel(row)}`;
+}
+
+function stripeStatusFromSourceConnector(connector: SourceConnector | undefined): StripeRefundConnectorStatusResponse | null {
+  if (!connector || connector.status !== "active") return null;
+  return {
+    connected: true,
+    connector_type: "stripe_refund",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_bearer_token: true,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: connector.created_at,
+    updated_at: connector.updated_at,
+  };
 }
 
 function connectorSystemLabel(row: ConnectorInventoryRow): string {
@@ -3826,6 +3852,7 @@ export default function IntegrationsPage() {
       postgresResult,
       checksResult,
       registryResult,
+      sourceConnectorsResult,
     ] = await Promise.allSettled([
       getMcpUpstreamBinding(),
       getGithubConnectionStatus(),
@@ -3844,14 +3871,20 @@ export default function IntegrationsPage() {
       getPostgresReadConnectorStatus(),
       listOutcomeReconciliations({ limit: 50 }),
       getToolRegistry(),
+      listSourceConnectors({ environment: "production", capability: STRIPE_REFUND_READ_CAPABILITY }),
     ]);
+
+    const nativeStripeStatus = stripeResult.status === "fulfilled" ? stripeResult.value : null;
+    const sourceStripeStatus = sourceConnectorsResult.status === "fulfilled"
+      ? stripeStatusFromSourceConnector(sourceConnectorsResult.value.items[0])
+      : null;
 
     setOverview({
       mcp: mcpResult.status === "fulfilled" ? mcpResult.value : null,
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
       generic: genericResult.status === "fulfilled" ? genericResult.value : null,
-      stripe: stripeResult.status === "fulfilled" ? stripeResult.value : null,
+      stripe: nativeStripeStatus?.connected ? nativeStripeStatus : sourceStripeStatus ?? nativeStripeStatus,
       stripePayment: stripePaymentResult.status === "fulfilled" ? stripePaymentResult.value : null,
       razorpay: razorpayResult.status === "fulfilled" ? razorpayResult.value : null,
       hubspot: hubspotResult.status === "fulfilled" ? hubspotResult.value : null,
