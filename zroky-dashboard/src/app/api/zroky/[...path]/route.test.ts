@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-import { DELETE, GET } from "./route";
+import { DELETE, GET, POST } from "./route";
 
 function context(path: string[]) {
   return {
@@ -74,6 +74,30 @@ describe("/api/zroky proxy route", () => {
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect((init.headers as Headers).get("authorization")).toBe("Bearer local-token");
+  });
+
+  it("forwards idempotency keys to backend writes", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/incidents/incident_1/execute-recovery", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "recovery-attempt-1",
+      },
+      body: JSON.stringify({ plan: { steps: [] } }),
+    });
+    await POST(request, context(["v1", "incidents", "incident_1", "execute-recovery"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("idempotency-key")).toBe("recovery-attempt-1");
   });
 
   it("does not forward caller-controlled authorization headers", async () => {
