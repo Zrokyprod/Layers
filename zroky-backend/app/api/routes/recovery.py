@@ -52,7 +52,7 @@ class RecoveryPlaybookListResponse(BaseModel):
 
 class RecoveryPlanCompileRequest(BaseModel):
     incident_id: str
-    playbook_key: str
+    playbook_key: str | None = None
 
 
 class RecoveryPlanCompileResponse(BaseModel):
@@ -180,6 +180,32 @@ def _find_playbook(row: FinalAssurancePack, playbook_key: str) -> dict[str, Any]
         if isinstance(playbook, dict) and playbook.get("key") == playbook_key:
             return playbook
     return None
+
+
+def _matching_playbooks(row: FinalAssurancePack, incident_type: str) -> list[dict[str, Any]]:
+    pack = json.loads(row.pack_json)
+    return [
+        playbook
+        for playbook in pack.get("recovery_playbooks") or []
+        if isinstance(playbook, dict) and playbook.get("incident_type") == incident_type
+    ]
+
+
+def _bind_step_target(step: dict[str, Any], intent_payload: dict[str, Any]) -> dict[str, Any]:
+    compiled = dict(step)
+    if compiled.get("adapter") != "stripe_refund" or compiled.get("operation") != "refund.create":
+        return compiled
+    target_value = compiled.get("target")
+    target = dict(target_value) if isinstance(target_value, dict) else {}
+    if not target.get("charge") and not target.get("payment_intent"):
+        charge = intent_payload.get("charge_id") or intent_payload.get("stripe_charge_id")
+        payment_intent = intent_payload.get("payment_intent_id") or intent_payload.get("stripe_payment_intent_id")
+        if charge:
+            target["charge"] = str(charge)
+        elif payment_intent:
+            target["payment_intent"] = str(payment_intent)
+    compiled["target"] = target
+    return compiled
 
 
 def _normalize_executor_ref(executor_ref: str) -> str:
@@ -347,9 +373,24 @@ def compile_recovery_plan(
     ).scalar_one_or_none()
     if pack is None:
         raise HTTPException(status_code=404, detail="Recovery playbook not found.")
-    playbook = _find_playbook(pack, body.playbook_key)
-    if playbook is None:
-        raise HTTPException(status_code=404, detail="Recovery playbook not found.")
+    if body.playbook_key:
+        playbook = _find_playbook(pack, body.playbook_key)
+        if playbook is None:
+            raise HTTPException(status_code=404, detail="Recovery playbook not found.")
+    else:
+        incident_type = str(graph.classification or snapshot.get("classification") or "").strip()
+        matches = _matching_playbooks(pack, incident_type)
+        if len(matches) != 1:
+            raise HTTPException(status_code=409, detail="Recovery requires exactly one matching playbook.")
+        playbook = matches[0]
+
+    intent = db.execute(
+        select(FinalWorkflowIntent).where(
+            FinalWorkflowIntent.id == graph.intent_id,
+            FinalWorkflowIntent.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    intent_payload = json.loads(intent.intent_json) if intent is not None else {}
 
     effects = [item for item in snapshot.get("actual_effects", []) if isinstance(item, dict)]
     matched = {str(item.get("effect_key")) for item in effects if item.get("matched") is True and item.get("effect_key")}
@@ -362,12 +403,13 @@ def compile_recovery_plan(
         if step_keys and step_keys <= matched:
             skipped_effects.update(step_keys)
             continue
-        compiled_steps.append(step)
+        compiled_steps.append(_bind_step_target(step, intent_payload))
+    playbook_key = str(playbook.get("key") or "").strip()
     plan = {
         "schema_version": "zroky.recovery_plan.v1",
         "incident_id": incident.id,
         "outcome_graph_id": graph.id,
-        "playbook_id": f"{pack.workflow_key}:{pack.version}:{body.playbook_key}",
+        "playbook_id": f"{pack.workflow_key}:{pack.version}:{playbook_key}",
         "target_effects": sorted(unresolved),
         "steps": compiled_steps,
     }

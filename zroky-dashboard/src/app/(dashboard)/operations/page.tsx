@@ -18,6 +18,7 @@ import {
 import {
   assignFinalIncident,
   approveFinalApprovalRequirement,
+  compileFinalIncidentRecovery,
   containFinalIncident,
   denyFinalApprovalRequirement,
   executeFinalIncidentRecovery,
@@ -1033,8 +1034,15 @@ export default function OperationsPage() {
     onError: (error) => setActionError(errorText(error)),
   });
   const recoveryExecution = useMutation({
-    mutationFn: ({ executorRef, row }: { executorRef: string; row: OpsRow }) =>
-      executeFinalIncidentRecovery(row.id, executorRef, recoveryIdempotencyKey(row.id)),
+    mutationFn: async ({ executorRef, row }: { executorRef: string; row: OpsRow }) => {
+      const compiled = await compileFinalIncidentRecovery(row.id);
+      return executeFinalIncidentRecovery(
+        row.id,
+        executorRef,
+        recoveryIdempotencyKey(row.id),
+        compiled.plan,
+      );
+    },
     onSuccess: async () => {
       setActionError(null);
       await queryClient.invalidateQueries({ queryKey: ["final-incidents"] });
