@@ -70,6 +70,10 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
   if (selectedProjectId) {
     headers.set("x-project-id", selectedProjectId);
   }
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+  if (idempotencyKey) {
+    headers.set("idempotency-key", idempotencyKey);
+  }
 
   const timeoutMsRaw = Number(process.env.ZROKY_API_PROXY_TIMEOUT_MS ?? defaultTimeoutMs);
   const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? timeoutMsRaw : defaultTimeoutMs;
