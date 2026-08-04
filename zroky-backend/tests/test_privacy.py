@@ -1,3 +1,5 @@
+import re
+
 from app.services.privacy import mask_payload, mask_text
 
 
@@ -33,3 +35,20 @@ def test_custom_pattern_layer_masks_project_specific_terms() -> None:
     assert "AcmeInternalCodename" not in rendered
     assert "VIP-MIGRATION-42" not in rendered
     assert rendered.count("[REDACTED]") == 2
+
+
+def test_uuid_is_preserved_while_adjacent_pii_is_masked() -> None:
+    identifier = "12345678-1234-1234-1234-123456789012"
+
+    masked = mask_text(f"run {identifier} belongs to user@example.com")
+
+    assert identifier in masked
+    assert "user@example.com" not in masked
+
+
+def test_custom_pattern_can_explicitly_mask_uuid() -> None:
+    identifier = "12345678-1234-1234-1234-123456789012"
+
+    masked = mask_text(identifier, custom_patterns=[re.escape(identifier)])
+
+    assert masked == "[REDACTED]"
