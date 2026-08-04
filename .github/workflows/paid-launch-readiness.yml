@@ -149,7 +149,10 @@ jobs:
 
       - name: Run Python SDK final gates
         working-directory: zroky-sdk
-        run: python -m pytest tests/test_final_sdk_shape.py tests/test_final_sdk_public_surface.py tests/test_final_pre_execution_guard.py tests/test_runner.py -q
+        run: python -m pytest tests/test_final_sdk_shape.py tests/test_final_sdk_public_surface.py tests/test_final_pre_execution_guard.py tests/test_runner.py tests/test_recovery_runner.py -q
+
+      - name: Build recovery runner image
+        run: docker build --file zroky-sdk/Dockerfile zroky-sdk
 
       - name: Set up Node 22
         uses: actions/setup-node@v4

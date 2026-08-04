@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import threading
 import time
@@ -25,6 +26,7 @@ from zroky._runner import (
 )
 
 _REQUEST_TIMEOUT_S = 30.0
+_LOGGER = logging.getLogger(__name__)
 
 
 def recovery_step_idempotency_key(plan_digest: str, step_key: str) -> str:
@@ -190,6 +192,15 @@ class RecoveryRunner:
                 stats["claimed"] += 1
                 if status in {"succeeded", "failed", "ambiguous"}:
                     stats[status] += 1
+                dispatch = result.get("dispatch")
+                outbox_job_id = (
+                    dispatch.get("outbox_job_id") if isinstance(dispatch, Mapping) else None
+                )
+                _LOGGER.info(
+                    "Recovery dispatch completed status=%s outbox_job_id=%s",
+                    status,
+                    outbox_job_id or "unknown",
+                )
             else:
                 stats["idle"] += 1
                 sleep(poll_interval_seconds)
@@ -262,10 +273,30 @@ class RecoveryRunner:
 
 
 def main() -> None:
+    missing = []
+    if not os.environ.get("ZROKY_API_KEY", "").strip():
+        missing.append("ZROKY_API_KEY")
+    project = os.environ.get("ZROKY_PROJECT", "").strip()
+    project_id = os.environ.get("ZROKY_PROJECT_ID", "").strip()
+    if not (project or project_id):
+        missing.append("ZROKY_PROJECT")
     executor_ref = os.environ.get("ZROKY_EXECUTOR_REF", "").strip()
     if not executor_ref:
-        raise SystemExit("ZROKY_EXECUTOR_REF is required.")
-    poll_seconds = float(os.environ.get("ZROKY_POLL_SECONDS", "30"))
+        missing.append("ZROKY_EXECUTOR_REF")
+    if missing:
+        raise SystemExit(f"Missing required environment variables: {', '.join(missing)}.")
+    try:
+        poll_seconds = float(os.environ.get("ZROKY_POLL_SECONDS", "30"))
+    except ValueError as exc:
+        raise SystemExit("ZROKY_POLL_SECONDS must be a positive number.") from exc
+    if poll_seconds <= 0:
+        raise SystemExit("ZROKY_POLL_SECONDS must be a positive number.")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    _LOGGER.info(
+        "Zroky recovery runner started executor_ref=%s poll_seconds=%s",
+        executor_ref,
+        poll_seconds,
+    )
     runner = RecoveryRunner(executor_ref=executor_ref)
     runner.run_daemon(poll_interval_seconds=poll_seconds)
 
