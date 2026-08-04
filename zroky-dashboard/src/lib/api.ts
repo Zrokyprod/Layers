@@ -327,6 +327,15 @@ export interface FinalIncidentRecoveryExecutionResponse {
   idempotency_key: string;
 }
 
+export interface RecoveryPlanCompileResponse {
+  incident_id: string;
+  playbook_id: string;
+  plan_digest: string;
+  plan: Record<string, unknown>;
+  included_effects: string[];
+  skipped_effects: string[];
+}
+
 export interface FinalApprovalRequirementResponse {
   id: string;
   project_id: string;
@@ -1416,6 +1425,13 @@ export function executeFinalIncidentRecovery(
       body: { executor_ref: executorRef, plan },
     },
   );
+}
+
+export function compileFinalIncidentRecovery(incidentId: string): Promise<RecoveryPlanCompileResponse> {
+  return request<RecoveryPlanCompileResponse>("/v1/recovery/compile-plan", {
+    method: "POST",
+    body: { incident_id: incidentId },
+  });
 }
 
 export function resolveFinalIncidentManually(

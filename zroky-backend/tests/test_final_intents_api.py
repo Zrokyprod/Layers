@@ -1573,6 +1573,13 @@ def test_incident_recovery_execution_queues_customer_executor(client: TestClient
     assert forbidden.status_code == 403
 
     client.tenant_role["value"] = "admin"
+    empty_plan = client.post(
+        f"/v1/incidents/{incident['id']}/execute-recovery",
+        json={"executor_ref": "customer-recovery-executor://ops/refund", "plan": {}},
+        headers={"Idempotency-Key": "recover-exec-empty"},
+    )
+    assert empty_plan.status_code == 400
+
     dispatched = client.post(
         f"/v1/incidents/{incident['id']}/execute-recovery",
         json={"executor_ref": "customer-recovery-executor://ops/refund", "plan": {"step": "retry_refund"}},
@@ -1805,6 +1812,82 @@ def test_recovery_plan_compiler_excludes_already_satisfied_effects(client: TestC
     assert body["plan"]["target_effects"] == ["email_sent"]
     assert body["plan"]["steps"] == [{"effect_key": "email_sent", "operation": "send_customer_email"}]
     assert body["plan_digest"].startswith("sha256:")
+
+
+def test_recovery_plan_compiler_selects_playbook_and_binds_stripe_charge(client: TestClient) -> None:
+    intent = client.post(
+        "/v1/intents",
+        json={"intent": {"charge_id": "ch_compile", "amount_minor": 450_000}},
+        headers={"Idempotency-Key": "compile-stripe-intent"},
+    ).json()
+    run = client.post(
+        "/v1/runs",
+        json={"intent_id": intent["id"], "workflow_key": "stripe-refund", "run": {}},
+        headers={"Idempotency-Key": "compile-stripe-run"},
+    ).json()
+    client.tenant_role["value"] = "admin"
+    client.post(
+        "/v1/assurance-packs",
+        json={
+            "pack": {
+                "schema_version": "zroky.workflow_assurance_pack.v1",
+                "workflow_key": "stripe-refund",
+                "version": "1.0.0",
+                "object_types": [{"key": "refund", "schema": {"type": "object"}}],
+                "effects": [
+                    {"key": "refund_posted", "object_type": "refund", "predicate": "refund.status == 'posted'"}
+                ],
+                "source_bindings": [
+                    {
+                        "key": "stripe_refunds",
+                        "connector_capability": "stripe_refund.read",
+                        "object_type": "refund",
+                        "freshness_seconds": 300,
+                    }
+                ],
+                "recovery_playbooks": [
+                    {
+                        "key": "reissue_refund",
+                        "incident_type": "missing",
+                        "steps": [
+                            {
+                                "step_key": "reissue_refund",
+                                "effect_keys": ["refund_posted"],
+                                "adapter": "stripe_refund",
+                                "operation": "refund.create",
+                                "credential_ref": "customer-runner-secret://demo/stripe",
+                                "target": {},
+                                "arguments": {"amount_minor": 450_000},
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+    )
+    graph = client.post(f"/v1/runs/{run['id']}/outcome-graph", json={}).json()
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        graph_row = session.get(FinalOutcomeGraph, graph["id"])
+        graph_row.classification = "missing"
+        incident_row = FinalOutcomeIncident(
+            project_id="proj_test",
+            environment="production",
+            outcome_graph_id=graph["id"],
+            severity="high",
+            status="open",
+            incident_json=json.dumps({"intent_id": intent["id"]}),
+        )
+        session.add(incident_row)
+        session.commit()
+        incident_id = incident_row.id
+
+    compiled = client.post("/v1/recovery/compile-plan", json={"incident_id": incident_id})
+
+    assert compiled.status_code == 200, compiled.text
+    body = compiled.json()
+    assert body["playbook_id"] == "stripe-refund:1.0.0:reissue_refund"
+    assert body["plan"]["steps"][0]["target"] == {"charge": "ch_compile"}
+    assert body["plan"]["outcome_graph_id"] == graph["id"]
 
 
 def test_final_evidence_bundle_requires_final_sections(client: TestClient) -> None:

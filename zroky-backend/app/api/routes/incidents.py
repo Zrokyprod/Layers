@@ -290,6 +290,8 @@ def execute_incident_recovery(
     _require_admin(context)
     if not idempotency_key or not idempotency_key.strip():
         raise HTTPException(status_code=400, detail="Idempotency-Key header is required.")
+    if not body.plan:
+        raise HTTPException(status_code=400, detail="Compiled recovery plan is required.")
     key = idempotency_key.strip()
     incident = _load_incident(db, project_id=context.tenant_id, incident_id=incident_id)
     if incident.status == "resolved":

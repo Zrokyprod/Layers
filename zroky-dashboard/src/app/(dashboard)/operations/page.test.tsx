@@ -23,6 +23,7 @@ const userEvent = {
 const api = vi.hoisted(() => ({
   assignFinalIncident: vi.fn(),
   approveFinalApprovalRequirement: vi.fn(),
+  compileFinalIncidentRecovery: vi.fn(),
   containFinalIncident: vi.fn(),
   denyFinalApprovalRequirement: vi.fn(),
   executeFinalIncidentRecovery: vi.fn(),
@@ -98,6 +99,7 @@ describe("OperationsPage", () => {
     api.listMyProjects.mockReset();
     api.assignFinalIncident.mockReset();
     api.approveFinalApprovalRequirement.mockReset();
+    api.compileFinalIncidentRecovery.mockReset();
     api.containFinalIncident.mockReset();
     api.denyFinalApprovalRequirement.mockReset();
     api.executeFinalIncidentRecovery.mockReset();
@@ -106,6 +108,14 @@ describe("OperationsPage", () => {
     queryClient.invalidateQueries.mockReset();
     api.assignFinalIncident.mockReturnValue({ id: "incident_1", status: "open" });
     api.approveFinalApprovalRequirement.mockReturnValue({ id: "approval_1", status: "approved" });
+    api.compileFinalIncidentRecovery.mockResolvedValue({
+      incident_id: "incident_1",
+      playbook_id: "refund-workflow:1.0.0:reissue_refund",
+      plan_digest: "sha256:compiled",
+      plan: { steps: [{ step_key: "reissue_refund", target: { charge: "ch_1" } }] },
+      included_effects: ["refund_posted"],
+      skipped_effects: [],
+    });
     api.containFinalIncident.mockReturnValue({ id: "incident_1", status: "unresolved" });
     api.denyFinalApprovalRequirement.mockReturnValue({ id: "approval_1", status: "denied" });
     api.executeFinalIncidentRecovery.mockReturnValue({ incident: { id: "incident_1" }, execution_status: "dispatched" });
@@ -344,11 +354,15 @@ describe("OperationsPage", () => {
     await user.type(screen.getByLabelText("Recovery executor ref"), "customer-recovery-executor://primary");
     await user.click(screen.getByRole("button", { name: "Execute recovery" }));
 
-    expect(api.executeFinalIncidentRecovery).toHaveBeenCalledWith(
-      "incident_1",
-      "customer-recovery-executor://primary",
-      expect.any(String),
-    );
+    await vi.waitFor(() => {
+      expect(api.compileFinalIncidentRecovery).toHaveBeenCalledWith("incident_1");
+      expect(api.executeFinalIncidentRecovery).toHaveBeenCalledWith(
+        "incident_1",
+        "customer-recovery-executor://primary",
+        expect.any(String),
+        { steps: [{ step_key: "reissue_refund", target: { charge: "ch_1" } }] },
+      );
+    });
   });
 
   it("manual incident resolution requires an explicit verified graph id", async () => {
