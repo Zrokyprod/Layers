@@ -10,13 +10,35 @@ import httpx
 import pytest
 
 from zroky._runner import RunnerExecutionContext, credential_env_name
-from zroky.recovery_runner import RecoveryRunner, recovery_step_idempotency_key
+from zroky.recovery_runner import RecoveryRunner, main, recovery_step_idempotency_key
 
 
 def test_recovery_step_idempotency_key_is_deterministic() -> None:
     assert recovery_step_idempotency_key("plan_digest_1", "refund_retry") == hashlib.sha256(
         b"plan_digest_1:refund_retry"
     ).hexdigest()
+
+
+def test_recovery_runner_main_reports_all_missing_required_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("ZROKY_API_KEY", "ZROKY_PROJECT", "ZROKY_PROJECT_ID", "ZROKY_EXECUTOR_REF"):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(SystemExit, match="ZROKY_API_KEY, ZROKY_PROJECT, ZROKY_EXECUTOR_REF"):
+        main()
+
+
+def test_recovery_runner_main_rejects_non_positive_poll_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ZROKY_API_KEY", "zk_test")
+    monkeypatch.setenv("ZROKY_PROJECT", "proj_test")
+    monkeypatch.setenv("ZROKY_EXECUTOR_REF", "customer-recovery-executor://ops/refund")
+    monkeypatch.setenv("ZROKY_POLL_SECONDS", "0")
+
+    with pytest.raises(SystemExit, match="ZROKY_POLL_SECONDS must be a positive number"):
+        main()
 
 
 def test_recovery_runner_claims_executes_and_completes_with_fake_adapter(
