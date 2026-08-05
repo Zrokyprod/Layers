@@ -423,10 +423,11 @@ describe("Home dashboard", () => {
     expect(within(approvalCell as HTMLElement).getByText("2")).toBeInTheDocument();
   });
 
-  it("uses proof-ledger freshness and signing-key readiness instead of legacy activity counts", async () => {
+  it("keeps all-proven posture active when only the separate action runner is offline", async () => {
     const response = summary();
     response.metrics.receipts_generated = 0;
     response.metrics.pending_approvals = 0;
+    response.data!.stale_attempts = [];
     response.data!.source_summary = {
       total: 0,
       matched_receipt: 0,
@@ -462,12 +463,15 @@ describe("Home dashboard", () => {
 
     render(<HomePage />);
 
+    expect(await screen.findByRole("heading", { name: "ACTIVE" })).toBeInTheDocument();
     expect(await screen.findByText("3 of 3 outcome graphs have current source proof")).toBeInTheDocument();
     expect(screen.getByText("Ed25519 attestation key configured")).toBeInTheDocument();
-    expect(screen.getByText("Verification needs attention: 0 runners online.")).toBeInTheDocument();
+    expect(screen.getByText("Protected action runner")).toBeInTheDocument();
+    expect(screen.getByText("0 action runners online")).toBeInTheDocument();
+    expect(screen.getByText("No current blocker")).toBeInTheDocument();
     expect(screen.queryByText(/source pollers successful/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no signed receipt generated/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Review blocker" }).getAttribute("href")).toBe("/operations");
+    expect(screen.queryByRole("link", { name: "Review blocker" })).not.toBeInTheDocument();
   });
 
   it("refetches summary data when the Home window changes", async () => {
