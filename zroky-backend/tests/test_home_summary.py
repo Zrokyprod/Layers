@@ -201,9 +201,26 @@ def test_home_summary_uses_exact_window_counts_not_list_caps(client: TestClient)
         "online_runners": 0,
         "active_sor_connectors": 0,
         "tested_sor_connectors": 0,
+        "attestation_signing_ready": True,
         "mcp_gateway_status": "not_configured",
         "mcp_gateway_test_status": "not_tested",
         "runtime_enabled": True,
         "kill_switch_enabled": False,
     }
     assert body["sources"]["intents"] is True
+
+
+def test_home_summary_reports_missing_production_attestation_key(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    project_id = "proj_home_signer"
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        session.add(Project(id=project_id, name="Home signer", is_active=True))
+        session.commit()
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("ACTION_RECEIPT_ED25519_PRIVATE_KEY", raising=False)
+    get_settings.cache_clear()
+
+    response = client.get("/v1/home/summary?days=7", headers={"x-project-id": project_id})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["control_health"]["attestation_signing_ready"] is False

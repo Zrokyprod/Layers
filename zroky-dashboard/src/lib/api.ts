@@ -4226,6 +4226,7 @@ export interface HomeSummaryResponse {
       online_runners: number;
       active_sor_connectors: number;
       tested_sor_connectors: number;
+      attestation_signing_ready: boolean;
       mcp_gateway_status: string;
       mcp_gateway_test_status: string;
       runtime_enabled: boolean;

@@ -254,6 +254,7 @@ function demoHomeSummary(days: number): HomeSummaryResponse {
         online_runners: 2,
         active_sor_connectors: 8,
         tested_sor_connectors: 7,
+        attestation_signing_ready: true,
         mcp_gateway_status: "active",
         mcp_gateway_test_status: "succeeded",
         runtime_enabled: true,
@@ -448,18 +449,21 @@ function blockerText(status: PostureStatus, stats: ProofStats, readiness: Readin
   return "No current blocker";
 }
 
-function postureExplanation(status: PostureStatus): string {
+function postureExplanation(status: PostureStatus, blocker: string): string {
   if (status === "INACTIVE") return "Verification is not active yet. Connect a source to start proving outcomes.";
   if (status === "CRITICAL") return "Source-of-truth evidence contradicts one or more agent success claims.";
-  if (status === "DEGRADED") return "Verification is running, but one source cannot be independently read.";
+  if (status === "DEGRADED") return `Verification needs attention: ${blocker}.`;
   return "Current actions are proven against configured sources of truth.";
 }
 
-function primaryCta(status: PostureStatus, stats: ProofStats) {
+function primaryCta(status: PostureStatus, stats: ProofStats, readiness: ReadinessRow[]) {
   if (status === "INACTIVE") return { label: "Connect source", href: "/integrations" };
   if (stats.pendingApprovals > Math.max(stats.mismatches, stats.needsAttention)) return { label: "Open approvals", href: "/operations" };
   if (status === "CRITICAL") return { label: "Review incidents", href: "/operations" };
-  if (status === "DEGRADED") return { label: "Resolve blocker", href: "/integrations" };
+  if (status === "DEGRADED") {
+    const blocked = readiness.find((item) => ["Blocked", "Stale", "Missing"].includes(item.status));
+    return { label: "Review blocker", href: blocked?.href ?? "/operations" };
+  }
   return { label: "View evidence", href: "/evidence" };
 }
 
@@ -493,11 +497,13 @@ function quotaWarning(usage: BillingUsageResponse | null): string | null {
   return null;
 }
 
-function buildReadinessRows(data: HomeData, availability: HomeAvailability): ReadinessRow[] {
-  const connectedFeeds = data.sourceSummary?.connected_feeds ?? 0;
-  const successfulPollers = data.sourceSummary?.successful_pollers ?? 0;
+function buildReadinessRows(data: HomeData): ReadinessRow[] {
   const health = data.homeSummary?.data?.control_health ?? null;
-  const receipts = data.homeSummary?.metrics.receipts_generated ?? data.intents.filter((intent) => intent.receipt_status === "generated").length;
+  const coverage = data.outcomeGraphCoverage;
+  const proofAttention = coverage
+    ? (coverage.counts.pending ?? 0) + (coverage.counts.unknown ?? 0) + (coverage.counts.stale ?? 0) + (coverage.counts.conflicted ?? 0)
+    : 0;
+  const currentProof = coverage ? Math.max(coverage.total - proofAttention, 0) : 0;
   const activeConnectors = health?.active_sor_connectors ?? 0;
   const testedConnectors = health?.tested_sor_connectors ?? 0;
   const configuredPacks = health?.configured_action_packs ?? 0;
@@ -512,14 +518,15 @@ function buildReadinessRows(data: HomeData, availability: HomeAvailability): Rea
 
   return [
     {
-      component: "Source freshness",
-      status: !availability.sourceSummary ? "Stale" : connectedFeeds === 0 ? "Missing" : successfulPollers < connectedFeeds ? "Stale" : "Ready",
-      details:
-        connectedFeeds === 0
-          ? "No source connected"
-          : `${successfulPollers}/${connectedFeeds} source pollers successful`,
+      component: "Proof freshness",
+      status: !coverage ? "Stale" : coverage.total === 0 ? "Pending" : proofAttention > 0 ? "Stale" : "Ready",
+      details: !coverage
+        ? "Outcome proof unavailable"
+        : coverage.total === 0
+          ? "No outcome graphs checked yet"
+          : `${formatCount(currentProof)} of ${formatCount(coverage.total)} outcome graphs have current source proof`,
       action: "Review",
-      href: "/integrations",
+      href: "/evidence",
     },
     {
       component: "Connector test-read",
@@ -533,8 +540,12 @@ function buildReadinessRows(data: HomeData, availability: HomeAvailability): Rea
     },
     {
       component: "Evidence signer",
-      status: receipts > 0 ? "Ready" : "Missing",
-      details: receipts > 0 ? `${formatCount(receipts)} signed bundles generated` : "No signed receipt generated yet",
+      status: !health ? "Stale" : health.attestation_signing_ready ? "Ready" : "Missing",
+      details: !health
+        ? "Control health unavailable"
+        : health.attestation_signing_ready
+          ? "Ed25519 attestation key configured"
+          : "Attestation signing key not configured",
       action: "View",
       href: "/evidence",
     },
@@ -699,6 +710,7 @@ function VerdictHero({
   stats,
   status,
   blocker,
+  readiness,
   canAct,
   errorCount,
   quota,
@@ -709,6 +721,7 @@ function VerdictHero({
   stats: ProofStats;
   status: PostureStatus;
   blocker: string;
+  readiness: ReadinessRow[];
   canAct: boolean;
   errorCount: number;
   quota: string | null;
@@ -716,7 +729,7 @@ function VerdictHero({
   onWindowChange: (days: number) => void;
   onRefresh: () => void;
 }) {
-  const cta = primaryCta(status, stats);
+  const cta = primaryCta(status, stats, readiness);
   const windows = [
     ["24h", 1],
     ["7d", 7],
@@ -732,7 +745,7 @@ function VerdictHero({
             <h2>{status}</h2>
             <StatusBadge status={status} />
           </div>
-          <p>{postureExplanation(status)}</p>
+          <p>{postureExplanation(status, blocker)}</p>
           {errorCount > 0 ? <span className="zh-inline-alert">{errorCount} source feed unavailable</span> : null}
           {quota ? <span className="zh-inline-alert">{quota}</span> : null}
         </div>
@@ -847,7 +860,7 @@ function CompactAttentionQueue({ rows, canAct, loading }: { rows: AttentionRow[]
 }
 
 function TrustMachineHealth({ rows }: { rows: ReadinessRow[] }) {
-  const core = ["Source freshness", "Connector test-read", "Evidence signer", "Executor / recovery rail"];
+  const core = ["Proof freshness", "Connector test-read", "Evidence signer", "Executor / recovery rail"];
   const healthRows = core
     .map((component) => rows.find((row) => row.component === component))
     .filter((row): row is ReadinessRow => Boolean(row));
@@ -1160,7 +1173,7 @@ export default function HomePage() {
   const canAct = canChangeHomeSetup(projectRole);
   const demoMode = localDemoHomeEnabled();
   const stats = data.outcomeGraphCoverage ? proofStats(data, data.outcomeGraphCoverage) : null;
-  const readiness = buildReadinessRows(data, availability);
+  const readiness = buildReadinessRows(data);
   const status = stats ? homePosture(stats, loadErrors, readiness) : null;
   const blocker = stats && status ? blockerText(status, stats, readiness) : "";
   const active = stats ? activityExists(stats) : false;
@@ -1208,6 +1221,7 @@ export default function HomePage() {
             stats={stats}
             status={status}
             blocker={blocker}
+            readiness={readiness}
             canAct={canAct}
             errorCount={loadErrors}
             quota={quotaWarning(data.billingUsage)}
