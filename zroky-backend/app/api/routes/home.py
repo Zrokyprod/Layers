@@ -50,6 +50,7 @@ from app.services.agent_profiles import (
     resolve_agent_profile_limit,
 )
 from app.services.action_kernel import list_action_intents
+from app.services.action_receipts import ActionReceiptSigningError, action_receipt_public_key_payload
 from app.services.action_runner import list_action_runners, list_project_execution_attempts
 from app.services.outcome_reconciliation import get_reconciliation_summary, list_reconciliations
 from app.services.source_mutations import list_source_mutations, source_mutation_summary
@@ -189,6 +190,11 @@ def get_home_summary(
             SystemOfRecordConnectorConfig.last_tested_at.is_not(None),
         ),
     )
+    try:
+        action_receipt_public_key_payload()
+        attestation_signing_ready = True
+    except ActionReceiptSigningError:
+        attestation_signing_ready = False
     pilot_policy = db.execute(
         select(PilotPolicy).where(PilotPolicy.project_id == tenant_id)
     ).scalar_one_or_none()
@@ -284,6 +290,7 @@ def get_home_summary(
             online_runners=online_runners,
             active_sor_connectors=active_sor_connectors,
             tested_sor_connectors=tested_sor_connectors,
+            attestation_signing_ready=attestation_signing_ready,
             mcp_gateway_status="not_configured",
             mcp_gateway_test_status="not_tested",
             runtime_enabled=bool(policy_payload.get("runtime_enabled", True)),

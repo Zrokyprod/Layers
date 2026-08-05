@@ -423,6 +423,53 @@ describe("Home dashboard", () => {
     expect(within(approvalCell as HTMLElement).getByText("2")).toBeInTheDocument();
   });
 
+  it("uses proof-ledger freshness and signing-key readiness instead of legacy activity counts", async () => {
+    const response = summary();
+    response.metrics.receipts_generated = 0;
+    response.metrics.pending_approvals = 0;
+    response.data!.source_summary = {
+      total: 0,
+      matched_receipt: 0,
+      authorized_external: 0,
+      legacy_path: 0,
+      unmanaged_agent_action: 0,
+      policy_bypass: 0,
+      unknown_actor: 0,
+      unreceipted: 0,
+      connected_feeds: 1,
+      successful_pollers: 0,
+    };
+    response.data!.control_health = {
+      active_agents: 1,
+      policy_enforced_agents: 1,
+      configured_action_packs: 1,
+      online_runners: 0,
+      active_sor_connectors: 1,
+      tested_sor_connectors: 1,
+      attestation_signing_ready: true,
+      mcp_gateway_status: "not_configured",
+      mcp_gateway_test_status: "not_tested",
+      runtime_enabled: true,
+      kill_switch_enabled: false,
+    };
+    api.getHomeSummary.mockResolvedValue(response);
+    api.fetchOutcomeGraphCoverage.mockResolvedValue({
+      counts: { conflicted: 0, duplicate: 0, forbidden: 0, missing: 0, pending: 0, stale: 0, unknown: 0, verified: 3, wrong: 0 },
+      coverage_percent: 100,
+      total: 3,
+    });
+    api.listFinalIncidents.mockResolvedValue([]);
+
+    render(<HomePage />);
+
+    expect(await screen.findByText("3 of 3 outcome graphs have current source proof")).toBeInTheDocument();
+    expect(screen.getByText("Ed25519 attestation key configured")).toBeInTheDocument();
+    expect(screen.getByText("Verification needs attention: 0 runners online.")).toBeInTheDocument();
+    expect(screen.queryByText(/source pollers successful/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no signed receipt generated/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review blocker" }).getAttribute("href")).toBe("/operations");
+  });
+
   it("refetches summary data when the Home window changes", async () => {
     const { rerender } = render(<HomePage />);
 

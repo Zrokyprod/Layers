@@ -46,6 +46,7 @@ class HomeControlHealth(BaseModel):
     online_runners: int = Field(ge=0)
     active_sor_connectors: int = Field(ge=0)
     tested_sor_connectors: int = Field(ge=0)
+    attestation_signing_ready: bool
     mcp_gateway_status: str
     mcp_gateway_test_status: str
     runtime_enabled: bool
