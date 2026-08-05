@@ -105,6 +105,7 @@ type ReadinessRow = {
   action: string;
   href: string;
   ownerOnly?: boolean;
+  postureRelevant?: boolean;
 };
 
 type AttentionRow = {
@@ -433,7 +434,7 @@ function homePosture(stats: ProofStats, unavailableCount: number, readiness: Rea
     stats.pendingApprovals > 0 ||
     stats.blockedAttempts > 0 ||
     unavailableCount > 0 ||
-    readiness.some((item) => ["Blocked", "Stale", "Missing"].includes(item.status))
+    readiness.some((item) => item.postureRelevant !== false && ["Blocked", "Stale", "Missing"].includes(item.status))
   ) {
     return "DEGRADED";
   }
@@ -442,7 +443,10 @@ function homePosture(stats: ProofStats, unavailableCount: number, readiness: Rea
 
 function blockerText(status: PostureStatus, stats: ProofStats, readiness: ReadinessRow[]): string {
   if (status === "INACTIVE") return "Connector test-read missing";
-  const blocked = readiness.find((item) => item.status === "Blocked" || item.status === "Missing" || item.status === "Stale");
+  if (status === "ACTIVE") return "No current blocker";
+  const blocked = readiness.find(
+    (item) => item.postureRelevant !== false && (item.status === "Blocked" || item.status === "Missing" || item.status === "Stale"),
+  );
   if (blocked) return blocked.details;
   if (stats.mismatches > 0) return `${formatCount(stats.mismatches)} source-of-truth mismatches require review`;
   if (stats.pendingApprovals > 0) return `${formatCount(stats.pendingApprovals)} approvals are waiting for an operator`;
@@ -461,7 +465,9 @@ function primaryCta(status: PostureStatus, stats: ProofStats, readiness: Readine
   if (stats.pendingApprovals > Math.max(stats.mismatches, stats.needsAttention)) return { label: "Open approvals", href: "/operations" };
   if (status === "CRITICAL") return { label: "Review incidents", href: "/operations" };
   if (status === "DEGRADED") {
-    const blocked = readiness.find((item) => ["Blocked", "Stale", "Missing"].includes(item.status));
+    const blocked = readiness.find(
+      (item) => item.postureRelevant !== false && ["Blocked", "Stale", "Missing"].includes(item.status),
+    );
     return { label: "Review blocker", href: blocked?.href ?? "/operations" };
   }
   return { label: "View evidence", href: "/evidence" };
@@ -550,11 +556,12 @@ function buildReadinessRows(data: HomeData): ReadinessRow[] {
       href: "/evidence",
     },
     {
-      component: "Executor / recovery rail",
+      component: "Protected action runner",
       status: !health ? "Stale" : onlineRunners > 0 ? "Ready" : "Missing",
-      details: !health ? "Control health unavailable" : `${formatCount(onlineRunners)} runners online`,
+      details: !health ? "Control health unavailable" : `${formatCount(onlineRunners)} action runners online`,
       action: "View",
       href: "/operations",
+      postureRelevant: false,
     },
     {
       component: "Policy engine",
@@ -860,7 +867,7 @@ function CompactAttentionQueue({ rows, canAct, loading }: { rows: AttentionRow[]
 }
 
 function TrustMachineHealth({ rows }: { rows: ReadinessRow[] }) {
-  const core = ["Proof freshness", "Connector test-read", "Evidence signer", "Executor / recovery rail"];
+  const core = ["Proof freshness", "Connector test-read", "Evidence signer", "Protected action runner"];
   const healthRows = core
     .map((component) => rows.find((row) => row.component === component))
     .filter((row): row is ReadinessRow => Boolean(row));
