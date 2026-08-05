@@ -19,7 +19,6 @@ import type {
   ZendeskTicketConnectorStatusResponse,
   ZohoCrmConnectorStatusResponse,
 } from "@/lib/api";
-import { externalNavigator } from "@/lib/external-navigation";
 import IntegrationsPage from "./page";
 
 const api = vi.hoisted(() => ({
@@ -61,7 +60,6 @@ const api = vi.hoisted(() => ({
   saveZohoCrmConnectorConfig: vi.fn(),
   startJiraIssueOAuth: vi.fn(),
   startZohoCrmOAuth: vi.fn(),
-  startSlackInstall: vi.fn(),
   testGenericRestConnector: vi.fn(),
   testHubSpotCrmConnector: vi.fn(),
   testJiraIssueConnector: vi.fn(),
@@ -137,7 +135,6 @@ vi.mock("@/lib/api", async () => {
     saveZohoCrmConnectorConfig: api.saveZohoCrmConnectorConfig,
     startJiraIssueOAuth: api.startJiraIssueOAuth,
     startZohoCrmOAuth: api.startZohoCrmOAuth,
-    startSlackInstall: api.startSlackInstall,
     testGenericRestConnector: api.testGenericRestConnector,
     testHubSpotCrmConnector: api.testHubSpotCrmConnector,
     testJiraIssueConnector: api.testJiraIssueConnector,
@@ -783,9 +780,6 @@ describe("IntegrationsPage", () => {
     });
     api.startJiraIssueOAuth.mockResolvedValue({
       authorization_url: "https://auth.atlassian.com/authorize?state=test",
-    });
-    api.startSlackInstall.mockResolvedValue({
-      authorization_url: "https://slack.com/oauth/v2/authorize?state=test",
     });
     api.getPostgresReadConnectorStatus.mockResolvedValue(postgresStatus({
       connected: true,

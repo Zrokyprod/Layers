@@ -83,7 +83,6 @@ function ApiKeysContent() {
 
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
-  const [secretStored, setSecretStored] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [statusTone, setStatusTone] = useState<"success" | "danger" | null>(null);
   const [expiresInDays, setExpiresInDays] = useState("90");
@@ -106,7 +105,6 @@ function ApiKeysContent() {
     setStatusTone(null);
     setNewKey(null);
     setCopied(false);
-    setSecretStored(false);
     try {
       const expiryValue = expiresInDays.trim();
       let parsedExpiry: number | null = null;
@@ -152,7 +150,6 @@ function ApiKeysContent() {
     try {
       const rotated = await rotateMutation.mutateAsync({ projectId, keyId: rotateTarget.key_id });
       setCopied(false);
-      setSecretStored(false);
       setNewKey(rotated);
       setStatusMsg(`Key "${rotateTarget.name}" rotated. Copy the replacement key now.`);
       setStatusTone("success");

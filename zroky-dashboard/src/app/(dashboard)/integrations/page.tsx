@@ -60,7 +60,6 @@ import {
   saveZohoCrmConnectorConfig,
   startJiraIssueOAuth,
   startZohoCrmOAuth,
-  startSlackInstall,
   testGenericRestConnector,
   testHubSpotCrmConnector,
   testJiraIssueConnector,
@@ -102,10 +101,7 @@ import {
   type ConnectorInventoryRow,
 } from "@/lib/connector-inventory";
 import { ConnectorLogo } from "@/lib/connector-logo";
-import {
-  CONFIGURABLE_CONNECTOR_IDS,
-  connectorSetupProfile,
-} from "@/lib/connector-setup-profile";
+import { connectorSetupProfile } from "@/lib/connector-setup-profile";
 import { externalNavigator } from "@/lib/external-navigation";
 import { compactJson, formatCount, humanize } from "@/lib/format";
 import type {
@@ -620,10 +616,6 @@ function buildBridgeCurl(form: GenericRestFormState) {
     "  -H 'x-api-key: $ZROKY_API_KEY' \\",
     `  -d '${JSON.stringify(payload, null, 2).replace(/'/g, "'\\''")}'`,
   ].join("\n");
-}
-
-function statusValue(row: ConnectorInventoryRow) {
-  return row.state;
 }
 
 function connectorSearchText(row: ConnectorInventoryRow): string {
@@ -3557,11 +3549,9 @@ function ConnectorInspector({
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
     setSetupOpen(false);
-    setConnectionError(null);
   }, [row?.id]);
 
   useEffect(() => {
@@ -3593,7 +3583,6 @@ function ConnectorInspector({
 
   const startOneClickConnect = async () => {
     setConnecting(true);
-    setConnectionError(null);
     try {
       if (row.id === "github") {
         externalNavigator.assign("/api/zroky/v1/settings/github/connect/start");
