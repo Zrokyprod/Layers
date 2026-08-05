@@ -1441,38 +1441,3 @@ export interface ModelHistoryResponse {
   category: string;
   points: MetricPoint[];
 }
-
-
-// -- Ask Zroky -----------------------------------------------------------------
-
-export interface AskEvidence {
-  kind: string;
-  id: string;
-  label: string;
-  href: string;
-}
-
-export interface AskResponse {
-  answer: string;
-  suggested_actions: string[];
-  confidence: number;
-  intent: string;
-  evidence: AskEvidence[];
-  used_llm: boolean;
-  fallback_reason: string | null;
-}
-
-export interface AskContext {
-  call_id?: string;
-  issue_id?: string;
-  anomaly_id?: string;
-  trace_id?: string;
-}
-
-export interface AskFeedbackRequest {
-  question: string;
-  answer: string;
-  helpful: boolean;
-  intent: string;
-  confidence: number;
-}

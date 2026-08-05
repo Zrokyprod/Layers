@@ -89,9 +89,6 @@
   DriftModelView,
   StatusResponse,
   ModelHistoryResponse,
-  AskResponse,
-  AskContext,
-  AskFeedbackRequest,
 } from "@/lib/types";
 import {
   clearAuthSession,
@@ -5199,22 +5196,6 @@ export function runGoldenSet(
   );
 }
 
-
-// -- Ask Zroky -----------------------------------------------------------------
-
-export function askZroky(
-  body: { question: string; context?: AskContext },
-  signal?: AbortSignal,
-): Promise<AskResponse> {
-  return request<AskResponse>("/v1/ask", { method: "POST", body, signal });
-}
-
-export function submitAskFeedback(
-  body: AskFeedbackRequest,
-  signal?: AbortSignal,
-): Promise<{ accepted: boolean }> {
-  return request<{ accepted: boolean }>("/v1/ask/feedback", { method: "POST", body, signal });
-}
 
 // ── Replay Runs (Pilot) ───────────────────────────────────────────────────────
 
