@@ -198,7 +198,7 @@ describe("auth pages", () => {
     expect(screen.getByText("Next step opens agent setup")).toBeInTheDocument();
     expect(screen.getByText("Key, SDK, and first receipt stay in one path")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Already have an account? Sign in" }).getAttribute("href")).toBe(
-      "/login?next=%2Fagents%2Fsetup%3Fintent%3Dprotect-agent%26plan%3Dpro%26source%3Dpricing",
+      "/login?next=%2Fworkflows%3Fintent%3Dprotect-agent%26plan%3Dpro%26source%3Dpricing",
     );
 
     fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "buyer@example.com" } });
@@ -234,7 +234,7 @@ describe("auth pages", () => {
 
     await waitFor(() => {
       expect(navigation.push).toHaveBeenCalledWith(
-        "/verify-email?email=pilot%40example.com&next=%2Fagents%2Fsetup%3Fintent%3Dprotect-agent%26plan%3Dstarter%26source%3Dpricing",
+        "/verify-email?email=pilot%40example.com&next=%2Fworkflows%3Fintent%3Dprotect-agent%26plan%3Dstarter%26source%3Dpricing",
       );
     });
   });
@@ -266,7 +266,7 @@ describe("auth pages", () => {
 
   it("continues to protected-agent setup after successful email verification", async () => {
     navigation.searchParams = new URLSearchParams(
-      "token=verify-token&next=%2Fagents%2Fsetup%3Fintent%3Dprotect-agent%26plan%3Dpro",
+      "token=verify-token&next=%2Fworkflows%3Fintent%3Dprotect-agent%26plan%3Dpro",
     );
     vi.mocked(verifyEmail).mockResolvedValue({ detail: "Email verified." });
 

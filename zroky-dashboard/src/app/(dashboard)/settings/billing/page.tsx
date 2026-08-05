@@ -281,13 +281,6 @@ function meterPercent(meter: BillingUsageMeter | null | undefined): number {
   return Math.min(100, Math.max(0, (meter.used / meter.limit) * 100));
 }
 
-function meterPercentLabel(meter: BillingUsageMeter | null | undefined): string {
-  const percent = meterPercent(meter);
-  if (percent === 0) return "0% used";
-  if (percent < 1) return "<1% used";
-  return `${Number(percent.toFixed(1))}% used`;
-}
-
 function hasMeterLimit(meter: BillingUsageMeter | null | undefined): boolean {
   return Boolean(meter && !meter.unlimited && meter.limit != null && meter.limit > 0);
 }
@@ -456,7 +449,9 @@ function BillingSettingsContent() {
           ? "Starter is the first paid launch plan. Team is the featured self-serve upgrade."
           : null;
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
-  const paymentStatus = paymentStatusLabel(billingMe);
+  const paymentStatus = billingRecordUnavailable
+    ? { label: "Unavailable", detail: "Billing status could not be loaded." }
+    : paymentStatusLabel(billingMe);
   const pendingPaymentConfirmation = Boolean(billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref);
   const billingTone = error ? "danger" : pendingPaymentConfirmation ? "warning" : billingMe?.status === "active" ? "success" : "neutral";
   const primaryUsageMeters = [
@@ -532,6 +527,14 @@ function BillingSettingsContent() {
 
       {loading && !billingMe ? (
         <div className="loading" />
+      ) : billingRecordUnavailable ? (
+        <section className="settings-control-section" aria-label="Billing unavailable">
+          <h2>Billing unavailable</h2>
+          <p>No fallback plan has been assumed. Retry to load the workspace billing record.</p>
+          <DashboardButton icon={<RefreshCw />} onClick={() => void load()} variant="soft">
+            Retry
+          </DashboardButton>
+        </section>
       ) : (
         <section className="billing-overview-grid" aria-label="Billing overview">
           <article className="billing-current-card">
@@ -643,7 +646,11 @@ function BillingSettingsContent() {
                       disabled={loading || checkoutBusy}
                       loading={checkoutPlanCode === plan.code}
                     >
-                      {plan.selfServe ? (checkoutBusy ? "Opening..." : `Upgrade to ${plan.name}`) : "Contact sales"}
+                      {plan.selfServe
+                        ? checkoutPlanCode === plan.code
+                          ? "Opening checkout"
+                          : `Upgrade to ${plan.name}`
+                        : "Contact sales"}
                     </DashboardButton>
                   ) : null}
                 </div>

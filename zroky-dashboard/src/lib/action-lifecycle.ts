@@ -433,7 +433,10 @@ function isMismatched(row: ActionLifecycleRow): boolean {
 function isNotVerified(row: ActionLifecycleRow): boolean {
   if (row.kind !== "action_intent" || isStopped(row)) return false;
   const executionFinished = ["succeeded", "success", "completed", "finished"].includes(normalized(row.attempt?.status));
-  const verificationExpected = executionFinished || row.outcome != null || row.stage.id === "verification";
+  const verificationExpected = executionFinished
+    || row.outcome != null
+    || row.stage.id === "verification"
+    || row.receiptStatus === "generated";
   return verificationExpected && ["not_verified", "pending", "missing", "not_started"].includes(row.proofStatus);
 }
 

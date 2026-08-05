@@ -126,7 +126,7 @@ describe("BillingPage", () => {
     expect(screen.queryByText("Replay runs")).not.toBeInTheDocument();
     expect(screen.queryByText("Spend limits")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
-    expect(screen.getAllByText("7 / 500").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2 / 500").length).toBeGreaterThan(0);
     expect(screen.queryByText("Policy checks")).not.toBeInTheDocument();
     expect(screen.queryByText("Runner executions")).not.toBeInTheDocument();
     expect(screen.queryByText("Managed AgentProfile capacity")).not.toBeInTheDocument();
