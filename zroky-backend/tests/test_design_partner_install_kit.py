@@ -255,7 +255,7 @@ def test_design_partner_owner_proof_workflow_runs_live_gate_with_required_secret
     assert "scripts/verify_design_partner_owner_proof_artifact.py" in workflow
     assert "--summary artifacts/design-partner-owner-proof-summary.json" in workflow
     assert "--evidence artifacts/design-partner-owner-proof-evidence.json" in workflow
-    assert "actions/upload-artifact@v4" in workflow
+    assert "actions/upload-artifact@v6" in workflow
     assert "design-partner-owner-proof-summary.json" in workflow
     assert "design-partner-owner-proof-evidence.json" in workflow
 
