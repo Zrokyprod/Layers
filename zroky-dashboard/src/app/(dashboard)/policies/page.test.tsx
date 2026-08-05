@@ -374,6 +374,17 @@ describe("PoliciesPage mandate control", () => {
     expect(screen.getByRole("button", { name: "Arm kill switch" }).hasAttribute("disabled")).toBe(true);
   });
 
+  it("does not turn an unavailable decision feed into zero approvals", async () => {
+    api.listRuntimePolicyApprovals.mockRejectedValue(new Error("Decision feed unavailable."));
+
+    renderUnseededPoliciesPage();
+
+    expect(await screen.findByRole("heading", { name: "Decision feed unavailable" })).toBeInTheDocument();
+    const summary = screen.getByLabelText("Policy safety summary");
+    expect(within(summary).getAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.getByText("Runtime decisions could not load. Retry before treating this queue as clear.")).toBeInTheDocument();
+  });
+
   it("keeps free-plan policy visible but disables paid configuration", async () => {
     seededBillingResponse = { plan_code: "free", plan_template: {} };
 

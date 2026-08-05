@@ -208,7 +208,7 @@ function checkedTime(check: OutcomeReconciliationView): number {
 
 function evidenceHref(check: OutcomeReconciliationView): string | null {
   return check.runtime_policy_decision_id
-    ? `/evidence?decision_id=${encodeURIComponent(check.runtime_policy_decision_id)}`
+    ? `/operations?decision_id=${encodeURIComponent(check.runtime_policy_decision_id)}`
     : null;
 }
 

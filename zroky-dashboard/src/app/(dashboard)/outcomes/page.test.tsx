@@ -391,8 +391,8 @@ describe("OutcomesPage", () => {
     expect(within(diff).getByText("42.5")).toBeInTheDocument();
     expect(within(diff).getByText("41.5")).toBeInTheDocument();
     expect(within(diff).getByText("currency")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open signed evidence/ }).getAttribute("href")).toBe(
-      "/evidence?decision_id=decision_1",
+    expect(screen.getByRole("link", { name: /Open decision context/ }).getAttribute("href")).toBe(
+      "/operations?decision_id=decision_1",
     );
     expect(screen.getByRole("link", { name: /Open action/ }).getAttribute("href")).toBe(
       "/operations?action_id=action_1",

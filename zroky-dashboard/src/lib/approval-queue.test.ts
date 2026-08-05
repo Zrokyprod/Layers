@@ -267,7 +267,7 @@ describe("buildApprovalQueue", () => {
       recordedApprovalCount: 1,
       hrefs: {
         approvals: "/approvals?decision_id=dual_hold",
-        evidence: "/evidence?decision_id=dual_hold",
+        evidence: "/operations?decision_id=dual_hold",
         action: "/operations?action_id=act_1",
       },
     });

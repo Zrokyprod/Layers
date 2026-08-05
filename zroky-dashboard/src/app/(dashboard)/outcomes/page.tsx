@@ -512,7 +512,7 @@ function OutcomeInspector({
       <div className="outcomes-inspector-actions">
         {row.evidenceHref ? (
           <DashboardButtonLink href={row.evidenceHref} variant="primary" icon={<ExternalLink size={14} />}>
-            Open signed evidence
+            Open decision context
           </DashboardButtonLink>
         ) : null}
         {row.actionHref ? (

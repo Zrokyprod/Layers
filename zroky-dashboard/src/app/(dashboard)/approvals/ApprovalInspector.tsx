@@ -310,7 +310,7 @@ function CompactEvidence({
           <strong>{row.title}</strong>
         </div>
         <DashboardButtonLink href={row.hrefs.evidence} icon={<FileText />} variant="soft">
-          Open full evidence
+          Open decision context
         </DashboardButtonLink>
       </div>
       <EvidencePackView pack={pack} title={row.title} mode="compact" />

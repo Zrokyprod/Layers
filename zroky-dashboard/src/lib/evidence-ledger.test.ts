@@ -130,7 +130,7 @@ describe("buildEvidenceLedger", () => {
       exportKind: "receipt",
       digest: "sha256:intent-ready",
       systemRef: "item_123",
-      href: "/evidence?action_id=act_ready",
+      href: "/operations?action_id=act_ready",
     });
     expect(ready?.systemRef).not.toBe(ready?.digest);
     expect(rows.find((row) => row.actionId === "act_missing")?.sourceLabel).toBe("Protected action record");
@@ -156,7 +156,7 @@ describe("buildEvidenceLedger", () => {
       exportable: true,
       exportKind: "evidence_pack",
       sourceLabel: "Guard-only Evidence Pack",
-      href: "/evidence?decision_id=guard_decision",
+      href: "/operations?decision_id=guard_decision",
     });
   });
 

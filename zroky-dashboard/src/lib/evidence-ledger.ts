@@ -256,11 +256,11 @@ function isException(row: EvidenceLedgerRow): boolean {
 }
 
 function actionHref(actionId: string): string {
-  return `/evidence?action_id=${encodeURIComponent(actionId)}`;
+  return `/operations?action_id=${encodeURIComponent(actionId)}`;
 }
 
 function decisionHref(decisionId: string): string {
-  return `/evidence?decision_id=${encodeURIComponent(decisionId)}`;
+  return `/operations?decision_id=${encodeURIComponent(decisionId)}`;
 }
 
 function titleForDecision(decision: RuntimePolicyDecisionResponse): string {

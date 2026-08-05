@@ -155,4 +155,15 @@ describe("ProjectsPage", () => {
     expect((screen.getByLabelText("New project") as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByRole("link", { name: "Upgrade plan" }).getAttribute("href")).toBe("/settings/billing");
   });
+
+  it("does not invent project ownership when memberships fail to load", async () => {
+    api.listMyProjects.mockRejectedValue(new Error("Membership service unavailable."));
+
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText("Project access unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Project count unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
+    expect((screen.getByRole("button", { name: "Create project" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

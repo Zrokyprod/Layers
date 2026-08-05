@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -69,18 +69,6 @@ function formatRoleLabel(role: string | null | undefined): string {
     .join(" ");
 }
 
-function fallbackProjectRow(project: ProjectResponse): CurrentUserProjectResponse {
-  return {
-    membership_id: project.project_id,
-    project_id: project.project_id,
-    project_name: project.name,
-    role: "owner",
-    is_active: project.is_active,
-    created_at: project.created_at,
-    updated_at: project.updated_at,
-  };
-}
-
 function isProblemMessage(value: string): boolean {
   const text = value.toLowerCase();
   return text.includes("failed") || text.includes("error") || text.includes("unavailable") || text.includes("cannot");
@@ -118,7 +106,7 @@ export default function ProjectDetailPage() {
       }
 
       const activeProject = activeResult.value;
-      const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [fallbackProjectRow(activeProject)];
+      const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [];
       setState({ activeProject, projects });
 
       if (projectsResult.status === "rejected") {
@@ -135,10 +123,7 @@ export default function ProjectDetailPage() {
     void load();
   }, [load]);
 
-  const rows = useMemo(() => {
-    if (state.projects.length > 0) return state.projects;
-    return state.activeProject ? [fallbackProjectRow(state.activeProject)] : [];
-  }, [state.activeProject, state.projects]);
+  const rows = state.projects;
 
   const selectedProject = rows.find((project) => project.project_id === routeProjectId) ?? null;
   const activeProjectId = state.activeProject?.project_id ?? null;
@@ -346,6 +331,15 @@ export default function ProjectDetailPage() {
                 </aside>
               </div>
             </>
+          ) : projectListError ? (
+            <div className="settings-project-empty projects-not-found" role="status">
+              <AlertTriangle aria-hidden="true" />
+              <strong>Project access unavailable</strong>
+              <span>Retry before relying on project roles or deletion controls.</span>
+              <button type="button" className="btn btn-soft" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
           ) : (
             <div className="settings-project-empty projects-not-found" role="status">
               <FolderOpen aria-hidden="true" />
