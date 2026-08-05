@@ -409,7 +409,7 @@ export function buildApprovalQueue({
       expiresAt: decision.expires_at,
       hrefs: {
         approvals: `/approvals?decision_id=${encodeURIComponent(decision.id)}`,
-        evidence: `/evidence?decision_id=${encodeURIComponent(decision.id)}`,
+        evidence: `/operations?decision_id=${encodeURIComponent(decision.id)}`,
         action: intent ? `/operations?action_id=${encodeURIComponent(intent.action_id)}` : null,
       },
       view,

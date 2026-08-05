@@ -135,4 +135,14 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("Project not found")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View projects" }).getAttribute("href")).toBe("/projects");
   });
+
+  it("does not expose owner controls when memberships fail to load", async () => {
+    api.listMyProjects.mockRejectedValue(new Error("Membership service unavailable."));
+
+    render(<ProjectDetailPage />);
+
+    expect(await screen.findByText("Project access unavailable")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Type project name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete project" })).not.toBeInTheDocument();
+  });
 });

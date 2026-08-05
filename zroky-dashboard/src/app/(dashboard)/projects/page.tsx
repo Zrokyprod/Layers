@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -55,18 +55,6 @@ function formatRoleLabel(role: string | null | undefined): string {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
     .join(" ");
-}
-
-function fallbackProjectRow(project: ProjectResponse): CurrentUserProjectResponse {
-  return {
-    membership_id: project.project_id,
-    project_id: project.project_id,
-    project_name: project.name,
-    role: "owner",
-    is_active: project.is_active,
-    created_at: project.created_at,
-    updated_at: project.updated_at,
-  };
 }
 
 function projectLimitFromBilling(billing: BillingMeResponse | null): number | null {
@@ -122,7 +110,7 @@ export default function ProjectsPage() {
       }
 
       const activeProject = activeResult.value;
-      const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [fallbackProjectRow(activeProject)];
+      const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [];
       const billing = billingResult.status === "fulfilled" ? billingResult.value : null;
       setState({ activeProject, projects, billing });
 
@@ -143,16 +131,13 @@ export default function ProjectsPage() {
     void load();
   }, [load]);
 
-  const rows = useMemo(() => {
-    if (state.projects.length > 0) return state.projects;
-    return state.activeProject ? [fallbackProjectRow(state.activeProject)] : [];
-  }, [state.activeProject, state.projects]);
+  const rows = state.projects;
 
   const activeProjectId = state.activeProject?.project_id ?? selectedProject ?? null;
   const maxProjects = projectLimitFromBilling(state.billing);
   const projectLimitReached = maxProjects !== null && maxProjects !== -1 && rows.length >= maxProjects;
   const newProjectNameReady = newProjectName.trim().length >= 2;
-  const canCreateProject = !loading && !creating && newProjectNameReady && !projectLimitReached;
+  const canCreateProject = !loading && !creating && !projectListError && newProjectNameReady && !projectLimitReached;
 
   async function onCreateProject() {
     if (!canCreateProject) {
@@ -238,7 +223,7 @@ export default function ProjectsPage() {
 
             <div className="projects-limit-strip">
               <span>{state.billing?.plan_code ? `${state.billing.plan_code} plan` : "Current plan"}</span>
-              <strong>{projectLimitLabel(rows.length, maxProjects)}</strong>
+              <strong>{projectListError ? "Project count unavailable" : projectLimitLabel(rows.length, maxProjects)}</strong>
               {projectLimitReached ? (
                 <>
                   <small>Upgrade before adding another project.</small>
@@ -280,7 +265,7 @@ export default function ProjectsPage() {
             <div className="settings-project-section-head">
               <div>
                 <span>Accessible projects</span>
-                <strong>{rows.length > 0 ? "Choose a project" : "No projects"}</strong>
+                <strong>{projectListError ? "Project list unavailable" : rows.length > 0 ? "Choose a project" : "No projects"}</strong>
               </div>
               <small>{rows.length > 0 ? "Open details, switch context, or delete from the detail page." : "Create or join a project to continue."}</small>
             </div>
@@ -318,6 +303,12 @@ export default function ProjectsPage() {
                     </Link>
                   );
                 })
+              ) : projectListError ? (
+                <div className="settings-project-empty" role="status">
+                  <AlertTriangle aria-hidden="true" />
+                  <strong>Project access unavailable</strong>
+                  <span>Retry before relying on project roles or access.</span>
+                </div>
               ) : (
                 <div className="settings-project-empty" role="status">
                   <FolderOpen aria-hidden="true" />

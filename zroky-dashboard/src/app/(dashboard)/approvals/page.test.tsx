@@ -310,8 +310,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(within(selected).getByText("act_1")).toBeInTheDocument();
     expect(within(selected).getByText("intent_digest_1")).toBeInTheDocument();
     fireEvent.click(within(selected).getByRole("tab", { name: "Evidence" }));
-    expect(within(selected).getByRole("link", { name: "Open full evidence" }).getAttribute("href")).toBe(
-      "/evidence?decision_id=decision_1",
+    expect(within(selected).getByRole("link", { name: "Open decision context" }).getAttribute("href")).toBe(
+      "/operations?decision_id=decision_1",
     );
     const evidence = screen.getByRole("region", { name: "Runtime policy Evidence Pack" });
     expect(within(evidence).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
@@ -455,8 +455,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     const evidence = screen.getByRole("region", { name: "Runtime policy Evidence Pack" });
     expect(within(evidence).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
     expect(within(evidence).getByText("ledger:rf_100")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open full evidence" }).getAttribute("href")).toBe(
-      "/evidence?decision_id=decision_1",
+    expect(screen.getByRole("link", { name: "Open decision context" }).getAttribute("href")).toBe(
+      "/operations?decision_id=decision_1",
     );
     expect(screen.queryByRole("dialog", { name: "Evidence Pack" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export Evidence JSON" })).not.toBeInTheDocument();

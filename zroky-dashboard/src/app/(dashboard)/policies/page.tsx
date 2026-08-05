@@ -167,6 +167,7 @@ function policyReadiness(policy: PilotPolicyPayload | null): {
 function policyVerdict({
   activeGuardrails,
   blockedActions,
+  decisionFeedError,
   error,
   loading,
   pendingApprovals,
@@ -174,6 +175,7 @@ function policyVerdict({
 }: {
   activeGuardrails: number;
   blockedActions: number;
+  decisionFeedError: boolean;
   error: unknown;
   loading: boolean;
   pendingApprovals: number;
@@ -193,6 +195,14 @@ function policyVerdict({
         ? "This plan cannot configure Runtime Action Control. Existing policy decisions remain visible in the audit trail."
         : "The saved runtime policy could not be loaded, so the current action boundary cannot be confirmed.",
       title: planLimited ? "Policy upgrade required" : "Policy status unavailable",
+      tone: "warning",
+    };
+  }
+  if (decisionFeedError) {
+    return {
+      badge: "Unavailable",
+      copy: "The latest runtime decisions could not be loaded, so approval and blocked-action counts cannot be confirmed.",
+      title: "Decision feed unavailable",
       tone: "warning",
     };
   }
@@ -493,6 +503,7 @@ export default function PoliciesPage() {
   const heroVerdict = policyVerdict({
     activeGuardrails,
     blockedActions,
+    decisionFeedError: approvalsQuery.isError,
     error: policyQuery.error,
     loading: policyQuery.isLoading,
     pendingApprovals,
@@ -519,18 +530,18 @@ export default function PoliciesPage() {
     {
       id: "pending",
       label: "Pending approvals",
-      value: approvalsQuery.isLoading ? DASH : String(pendingApprovals),
+      value: approvalsQuery.isLoading ? DASH : approvalsQuery.isError ? "Unavailable" : String(pendingApprovals),
       helper: "Approval queue items waiting on a human decision.",
-      tone: pendingApprovals > 0 ? "warning" : "neutral",
+      tone: approvalsQuery.isError || pendingApprovals > 0 ? "warning" : "neutral",
       href: "/approvals",
       icon: <Clock3 size={16} />,
     },
     {
       id: "blocked",
       label: "Blocked actions",
-      value: approvalsQuery.isLoading ? DASH : String(blockedActions),
+      value: approvalsQuery.isLoading ? DASH : approvalsQuery.isError ? "Unavailable" : String(blockedActions),
       helper: "Rejected or blocked policy decisions visible in the audit trail.",
-      tone: blockedActions > 0 ? "danger" : "neutral",
+      tone: approvalsQuery.isError ? "warning" : blockedActions > 0 ? "danger" : "neutral",
       href: "/approvals",
       icon: <AlertTriangle size={16} />,
     },
@@ -1037,7 +1048,7 @@ export default function PoliciesPage() {
                   <div className="list-row">
                     <div className="list-main">
                       <strong>Approval queue</strong>
-                      <span>{pendingApprovals} pending policy decision{pendingApprovals === 1 ? "" : "s"}</span>
+                      <span>{approvalsQuery.isError ? "Approval queue unavailable" : `${pendingApprovals} pending policy decision${pendingApprovals === 1 ? "" : "s"}`}</span>
                     </div>
                     <DashboardButtonLink href="/approvals" size="sm" variant="soft">
                       Open
@@ -1071,7 +1082,9 @@ export default function PoliciesPage() {
               Open approvals
             </DashboardButtonLink>
           </header>
-          {latestDecisions.length > 0 ? (
+          {approvalsQuery.isError ? (
+            <div className="policy-empty-state">Runtime decisions could not load. Retry before treating this queue as clear.</div>
+          ) : latestDecisions.length > 0 ? (
             <div className="policy-decision-list">
               {latestDecisions.map((item) => (
                 <article key={item.id} className="policy-decision-row" data-tone={decisionTone(item)}>

@@ -623,7 +623,7 @@ export function buildActionLifecycle({
           ? `/approvals?decision_id=${encodeURIComponent(intent.runtime_policy_decision_id)}`
           : null,
         outcomes: outcome?.id ? `/outcomes?check_id=${encodeURIComponent(outcome.id)}` : "/outcomes",
-        evidence: `/evidence?action_id=${encodeURIComponent(intent.action_id)}`,
+        evidence: `/operations?action_id=${encodeURIComponent(intent.action_id)}`,
       },
       view,
       intent,
@@ -689,7 +689,7 @@ export function buildActionLifecycle({
         action: null,
         approvals: `/approvals?decision_id=${encodeURIComponent(decision.id)}`,
         outcomes: outcome?.id ? `/outcomes?check_id=${encodeURIComponent(outcome.id)}` : "/outcomes",
-        evidence: `/evidence?decision_id=${encodeURIComponent(decision.id)}`,
+        evidence: `/operations?decision_id=${encodeURIComponent(decision.id)}`,
       },
       view: null,
       intent: null,
