@@ -229,31 +229,6 @@
   white-space: nowrap;
 }
 
-.sparkline {
-  width: 100%;
-  height: 22px;
-}
-
-.sparkline polyline {
-  fill: none;
-  stroke: var(--faint);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-}
-
-.sparkline[data-tone="ready"] polyline {
-  stroke: var(--success);
-}
-
-.sparkline[data-tone="warning"] polyline {
-  stroke: var(--warning);
-}
-
-.sparkline[data-tone="critical"] polyline {
-  stroke: var(--danger);
-}
-
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 8fr) minmax(340px, 4fr);
