@@ -1,6 +1,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+watchPatterns = ["/zroky-backend/**"]
 
 [deploy]
 startCommand = "sh scripts/start.sh"
