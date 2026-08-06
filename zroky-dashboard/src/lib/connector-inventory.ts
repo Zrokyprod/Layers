@@ -896,8 +896,8 @@ function inventoryVerdict(counts: ConnectorInventoryCounts, partialFailure: bool
       title: "Systems of record ready",
       copy: "Healthy read-only verifiers can independently check real outcomes for configured agent actions.",
       pill: "Ready",
-      ctaLabel: "Open Outcomes",
-      ctaHref: "/outcomes",
+      ctaLabel: "Open Evidence",
+      ctaHref: "/evidence",
     };
   }
   return {

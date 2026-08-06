@@ -424,7 +424,7 @@ export function buildEvidenceLedger({
       systemRef: outcome.system_ref,
       sourceLabel: "Unlinked outcome",
       checkedAt: outcome.checked_at ?? outcome.created_at,
-      href: "/outcomes",
+      href: "/evidence",
       exportable: false,
       exportKind: null,
       detail: "Not linked to an action intent in this evidence window",
