@@ -2295,8 +2295,8 @@ export default function SystemOfRecordConnectors() {
               <Copy aria-hidden="true" />
               Copy saved test payload
             </button>
-            <Link href="/outcomes" className="btn btn-primary">
-              View outcome checks
+            <Link href="/evidence" className="btn btn-primary">
+              View evidence
             </Link>
           </div>
         </article>
@@ -2576,8 +2576,8 @@ export default function SystemOfRecordConnectors() {
               <Copy aria-hidden="true" />
               Copy CRM saved test payload
             </button>
-            <Link href="/outcomes" className="btn btn-primary">
-              View outcome checks
+            <Link href="/evidence" className="btn btn-primary">
+              View evidence
             </Link>
           </div>
         </article>
@@ -2850,8 +2850,8 @@ export default function SystemOfRecordConnectors() {
               <Copy aria-hidden="true" />
               Copy PostgreSQL saved test payload
             </button>
-            <Link href="/outcomes" className="btn btn-primary">
-              View outcome checks
+            <Link href="/evidence" className="btn btn-primary">
+              View evidence
             </Link>
           </div>
         </article>
