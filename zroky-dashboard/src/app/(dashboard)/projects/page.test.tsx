@@ -166,4 +166,15 @@ describe("ProjectsPage", () => {
     expect(screen.queryByText("Owner")).not.toBeInTheDocument();
     expect((screen.getByRole("button", { name: "Create project" }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("keeps project switching available when the active project context is stale", async () => {
+    api.getProjectSettings.mockRejectedValue(new Error("Selected project not found."));
+
+    render(<ProjectsPage />);
+
+    expect(await screen.findByText("Active project context is unavailable. Choose an accessible project to continue.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Refund Agent" }).getAttribute("href")).toBe("/projects/proj_1");
+    expect(screen.getByRole("link", { name: "Open Checkout Agent" }).getAttribute("href")).toBe("/projects/proj_2");
+    expect(screen.queryByText("Projects could not load")).not.toBeInTheDocument();
+  });
 });

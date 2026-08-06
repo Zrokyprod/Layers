@@ -94,6 +94,7 @@ export default function ProjectsPage() {
     setLoading(true);
     setError(null);
     setProjectListError(null);
+    setStatusMessage("");
 
     try {
       const [activeResult, projectsResult, billingResult] = await Promise.allSettled([
@@ -105,19 +106,18 @@ export default function ProjectsPage() {
         withProjectsTimeout(getBillingMe(), "Billing plan load timed out."),
       ]);
 
-      if (activeResult.status === "rejected") {
-        throw activeResult.reason;
-      }
-
-      const activeProject = activeResult.value;
+      const activeProject = activeResult.status === "fulfilled" ? activeResult.value : null;
       const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [];
       const billing = billingResult.status === "fulfilled" ? billingResult.value : null;
       setState({ activeProject, projects, billing });
 
+      if (activeResult.status === "rejected") {
+        setStatusMessage("Active project context is unavailable. Choose an accessible project to continue.");
+      }
       if (projectsResult.status === "rejected") {
         setProjectListError(errorMessage(projectsResult.reason, "Project list could not load."));
       }
-      if (billingResult.status === "rejected") {
+      if (billingResult.status === "rejected" && activeResult.status === "fulfilled") {
         setStatusMessage(errorMessage(billingResult.reason, "Billing plan could not load."));
       }
     } catch (loadError) {
