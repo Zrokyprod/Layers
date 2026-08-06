@@ -114,6 +114,7 @@ type ConnectorsOverviewState = {
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
   stripe: StripeRefundConnectorStatusResponse | null;
+  stripePull: SourceConnector | null;
   stripePayment: StripePaymentConnectorStatusResponse | null;
   razorpay: RazorpayRefundConnectorStatusResponse | null;
   generic: GenericRestConnectorStatusResponse | null;
@@ -247,6 +248,7 @@ const initialOverview: ConnectorsOverviewState = {
   github: null,
   slack: null,
   stripe: null,
+  stripePull: null,
   stripePayment: null,
   razorpay: null,
   generic: null,
@@ -1561,7 +1563,11 @@ function StripeRefundSetupPanel({
 
 const STRIPE_REFUND_READ_CAPABILITY = "stripe_refund.read";
 
-function StripeRefundPullSetupPanel() {
+function StripeRefundPullSetupPanel({
+  onStatusChange,
+}: {
+  onStatusChange: (connector: SourceConnector) => void;
+}) {
   const [environment, setEnvironment] = useState("production");
   const [connector, setConnector] = useState<SourceConnector | null>(null);
   const [secretRef, setSecretRef] = useState("");
@@ -1609,6 +1615,7 @@ function StripeRefundPullSetupPanel() {
         status,
       });
       setConnector(saved);
+      onStatusChange(saved);
       setMessage(status === "active" ? "Automatic source checks enabled." : "Automatic source checks disabled.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update automatic source check.");
@@ -3511,6 +3518,7 @@ function ConnectorInspector({
   onSalesforceStatusChange,
   onShopifyStatusChange,
   onStripePaymentStatusChange,
+  onStripePullStatusChange,
   onStripeStatusChange,
   onZendeskStatusChange,
   onZohoStatusChange,
@@ -3540,6 +3548,7 @@ function ConnectorInspector({
   onSalesforceStatusChange: (status: SalesforceCrmConnectorStatusResponse) => void;
   onShopifyStatusChange: (status: ShopifyConnectorStatusResponse) => void;
   onStripePaymentStatusChange: (status: StripePaymentConnectorStatusResponse) => void;
+  onStripePullStatusChange: (connector: SourceConnector) => void;
   onStripeStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
   onZendeskStatusChange: (status: ZendeskTicketConnectorStatusResponse) => void;
   onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
@@ -3730,7 +3739,7 @@ function ConnectorInspector({
                     onStatusChange={onStripeStatusChange}
                     status={stripeStatus}
                   />
-                  <StripeRefundPullSetupPanel />
+                  <StripeRefundPullSetupPanel onStatusChange={onStripePullStatusChange} />
                 </>
               ) : null}
               {row.id === "stripe_payment" ? (
@@ -3864,8 +3873,8 @@ export default function IntegrationsPage() {
     ]);
 
     const nativeStripeStatus = stripeResult.status === "fulfilled" ? stripeResult.value : null;
-    const sourceStripeStatus = sourceConnectorsResult.status === "fulfilled"
-      ? stripeStatusFromSourceConnector(sourceConnectorsResult.value.items[0])
+    const sourceStripeConnector = sourceConnectorsResult.status === "fulfilled"
+      ? sourceConnectorsResult.value.items[0] ?? null
       : null;
 
     setOverview({
@@ -3873,7 +3882,8 @@ export default function IntegrationsPage() {
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
       generic: genericResult.status === "fulfilled" ? genericResult.value : null,
-      stripe: nativeStripeStatus?.connected ? nativeStripeStatus : sourceStripeStatus ?? nativeStripeStatus,
+      stripe: nativeStripeStatus,
+      stripePull: sourceStripeConnector,
       stripePayment: stripePaymentResult.status === "fulfilled" ? stripePaymentResult.value : null,
       razorpay: razorpayResult.status === "fulfilled" ? razorpayResult.value : null,
       hubspot: hubspotResult.status === "fulfilled" ? hubspotResult.value : null,
@@ -3905,6 +3915,7 @@ export default function IntegrationsPage() {
       postgresResult,
       checksResult,
       registryResult,
+      sourceConnectorsResult,
     ].some((result) => result.status === "rejected"));
     setLoading(false);
   }, []);
@@ -3920,6 +3931,7 @@ export default function IntegrationsPage() {
         customer: null,
         ledger: null,
         partialFailure,
+        stripe: stripeStatusFromSourceConnector(overview.stripePull ?? undefined),
         visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS,
       }),
     [overview, partialFailure],
@@ -4009,6 +4021,9 @@ export default function IntegrationsPage() {
             onSalesforceStatusChange={(salesforce) => setOverview((current) => ({ ...current, salesforce }))}
             onShopifyStatusChange={(shopify) => setOverview((current) => ({ ...current, shopify }))}
             onStripePaymentStatusChange={(stripePayment) => setOverview((current) => ({ ...current, stripePayment }))}
+            onStripePullStatusChange={(stripePull) => {
+              if (stripePull.environment === "production") setOverview((current) => ({ ...current, stripePull }));
+            }}
             onStripeStatusChange={(stripe) => setOverview((current) => ({ ...current, stripe }))}
             onZendeskStatusChange={(zendesk) => setOverview((current) => ({ ...current, zendesk }))}
             onZohoStatusChange={(zoho) => setOverview((current) => ({ ...current, zoho }))}
