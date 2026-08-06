@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "zroky-backend-production-deploy.yml"
 BACKEND_CI_WORKFLOW = ROOT / ".github" / "workflows" / "zroky-backend-ci.yml"
+RAILWAY_CONFIG = ROOT / "zroky-backend" / "railway.toml"
 
 
 def test_backend_production_deploy_waits_for_successful_main_ci() -> None:
@@ -25,6 +26,7 @@ def test_backend_ci_validates_production_deploy_workflow_changes() -> None:
 
 def test_backend_production_deploy_uses_scoped_config_and_strict_smoke() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
+    railway_config = RAILWAY_CONFIG.read_text(encoding="utf-8")
 
     assert "RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}" in workflow
     assert "RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}" in workflow
@@ -40,7 +42,8 @@ def test_backend_production_deploy_uses_scoped_config_and_strict_smoke() -> None
     ) < workflow.index('deploy_and_wait beat "${RAILWAY_BEAT_SERVICE_ID}" backend_as_root')
     assert '"${candidate_id}" != "${before_id}"' in workflow
     assert "railway deployment list" in workflow
-    assert "FAILED|CRASHED|REMOVED" in workflow
+    assert "FAILED|CRASHED|REMOVED|SKIPPED" in workflow
+    assert "watchPatterns" not in railway_config
     assert "scripts/railway_smoke_check.py" in workflow
     assert '--base-url "${PRODUCTION_API_URL}"' in workflow
     assert "--expected-unauthorized-status 401" in workflow
