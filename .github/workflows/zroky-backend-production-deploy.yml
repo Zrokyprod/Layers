@@ -144,7 +144,7 @@ jobs:
                   echo "${label}_deployment_id=${deployment_id}" >> "${GITHUB_OUTPUT}"
                   return 0
                   ;;
-                FAILED|CRASHED|REMOVED)
+                FAILED|CRASHED|REMOVED|SKIPPED)
                   echo "::error::Railway ${label} deployment ${deployment_id} ended with ${status}"
                   return 1
                   ;;
