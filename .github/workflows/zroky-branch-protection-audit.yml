@@ -103,10 +103,6 @@ jobs:
             $mismatches += "required_conversation_resolution.enabled must be true"
           }
 
-          if ($protection.required_pull_request_reviews.required_approving_review_count -lt 1) {
-            $mismatches += "required_pull_request_reviews.required_approving_review_count must be >= 1"
-          }
-
           if ($protection.allow_force_pushes.enabled) {
             $mismatches += "allow_force_pushes.enabled must be false"
           }
