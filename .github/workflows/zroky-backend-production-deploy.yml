@@ -99,8 +99,7 @@ jobs:
               --json)"
             before_id="$(jq -r '.[0].id // empty' <<<"${before_json}")"
 
-            railway up zroky-backend \
-              --path-as-root \
+            railway up \
               --project "${RAILWAY_PROJECT_ID}" \
               --environment "${RAILWAY_ENVIRONMENT_ID}" \
               --service "${service_id}" \
