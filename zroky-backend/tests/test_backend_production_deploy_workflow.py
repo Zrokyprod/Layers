@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "zroky-backend-production-deploy.yml"
+BACKEND_CI_WORKFLOW = ROOT / ".github" / "workflows" / "zroky-backend-ci.yml"
 
 
 def test_backend_production_deploy_waits_for_successful_main_ci() -> None:
@@ -16,21 +17,29 @@ def test_backend_production_deploy_waits_for_successful_main_ci() -> None:
     assert "ref: ${{ steps.revision.outputs.sha }}" in workflow
 
 
+def test_backend_ci_validates_production_deploy_workflow_changes() -> None:
+    workflow = BACKEND_CI_WORKFLOW.read_text(encoding="utf-8")
+
+    assert workflow.count('      - ".github/workflows/zroky-backend-production-deploy.yml"') == 2
+
+
 def test_backend_production_deploy_uses_scoped_config_and_strict_smoke() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}" in workflow
     assert "RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}" in workflow
     assert "RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}" in workflow
-    assert "RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_BACKEND_SERVICE_ID }}" in workflow
+    assert "RAILWAY_API_SERVICE_ID: ${{ vars.RAILWAY_BACKEND_SERVICE_ID }}" in workflow
+    assert "RAILWAY_WORKER_SERVICE_ID: ${{ vars.RAILWAY_WORKER_SERVICE_ID }}" in workflow
+    assert "RAILWAY_BEAT_SERVICE_ID: ${{ vars.RAILWAY_BEAT_SERVICE_ID }}" in workflow
     assert "@railway/cli@4.33.0" in workflow
     assert "railway up" in workflow
-    assert "--path-as-root" not in workflow
-    submit_block = workflow.split("- name: Submit backend deployment", 1)[1].split(
-        "- name: Wait for Railway deployment", 1
-    )[0]
-    assert "working-directory: zroky-backend" not in submit_block
-    assert '"${CANDIDATE_ID}" != "${BEFORE_ID}"' in workflow
+    assert "railway up zroky-backend" in workflow
+    assert "--path-as-root" in workflow
+    assert workflow.index('deploy_and_wait api "${RAILWAY_API_SERVICE_ID}"') < workflow.index(
+        'deploy_and_wait worker "${RAILWAY_WORKER_SERVICE_ID}"'
+    ) < workflow.index('deploy_and_wait beat "${RAILWAY_BEAT_SERVICE_ID}"')
+    assert '"${candidate_id}" != "${before_id}"' in workflow
     assert "railway deployment list" in workflow
     assert "FAILED|CRASHED|REMOVED" in workflow
     assert "scripts/railway_smoke_check.py" in workflow

@@ -5,12 +5,14 @@ on:
     paths:
       - "zroky-backend/**"
       - ".github/workflows/zroky-backend-ci.yml"
+      - ".github/workflows/zroky-backend-production-deploy.yml"
   push:
     branches:
       - main
     paths:
       - "zroky-backend/**"
       - ".github/workflows/zroky-backend-ci.yml"
+      - ".github/workflows/zroky-backend-production-deploy.yml"
   workflow_dispatch:
 
 concurrency:
