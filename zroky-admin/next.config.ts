@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/notifications",
-        destination: "/owner/ops",
+        destination: "/owner/infrastructure",
         permanent: true,
       },
     ];
