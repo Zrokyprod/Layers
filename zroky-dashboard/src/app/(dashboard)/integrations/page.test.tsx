@@ -1523,6 +1523,8 @@ describe("IntegrationsPage", () => {
         status: "active",
       });
     });
+    const inspector = await screen.findByRole("region", { name: "Selected connector" });
+    expect(within(inspector).getByRole("button", { name: "Manage Stripe" })).toBeInTheDocument();
 
     fireEvent.click(await within(panel).findByRole("button", { name: "Disable automatic checks" }));
     await waitFor(() => {
@@ -1559,6 +1561,23 @@ describe("IntegrationsPage", () => {
     expect(within(inspector).queryByText("Missing / Not connected")).not.toBeInTheDocument();
     expect(within(inspector).getByText("Saved")).toBeInTheDocument();
     expect(within(inspector).getByRole("button", { name: "Manage Stripe" })).toBeInTheDocument();
+  });
+
+  it("does not report autonomous Stripe proof ready from the legacy verifier alone", async () => {
+    api.getStripeRefundConnectorStatus.mockResolvedValue(stripeStatus({
+      connected: true,
+      has_bearer_token: true,
+      health_status: "healthy",
+      last_verdict: "matched",
+      readiness: { status: "ready" },
+    }));
+    api.listSourceConnectors.mockResolvedValue({ items: [] });
+
+    renderWithConnector("stripe_refund");
+
+    const inspector = await screen.findByRole("region", { name: "Selected connector" });
+    expect(within(inspector).getByText("Missing / Not connected")).toBeInTheDocument();
+    expect(within(inspector).getByRole("button", { name: "Connect Stripe" })).toBeInTheDocument();
   });
 
   it("saves and tests the native Shopify Admin verifier setup path", async () => {
