@@ -34,8 +34,8 @@ def test_backend_production_deploy_uses_scoped_config_and_strict_smoke() -> None
     assert "RAILWAY_BEAT_SERVICE_ID: ${{ vars.RAILWAY_BEAT_SERVICE_ID }}" in workflow
     assert "@railway/cli@4.33.0" in workflow
     assert "railway up" in workflow
-    assert "railway up zroky-backend" in workflow
-    assert "--path-as-root" in workflow
+    assert "railway up zroky-backend" not in workflow
+    assert "--path-as-root" not in workflow
     assert workflow.index('deploy_and_wait api "${RAILWAY_API_SERVICE_ID}"') < workflow.index(
         'deploy_and_wait worker "${RAILWAY_WORKER_SERVICE_ID}"'
     ) < workflow.index('deploy_and_wait beat "${RAILWAY_BEAT_SERVICE_ID}"')
