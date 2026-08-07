@@ -49,7 +49,7 @@ export default function Footer() {
             AI agent action control plane for policy gates, scoped execution, source-of-record verification, and signed receipts.
           </p>
           <div className="mt-5 flex items-center gap-3 text-[#8b9288]">
-            <a href="https://github.com/zroky-ai" className="transition hover:text-[#4f5a52]" aria-label="Zroky on GitHub">
+            <a href="https://github.com/Zrokyprod" className="transition hover:text-[#4f5a52]" aria-label="Zroky on GitHub">
               <Github size={18} />
             </a>
             <a href="https://x.com/zroky" className="transition hover:text-[#4f5a52]" aria-label="Zroky on X">

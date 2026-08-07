@@ -104,6 +104,10 @@ function formatCompact(value: number) {
   return compactFormatter.format(value);
 }
 
+function formatQuota(value: number, singular: string, plural: string) {
+  return `${formatCompact(value)} ${value === 1 ? singular : plural}`;
+}
+
 function planBullets(plan: PricingPlan) {
   const retention = plan.pricing.evidence_retention_days;
   const overage =
@@ -122,9 +126,9 @@ function planBullets(plan: PricingPlan) {
           : 'Bypass detection';
   return [
     `${formatNumber(plan.pricing.protected_actions_per_month)} protected actions/mo`,
-    `${formatCompact(plan.pricing.managed_agents)} managed agents`,
-    `${formatCompact(plan.pricing.connectors)} connectors`,
-    `${formatCompact(plan.pricing.approver_seats)} approver seats`,
+    formatQuota(plan.pricing.managed_agents, 'managed agent', 'managed agents'),
+    formatQuota(plan.pricing.connectors, 'connector', 'connectors'),
+    formatQuota(plan.pricing.approver_seats, 'approver seat', 'approver seats'),
     retention === UNLIMITED ? 'Custom evidence retention' : `${retention}-day evidence retention`,
     'Slack approvals included',
     ...(plan.pricing.scoped_policy_rules_dry_run ? ['Scoped policy rules + dry-run'] : []),
@@ -280,9 +284,9 @@ function PricingHeroVisual() {
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {[
-              ['Action value', '$250K/mo', 'money, access, production'],
-              ['One incident', '$8K+', 'loss, rework, audit noise'],
-              ['Team plan', '$199/mo', 'governed execution'],
+              ['Decision point', 'Before execution', 'policy and approvals'],
+              ['Outcome proof', 'Source matched', 'system of record'],
+              ['Evidence', 'Signed receipt', 'portable verification'],
             ].map(([label, value, body]) => (
               <div key={label} className="rounded-[14px] border border-[#dedacf] bg-[#fffdfa] p-4">
                 <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[#8a867a]">{label}</p>
