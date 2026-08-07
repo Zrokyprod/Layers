@@ -10,6 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from http.cookies import SimpleCookie
 from typing import Any
 
 
@@ -47,11 +48,12 @@ def _request(
     url: str,
     *,
     headers: dict[str, str] | None = None,
+    body: bytes | None = None,
     timeout: float = 20.0,
 ) -> HttpResult:
     attempts = 3 if method.upper() in {"GET", "HEAD"} else 1
     for attempt in range(1, attempts + 1):
-        request = urllib.request.Request(url=url, method=method, headers=dict(headers or {}))
+        request = urllib.request.Request(url=url, data=body, method=method, headers=dict(headers or {}))
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 text = response.read().decode("utf-8", errors="replace")
@@ -164,8 +166,26 @@ def _check_owner_json_fields(body: dict[str, Any], fields: list[str], label: str
         _fail(label, f"missing fields: {', '.join(missing)}")
 
 
+def _owner_session_cookie(admin_url: str, owner_token: str, timeout: float) -> str:
+    result = _request(
+        "POST",
+        _url(admin_url, "/api/owner/session"),
+        headers={"content-type": "application/json"},
+        body=json.dumps({"token": owner_token}).encode("utf-8"),
+        timeout=timeout,
+    )
+    _expect_status(result, 200, "admin owner session")
+    cookies = SimpleCookie()
+    cookies.load(result.headers.get("set-cookie", ""))
+    owner_cookie = cookies.get("zroky_owner_token")
+    if owner_cookie is None:
+        _fail("admin owner session", "response did not set the owner session cookie")
+    _pass("admin owner session", "status=200")
+    return f"{owner_cookie.key}={owner_cookie.coded_value}"
+
+
 def _check_proxy_with_owner_token(admin_url: str, owner_token: str, timeout: float) -> None:
-    headers = {"x-zroky-admin-token": owner_token}
+    headers = {"cookie": _owner_session_cookie(admin_url, owner_token, timeout)}
     checks = [
         ("/api/zroky/v1/owner/stats", ["total_users", "total_projects"], "owner stats"),
         ("/api/zroky/v1/owner/health", ["overall", "services"], "owner health"),
