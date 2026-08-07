@@ -286,7 +286,6 @@ test.describe("Owner Dashboard", () => {
       { path: "/owner/money-path", text: ["Money Path", "Demo Tenant", "Blocked CI Evidence"] },
       { path: "/owner/projects/proj_demo", text: ["Regression Firewall", "Review blocked CI", "90 / 100"] },
       { path: "/owner/pricing", text: ["Revenue & Entitlements", "Plan Entitlement Matrix", "Replay quota"] },
-      { path: "/owner/ops", text: ["Founder Ops Console", "Deployed Smoke Proof", "ci_smoke"] },
       { path: "/owner/infrastructure", text: ["Infrastructure Health", "Ops Health Proof", "ci_smoke"] },
       { path: "/owner/support", text: ["Support", "Product Evidence", "Provider: configured (1)"] },
       { path: "/owner/audit", text: ["Audit Log", "Product Evidence", "Platform event"] },

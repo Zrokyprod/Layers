@@ -112,7 +112,6 @@ def _check_owner_routes(admin_url: str, timeout: float) -> None:
         "/owner/money-path",
         "/owner/projects",
         "/owner/pricing",
-        "/owner/ops",
         "/owner/infrastructure",
         "/owner/support",
         "/owner/audit",
