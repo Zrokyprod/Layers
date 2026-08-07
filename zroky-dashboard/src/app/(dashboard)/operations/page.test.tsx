@@ -528,7 +528,6 @@ describe("OperationsPage", () => {
     expect(
       operationsRowsCsv([
         {
-          id: "row_1",
           runId: "run_1",
           type: "Mismatch",
           severity: "P1",
@@ -538,14 +537,6 @@ describe("OperationsPage", () => {
           state: "open",
           age: "12m",
           owner: "Ops",
-          action: "Investigate",
-          href: "/operations?incident_id=row_1",
-          expected: "Expected",
-          actual: "Actual",
-          impact: "Impact",
-          digest: "digest",
-          createdAt: "2026-07-21T10:00:00Z",
-          timeline: [],
         },
       ]),
     ).toContain('"Payroll ""export"""');
