@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { OwnerPlanGrantModal } from "@/components/owner-plan-grant-modal";
@@ -33,6 +33,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const userQuery = useOwnerUser(id);
   const membershipsQuery = useUserMemberships(id);
   const toggleMutation = useSetUserStatus();
@@ -83,7 +84,7 @@ export default function UserDetailPage() {
     setActionMsg("");
     try {
       await deleteMutation.mutateAsync(user.id);
-      window.location.href = "/owner/users";
+      router.replace("/owner/users");
     } catch (e: unknown) {
       setActionMsg(`Error: ${(e as Error).message}`);
     }

@@ -155,9 +155,11 @@ export default function OwnerSettingsPage() {
     ? "Active HttpOnly owner session"
     : "No owner token stored";
 
-  function signOut() {
-    clearOwnerToken();
+  async function signOut() {
+    await clearOwnerToken();
     setTokenPresent(false);
+    // A full reload resets the owner layout's authenticated client state.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/owner";
   }
 

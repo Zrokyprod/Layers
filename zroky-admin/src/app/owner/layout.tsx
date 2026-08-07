@@ -109,8 +109,8 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
     [tokenInput],
   );
 
-  const handleLogout = useCallback(() => {
-    clearOwnerToken();
+  const handleLogout = useCallback(async () => {
+    await clearOwnerToken();
     setAuthed(false);
     setTokenInput("");
   }, []);

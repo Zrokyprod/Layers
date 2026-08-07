@@ -22,14 +22,15 @@ export function setOwnerToken(token: string): void {
   }
 }
 
-export function clearOwnerToken(): void {
+export async function clearOwnerToken(): Promise<void> {
   if (typeof window !== "undefined") {
     sessionStorage.removeItem(SESSION_MARKER_KEY);
   }
-  void fetch("/api/owner/session", {
+  await fetch("/api/owner/session", {
     method: "DELETE",
     cache: "no-store",
     credentials: "same-origin",
+    keepalive: true,
   });
 }
 
@@ -45,7 +46,7 @@ async function ownerRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (res.status === 401) {
-    clearOwnerToken();
+    void clearOwnerToken();
     throw new Error("UNAUTHORIZED");
   }
   if (!res.ok) {
@@ -1023,7 +1024,7 @@ export async function verifyOwnerToken(token: string): Promise<boolean> {
       setOwnerToken(token);
       return true;
     }
-    clearOwnerToken();
+    await clearOwnerToken();
     return false;
   } catch {
     return false;
@@ -1041,7 +1042,7 @@ export async function verifyOwnerSession(): Promise<boolean> {
       setOwnerToken("active");
       return true;
     }
-    clearOwnerToken();
+    await clearOwnerToken();
     return false;
   } catch {
     return false;
