@@ -27,7 +27,7 @@ from zroky._internal.config import load_config
 
 _REQUEST_TIMEOUT_S = 30.0
 _FINAL_STATUSES = {"succeeded", "failed", "ambiguous", "cancelled"}
-RUNNER_CAPABILITY_VERSION = "zroky-python-runner/0.1.0"
+RUNNER_CAPABILITY_VERSION = "zroky-python-runner/0.2.0"
 DEFAULT_EXECUTABLE_ADAPTERS = ("generic_rest", "stripe_refund")
 DEFAULT_VERIFICATION_ADAPTERS = ("stripe_refund",)
 _SECRET_KEY_MARKERS = (

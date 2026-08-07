@@ -242,7 +242,7 @@ export default function ProjectDetailPage() {
                     <h2>{safeString(selectedProject.project_name, "Untitled project")}</h2>
                     <p>Manage this project context, active selection, and deletion controls.</p>
                   </div>
-                  <StatusPill value={selectedIsActive ? "active" : "verified"} />
+                  <StatusPill value={selectedIsActive ? "active" : "available"} />
                 </div>
               </div>
 
@@ -306,7 +306,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <strong>Delete project</strong>
                       <p>
-                        Removes this project from the active project list and disables capture keys. Existing evidence stays available for audit.
+                        Deactivates this project and revokes active API keys. Project data is not immediately erased.
                       </p>
                     </div>
                     <label htmlFor="projectDeleteConfirm">Type project name</label>

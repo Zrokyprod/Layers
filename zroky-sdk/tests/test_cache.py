@@ -17,6 +17,7 @@ from zroky._internal.cache import (
     cached_stream_iter,
     cached_stream_iter_async,
 )
+from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint
 
 
 def _reset_sdk():
@@ -301,7 +302,7 @@ class TestCacheIntegration:
             zroky.init(cache_enabled=True, cache_default_ttl=3600)
 
         # Pre-populate cache
-        fp = zroky.generate_prompt_fingerprint(
+        fp = generate_prompt_fingerprint(
             messages=[{"role": "user", "content": "say hi"}],
             tools=None,
             model="gpt-4o",
@@ -342,7 +343,7 @@ class TestCacheIntegration:
         with patch("zroky._internal.queue.LocalWriter"):
             zroky.init(cache_enabled=True)
 
-        fp = zroky.generate_prompt_fingerprint(
+        fp = generate_prompt_fingerprint(
             messages=[{"role": "user", "content": "force fresh"}],
             tools=None,
             model="gpt-4o",

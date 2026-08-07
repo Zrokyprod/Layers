@@ -282,7 +282,31 @@ func TestHandlerRejectsDisallowedProject(t *testing.T) {
 	}
 }
 
-func TestHandlerUsesConfiguredProviderAPIKey(t *testing.T) {
+func TestHandlerRequiresProjectHeaderForMultipleAllowedProjects(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+	rr := httptest.NewRecorder()
+	handler := HandlerWithOptions(
+		OpenAI,
+		"chat",
+		nil,
+		Options{
+			MaxBodyBytes: 1024,
+			AllowedProjectIDs: map[string]struct{}{
+				"proj_one": {},
+				"proj_two": {},
+			},
+		},
+		zerolog.New(io.Discard),
+	)
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandlerUsesConfiguredProviderAPIKeyAndSingleAllowedProject(t *testing.T) {
 	ingested := make(chan []byte, 1)
 	ingestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -311,7 +335,6 @@ func TestHandlerUsesConfiguredProviderAPIKey(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-4o-mini"}`))
 	req.Header.Set("Authorization", "Bearer caller-provider-key")
-	req.Header.Set("X-Zroky-Project-Id", "proj_gateway")
 	req.Header.Set("X-Zroky-Gateway-Token", "gateway-secret")
 
 	rr := httptest.NewRecorder()
