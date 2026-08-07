@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from app.api.routes._internal.owner_common import *
-from app.core.config_validation import _is_local_url, _is_placeholder_secret, is_production_env
+from app.core.config_validation import (
+    _is_local_url,
+    _is_placeholder_secret,
+    _looks_like_ed25519_private_key,
+    is_production_env,
+)
 
 
 class ProductionReadinessCheck(BaseModel):
@@ -159,10 +164,14 @@ def owner_production_readiness(
     )
     _check(
         checks,
-        code="replay_real_llm",
-        label="Real replay enabled",
-        ok=settings.REPLAY_REAL_LLM_ENABLED and _secret_configured(settings.REPLAY_WORKER_TOKEN, min_length=16),
-        detail="Real replay and worker token are configured." if settings.REPLAY_REAL_LLM_ENABLED and _secret_configured(settings.REPLAY_WORKER_TOKEN, min_length=16) else "REPLAY_REAL_LLM_ENABLED or REPLAY_WORKER_TOKEN is not production-ready.",
+        code="attestation_signing",
+        label="Attestation signing",
+        ok=_looks_like_ed25519_private_key(settings.ACTION_RECEIPT_ED25519_PRIVATE_KEY),
+        detail=(
+            "Ed25519 attestation signing key is configured."
+            if _looks_like_ed25519_private_key(settings.ACTION_RECEIPT_ED25519_PRIVATE_KEY)
+            else "ACTION_RECEIPT_ED25519_PRIVATE_KEY is missing or invalid."
+        ),
     )
     _check(
         checks,

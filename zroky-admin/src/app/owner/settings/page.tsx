@@ -30,12 +30,12 @@ const RATE_LIMIT_FIELDS: { key: string; label: string }[] = [
 
 const READINESS_LABELS: Record<string, string> = {
   provider_key_vault_kek: "Connector key vault KEK",
-  replay_real_llm: "Proof worker enabled",
+  attestation_signing: "Attestation signing",
 };
 
 const READINESS_DETAILS: Record<string, string> = {
   provider_key_vault_kek: "Connector key vault encryption key is missing, placeholder, or too short.",
-  replay_real_llm: "Proof worker environment is not production-ready.",
+  attestation_signing: "The Ed25519 attestation signing key is missing or invalid.",
 };
 
 function readinessLabel(code: string, label: string): string {

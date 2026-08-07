@@ -1,61 +1,31 @@
 from __future__ import annotations
 
-import json
-import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.routes._internal.owner_money_path import (
+    FINAL_READINESS_COMMANDS,
+    PRODUCT_STANDARD,
+)
 from app.api.routes._internal.owner_money_path_schemas import (
     OwnerLaunchGateEvidence,
     OwnerLaunchReadinessGate,
     OwnerLaunchReadinessResponse,
     OwnerMoneyPathHealthResponse,
 )
-from app.api.routes._internal.owner_money_path import (
-    BLOCKING_CI_STATUSES,
-    FINAL_READINESS_COMMANDS,
-    PRODUCT_STANDARD,
-    VERIFIED_REPLAY_STATUSES,
-    _json_object,
-)
+from app.core.config import get_settings
+from app.core.config_validation import _looks_like_ed25519_private_key
 from app.db.models import (
-    Call,
-    GoldenSet,
-    GoldenTrace,
-    OutcomeReconciliationCheck,
-    ReplayRun,
+    FinalAssurancePack,
+    FinalOutcomeGraph,
+    FinalOutcomeIncident,
+    FinalPolicyDecision,
+    FinalRecoveryPlan,
+    FinalSourceConnector,
+    FinalWorkflowIntent,
     RuntimePolicyDecision,
-)
-
-
-STALE_PRODUCT_DOC_PATHS = (
-    ".devin/workflows/replay.md",
-    ".kiro/specs/replay-worker-real-llm-execution/bugfix.md",
-    ".kiro/specs/unknown-failure-discovery/design.md",
-    ".kiro/specs/unknown-failure-discovery/requirements.md",
-    ".kiro/specs/unknown-failure-discovery/tasks.md",
-)
-
-LOCAL_PROOF_SOURCES = {
-    "design_partner_install_kit",
-    "money_path_demo",
-    "phase_8_deployment_smoke",
-}
-
-LOCAL_PROOF_MODES = {
-    "demo",
-    "local_demo",
-    "preflight",
-    "sandbox",
-    "synthetic",
-}
-
-SOURCE_TRUTH_MARKER = "single product, implementation, and execution source of truth"
-_DEFAULT_SOURCE_TRUTH_MANIFEST_PATH = (
-    Path(__file__).resolve().parents[4] / "source_truth_manifest.json"
 )
 
 
@@ -78,412 +48,27 @@ def _gate(
     *,
     code: str,
     title: str,
-    status: str,
     summary: str,
-    blockers: list[str] | None = None,
-    evidence: list[OwnerLaunchGateEvidence] | None = None,
-    verification_commands: list[str] | None = None,
+    blockers: list[str],
+    missing: list[str] | None = None,
+    evidence: list[OwnerLaunchGateEvidence],
+    verification_commands: list[str],
 ) -> OwnerLaunchReadinessGate:
+    missing = missing or []
+    status = "fail" if blockers else ("not_verified" if missing else "pass")
     return OwnerLaunchReadinessGate(
         code=code,
         title=title,
         status=status,
         summary=summary,
-        blockers=blockers or [],
-        evidence=evidence or [],
-        verification_commands=verification_commands or [],
+        blockers=blockers + missing,
+        evidence=evidence,
+        verification_commands=verification_commands,
     )
 
 
-def _status_for(*, blockers: list[str], missing: list[str]) -> str:
-    if blockers:
-        return "fail"
-    if missing:
-        return "not_verified"
-    return "pass"
-
-
-def _replay_trust_counts(
-    db: Session,
-    *,
-    project_ids: list[str],
-    since: datetime,
-) -> dict[str, int]:
-    counts = {
-        "trusted_verified": 0,
-        "stub_marked_verified": 0,
-        "not_verified": 0,
-        "errors": 0,
-    }
-    if not project_ids:
-        return counts
-
-    runs = (
-        db.execute(
-            select(ReplayRun).where(
-                ReplayRun.project_id.in_(project_ids),
-                ReplayRun.created_at >= since,
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for run in runs:
-        summary = _json_object(run.summary_json)
-        replay_mode = str(
-            summary.get("requested_replay_mode")
-            or summary.get("executor_replay_mode")
-            or summary.get("replay_mode")
-            or ""
-        )
-        verified = (
-            summary.get("verified_fix") is True
-            or str(summary.get("verification_status") or "") in VERIFIED_REPLAY_STATUSES
-        )
-        if run.status == "not_verified":
-            counts["not_verified"] += 1
-        if run.status == "error":
-            counts["errors"] += 1
-        if verified and replay_mode == "stub":
-            counts["stub_marked_verified"] += 1
-        elif verified:
-            counts["trusted_verified"] += 1
-    return counts
-
-
-def _ci_run_counts(
-    db: Session,
-    *,
-    project_ids: list[str],
-    since: datetime,
-) -> dict[str, int]:
-    counts = {
-        "total": 0,
-        "pass": 0,
-        "warn": 0,
-        "fail": 0,
-        "not_verified": 0,
-        "error": 0,
-    }
-    if not project_ids:
-        return counts
-    rows = db.execute(
-        select(ReplayRun.status, func.count(ReplayRun.id))
-        .where(
-            ReplayRun.project_id.in_(project_ids),
-            ReplayRun.trigger == "github",
-            ReplayRun.created_at >= since,
-        )
-        .group_by(ReplayRun.status)
-    ).all()
-    for status, count in rows:
-        key = str(status or "unknown")
-        if key in counts:
-            counts[key] = int(count or 0)
-        counts["total"] += int(count or 0)
-    return counts
-
-
-def _behavioral_golden_counts(
-    db: Session,
-    *,
-    project_ids: list[str],
-) -> dict[str, int]:
-    counts = {
-        "active": 0,
-        "blocking": 0,
-        "blocking_behavioral": 0,
-        "blocking_text_only": 0,
-    }
-    if not project_ids:
-        return counts
-    rows = db.execute(
-        select(GoldenTrace, GoldenSet)
-        .join(GoldenSet, GoldenTrace.golden_set_id == GoldenSet.id)
-        .where(
-            GoldenTrace.project_id.in_(project_ids),
-            GoldenTrace.status == "active",
-        )
-    ).all()
-    for trace, golden_set in rows:
-        counts["active"] += 1
-        if not bool(golden_set.blocks_ci) or bool(golden_set.is_flaky):
-            continue
-        counts["blocking"] += 1
-        criteria = _json_object(trace.criteria_json)
-        contract = criteria.get("golden_contract_v1")
-        if isinstance(contract, dict) and contract:
-            counts["blocking_behavioral"] += 1
-        else:
-            counts["blocking_text_only"] += 1
-    return counts
-
-
-def _runtime_policy_counts(
-    db: Session,
-    *,
-    project_ids: list[str],
-    since: datetime,
-) -> dict[str, int]:
-    counts = {
-        "blocked": 0,
-        "pending_approval": 0,
-        "approved": 0,
-        "rejected": 0,
-        "risk_stopped": 0,
-    }
-    if not project_ids:
-        return counts
-    rows = (
-        db.execute(
-            select(RuntimePolicyDecision).where(
-                RuntimePolicyDecision.project_id.in_(project_ids),
-                RuntimePolicyDecision.created_at >= since,
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for row in rows:
-        if row.status in counts:
-            counts[row.status] += 1
-        if row.decision in {"block", "requires_approval"} or row.status in {
-            "blocked",
-            "pending_approval",
-            "approved",
-            "rejected",
-        }:
-            counts["risk_stopped"] += 1
-    return counts
-
-
-def _outcome_reconciliation_counts(
-    db: Session,
-    *,
-    project_ids: list[str],
-    since: datetime,
-) -> dict[str, int]:
-    counts = {
-        "total": 0,
-        "matched": 0,
-        "mismatched": 0,
-        "not_verified": 0,
-        "linked_calls": 0,
-        "linked_runtime_policy": 0,
-    }
-    if not project_ids:
-        return counts
-
-    rows = (
-        db.execute(
-            select(OutcomeReconciliationCheck).where(
-                OutcomeReconciliationCheck.project_id.in_(project_ids),
-                OutcomeReconciliationCheck.checked_at >= since,
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for row in rows:
-        counts["total"] += 1
-        if row.verdict in {"matched", "mismatched", "not_verified"}:
-            counts[row.verdict] += 1
-        if row.call_id:
-            counts["linked_calls"] += 1
-        if row.runtime_policy_decision_id:
-            counts["linked_runtime_policy"] += 1
-    return counts
-
-
-def _is_local_or_synthetic_proof(
-    *,
-    check: OutcomeReconciliationCheck,
-    call: Call,
-) -> bool:
-    check_metadata = _json_object(check.metadata_json)
-    call_metadata = _json_object(call.metadata_json)
-    sources = {
-        str(check_metadata.get("source") or "").strip(),
-        str(call_metadata.get("source") or "").strip(),
-    }
-    proof_modes = {
-        str(check_metadata.get("proof_mode") or "").strip(),
-        str(call_metadata.get("proof_mode") or "").strip(),
-    }
-    if sources & LOCAL_PROOF_SOURCES:
-        return True
-    if proof_modes & LOCAL_PROOF_MODES:
-        return True
-    return (
-        bool(check_metadata.get("demo"))
-        or bool(check_metadata.get("is_synthetic"))
-        or bool(check_metadata.get("synthetic"))
-        or bool(call_metadata.get("demo"))
-        or bool(call_metadata.get("is_synthetic"))
-        or bool(call_metadata.get("synthetic"))
-        or call.is_production is False
-    )
-
-
-def _real_customer_proof_counts(
-    db: Session,
-    *,
-    project_ids: list[str],
-    since: datetime,
-) -> dict[str, int | float]:
-    counts: dict[str, int | float] = {
-        "candidate_matched": 0,
-        "real_matched": 0,
-        "demo_or_synthetic": 0,
-        "distinct_projects": 0,
-        "amount_usd": 0.0,
-    }
-    if not project_ids:
-        return counts
-
-    rows = db.execute(
-        select(OutcomeReconciliationCheck, Call)
-        .join(Call, OutcomeReconciliationCheck.call_id == Call.id)
-        .join(
-            RuntimePolicyDecision,
-            OutcomeReconciliationCheck.runtime_policy_decision_id
-            == RuntimePolicyDecision.id,
-        )
-        .where(
-            OutcomeReconciliationCheck.project_id.in_(project_ids),
-            OutcomeReconciliationCheck.checked_at >= since,
-            OutcomeReconciliationCheck.verdict == "matched",
-            OutcomeReconciliationCheck.call_id.is_not(None),
-            OutcomeReconciliationCheck.runtime_policy_decision_id.is_not(None),
-        )
-    ).all()
-
-    real_project_ids: set[str] = set()
-    for check, call in rows:
-        counts["candidate_matched"] += 1
-        if _is_local_or_synthetic_proof(check=check, call=call):
-            counts["demo_or_synthetic"] += 1
-            continue
-        counts["real_matched"] += 1
-        real_project_ids.add(check.project_id)
-        counts["amount_usd"] += float(check.amount_usd or 0)
-    counts["distinct_projects"] = len(real_project_ids)
-    return counts
-
-
-def _repo_root_for_source_truth() -> Path | None:
-    candidates = [
-        Path.cwd(),
-        Path.cwd().parent,
-        Path(__file__).resolve().parents[5],
-    ]
-    for candidate in candidates:
-        if (candidate / "README.md").exists() and (
-            candidate / "zroky-backend"
-        ).exists():
-            return candidate
-    return None
-
-
-def _source_truth_manifest_path() -> Path:
-    env_path = os.environ.get("SOURCE_TRUTH_MANIFEST_PATH", "").strip()
-    if env_path:
-        return Path(env_path)
-    return _DEFAULT_SOURCE_TRUTH_MANIFEST_PATH
-
-
-def _source_truth_status_from_manifest() -> tuple[
-    str, list[str], list[OwnerLaunchGateEvidence]
-]:
-    path = _source_truth_manifest_path()
-    if not path.exists():
-        return (
-            "not_verified",
-            ["repo_root_not_found"],
-            [
-                _evidence(
-                    "README marker",
-                    "missing",
-                    status="not_verified",
-                    detail="Backend could not locate the repository root or runtime source manifest.",
-                )
-            ],
-        )
-
-    try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return (
-            "not_verified",
-            ["source_truth_manifest_unreadable"],
-            [
-                _evidence(
-                    "runtime source manifest",
-                    "unreadable",
-                    status="not_verified",
-                    detail=str(exc),
-                )
-            ],
-        )
-
-    marker = str(manifest.get("readme_marker") or "")
-    readme_sha = str(manifest.get("readme_sha256") or "")
-    stale_docs = [
-        str(path)
-        for path in manifest.get("stale_product_doc_paths_present", [])
-        if str(path)
-    ]
-    evidence = [
-        _evidence(
-            "runtime source manifest",
-            "present",
-            status="pass" if marker == SOURCE_TRUTH_MARKER else "not_verified",
-            detail=str(manifest.get("source") or "README.md"),
-        ),
-        _evidence(
-            "README sha256",
-            readme_sha[:12] if readme_sha else "missing",
-            status="pass" if readme_sha else "not_verified",
-        ),
-        _evidence(
-            "stale planning docs",
-            len(stale_docs),
-            status="fail" if stale_docs else "pass",
-        ),
-    ]
-    if stale_docs:
-        return "fail", [f"stale_doc:{rel}" for rel in stale_docs], evidence
-    if marker != SOURCE_TRUTH_MARKER:
-        return "not_verified", ["readme_source_marker_missing"], evidence
-    if not readme_sha:
-        return "not_verified", ["readme_hash_missing"], evidence
-    return "pass", [], evidence
-
-
-def _source_truth_status() -> tuple[str, list[str], list[OwnerLaunchGateEvidence]]:
-    root = _repo_root_for_source_truth()
-    if root is None:
-        return _source_truth_status_from_manifest()
-
-    readme = root / "README.md"
-    text = readme.read_text(encoding="utf-8", errors="replace")
-    has_marker = SOURCE_TRUTH_MARKER in text
-    stale_docs = [rel for rel in STALE_PRODUCT_DOC_PATHS if (root / rel).exists()]
-    evidence = [
-        _evidence(
-            "README.md", "present", status="pass" if has_marker else "not_verified"
-        ),
-        _evidence(
-            "stale planning docs",
-            len(stale_docs),
-            status="fail" if stale_docs else "pass",
-        ),
-    ]
-    if stale_docs:
-        return "fail", [f"stale_doc:{rel}" for rel in stale_docs], evidence
-    if not has_marker:
-        return "not_verified", ["readme_source_marker_missing"], evidence
-    return "pass", [], evidence
+def _count(db: Session, model: type, *conditions: object) -> int:
+    return int(db.scalar(select(func.count(model.id)).where(*conditions)) or 0)
 
 
 def build_launch_readiness(
@@ -492,397 +77,244 @@ def build_launch_readiness(
     money_path: OwnerMoneyPathHealthResponse,
 ) -> OwnerLaunchReadinessResponse:
     now = datetime.now(UTC)
-    since_7d = now - timedelta(days=7)
-    platform = money_path.platform
-    tenants = money_path.tenants
-    project_ids = [row.project_id for row in tenants]
-
-    replay_counts = _replay_trust_counts(db, project_ids=project_ids, since=since_7d)
-    ci_counts = _ci_run_counts(db, project_ids=project_ids, since=since_7d)
-    golden_counts = _behavioral_golden_counts(db, project_ids=project_ids)
-    runtime_counts = _runtime_policy_counts(db, project_ids=project_ids, since=since_7d)
-    reconciliation_counts = _outcome_reconciliation_counts(
-        db, project_ids=project_ids, since=since_7d
-    )
-    real_customer_counts = _real_customer_proof_counts(
-        db, project_ids=project_ids, since=since_7d
-    )
-    source_status, source_blockers, source_evidence = _source_truth_status()
-
+    since = now - timedelta(days=7)
+    settings = get_settings()
     gates: list[OwnerLaunchReadinessGate] = []
 
-    capture_blockers = [
-        code
-        for code in platform.launch_blockers
-        if code
-        in {
-            "capture_loss_detected",
-            "gateway_backpressure",
-            "gateway_spool_stale",
-        }
-    ]
-    capture_missing = []
-    if platform.captures_24h <= 0:
-        capture_missing.append("no_capture_24h")
-    if platform.tenants_without_recent_capture > 0:
-        capture_missing.append("tenant_capture_gap")
+    active_packs = _count(db, FinalAssurancePack, FinalAssurancePack.status == "active")
+    active_connectors = _count(db, FinalSourceConnector, FinalSourceConnector.status == "active")
+    bound_contract_projects = int(
+        db.scalar(
+            select(func.count(func.distinct(FinalAssurancePack.project_id)))
+            .select_from(FinalAssurancePack)
+            .join(
+                FinalSourceConnector,
+                (FinalSourceConnector.project_id == FinalAssurancePack.project_id)
+                & (FinalSourceConnector.environment == FinalAssurancePack.environment),
+            )
+            .where(
+                FinalAssurancePack.status == "active",
+                FinalSourceConnector.status == "active",
+            )
+        )
+        or 0
+    )
+    recent_intents = _count(db, FinalWorkflowIntent, FinalWorkflowIntent.created_at >= since)
+    contract_missing = []
+    if active_packs == 0:
+        contract_missing.append("active_assurance_pack_missing")
+    if active_connectors == 0:
+        contract_missing.append("active_source_connector_missing")
+    if bound_contract_projects == 0:
+        contract_missing.append("bound_proof_contract_missing")
+    if recent_intents == 0:
+        contract_missing.append("recent_intent_missing")
     gates.append(
         _gate(
-            code="durable_capture",
-            title="Durable Capture",
-            status=_status_for(blockers=capture_blockers, missing=capture_missing),
-            summary="SDK, gateway, and direct ingest must preserve masked production events with visible loss/backpressure.",
-            blockers=capture_blockers + capture_missing,
+            code="workflow_proof_contracts",
+            title="Workflow Proof Contracts",
+            summary="Active assurance packs and read-only source connectors must turn agent intents into verifiable workflows.",
+            blockers=[],
+            missing=contract_missing,
             evidence=[
-                _evidence("captures_24h", platform.captures_24h),
-                _evidence(
-                    "tenants_without_recent_capture",
-                    platform.tenants_without_recent_capture,
-                ),
-                _evidence(
-                    "gateway_unhealthy_tenants", platform.gateway_unhealthy_tenants
-                ),
-                _evidence("gateway_loss_tenants", platform.gateway_loss_tenants),
-                _evidence(
-                    "gateway_backpressure_tenants",
-                    platform.gateway_backpressure_tenants,
-                ),
+                _evidence("active_assurance_packs", active_packs),
+                _evidence("active_source_connectors", active_connectors),
+                _evidence("projects_with_bound_proof_contracts", bound_contract_projects),
+                _evidence("intents_7d", recent_intents),
             ],
             verification_commands=[
-                "python -m pytest tests/test_ingest.py tests/test_capture_health.py",
-                "go test ./...",
+                "python -m pytest tests/test_final_intents_api.py tests/test_final_outcome_graph.py -q",
             ],
         )
     )
 
-    duplicate_project_ids = len(set(project_ids)) != len(project_ids)
-    tenant_missing = [] if tenants else ["no_active_tenants"]
-    tenant_blockers = ["duplicate_tenant_rows"] if duplicate_project_ids else []
+    workflow_decisions = _count(db, FinalPolicyDecision, FinalPolicyDecision.decided_at >= since)
+    protected_action_decisions = _count(
+        db,
+        RuntimePolicyDecision,
+        RuntimePolicyDecision.created_at >= since,
+    )
+    workflow_stops = _count(
+        db,
+        FinalPolicyDecision,
+        FinalPolicyDecision.decided_at >= since,
+        FinalPolicyDecision.decision.in_(("deny", "approval_required")),
+    )
+    protected_action_stops = _count(
+        db,
+        RuntimePolicyDecision,
+        RuntimePolicyDecision.created_at >= since,
+        RuntimePolicyDecision.decision.in_(("block", "requires_approval")),
+    )
+    recent_decisions = workflow_decisions + protected_action_decisions
+    stopped_decisions = workflow_stops + protected_action_stops
+    policy_missing = []
+    if recent_decisions == 0:
+        policy_missing.append("runtime_policy_decision_missing")
+    if stopped_decisions == 0:
+        policy_missing.append("runtime_hold_or_block_proof_missing")
     gates.append(
         _gate(
-            code="tenant_isolation",
-            title="Tenant Isolation",
-            status=_status_for(blockers=tenant_blockers, missing=tenant_missing),
-            summary="Every tenant-scoped flow must use the selected project and reject cross-project access.",
-            blockers=tenant_blockers + tenant_missing,
+            code="runtime_policy_control",
+            title="Runtime Policy Control",
+            summary="The live action path must prove that risky actions can be held for approval or denied before execution.",
+            blockers=[],
+            missing=policy_missing,
             evidence=[
-                _evidence("tenant_rows", len(tenants)),
-                _evidence("unique_project_rows", len(set(project_ids))),
-                _evidence("money_path_scoped_rows", bool(tenants)),
+                _evidence("policy_decisions_7d", recent_decisions),
+                _evidence("held_or_denied_7d", stopped_decisions),
+                _evidence("protected_action_decisions_7d", protected_action_decisions),
+                _evidence("workflow_policy_decisions_7d", workflow_decisions),
             ],
             verification_commands=[
-                "python -m pytest tests/test_tenant_session_project_selection.py tests/test_tenant_project_route_scoping.py",
+                "python -m pytest tests/test_runtime_policy_gate.py tests/test_final_intents_api.py -q",
             ],
         )
     )
 
-    failure_missing = []
-    if platform.issues_open <= 0:
-        failure_missing.append("no_grouped_failures")
-    gates.append(
-        _gate(
-            code="failure_intelligence",
-            title="Failure Intelligence",
-            status=_status_for(blockers=[], missing=failure_missing),
-            summary="Production failures must group into actionable issues with root cause, blast radius, next action, and proof status.",
-            blockers=failure_missing,
-            evidence=[
-                _evidence("open_grouped_failures", platform.issues_open),
-                _evidence(
-                    "tenants_with_failures",
-                    sum(1 for row in tenants if row.open_issue_count > 0),
-                ),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_failure_intelligence.py tests/test_issues.py",
-            ],
-        )
+    recent_graphs = _count(db, FinalOutcomeGraph, FinalOutcomeGraph.created_at >= since)
+    verified_graphs = _count(
+        db,
+        FinalOutcomeGraph,
+        FinalOutcomeGraph.created_at >= since,
+        FinalOutcomeGraph.classification == "verified",
     )
-
-    replay_blockers: list[str] = []
-    if replay_counts["stub_marked_verified"] > 0:
-        replay_blockers.append("stub_replay_marked_verified")
-    if platform.replay_jobs_stale > 0:
-        replay_blockers.append("replay_worker_stale_jobs")
-    if replay_counts["errors"] > 0:
-        replay_blockers.append("replay_executor_errors")
-    replay_missing = []
-    if replay_counts["trusted_verified"] <= 0:
-        replay_missing.append("trusted_replay_proof_missing")
-    if replay_counts["not_verified"] > 0:
-        replay_missing.append("recent_replay_not_verified")
-    gates.append(
-        _gate(
-            code="honest_replay_proof",
-            title="Honest Replay Proof",
-            status=_status_for(blockers=replay_blockers, missing=replay_missing),
-            summary="Replay must report pass/fail/not_verified/error honestly; stub replay can never be trusted proof.",
-            blockers=replay_blockers + replay_missing,
-            evidence=[
-                _evidence(
-                    "trusted_verified_replays_7d", replay_counts["trusted_verified"]
-                ),
-                _evidence(
-                    "stub_marked_verified", replay_counts["stub_marked_verified"]
-                ),
-                _evidence("not_verified_replays_7d", replay_counts["not_verified"]),
-                _evidence("replay_errors_7d", replay_counts["errors"]),
-                _evidence("stale_replay_jobs", platform.replay_jobs_stale),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_replay_runs.py tests/test_replay_executor.py tests/test_replay_worker_claiming.py",
-                "python -m pytest",
-            ],
-        )
+    caught_graphs = _count(
+        db,
+        FinalOutcomeGraph,
+        FinalOutcomeGraph.created_at >= since,
+        FinalOutcomeGraph.classification.in_(("wrong", "missing", "forbidden", "duplicate")),
     )
-
-    golden_blockers = []
-    if golden_counts["blocking_text_only"] > 0:
-        golden_blockers.append("blocking_text_only_goldens")
-    golden_missing = []
-    if golden_counts["blocking_behavioral"] <= 0:
-        golden_missing.append("behavioral_blocking_goldens_missing")
-    gates.append(
-        _gate(
-            code="behavioral_goldens",
-            title="Behavioral Goldens",
-            status=_status_for(blockers=golden_blockers, missing=golden_missing),
-            summary="Blocking Goldens must verify behavior contracts, not only final text.",
-            blockers=golden_blockers + golden_missing,
-            evidence=[
-                _evidence("active_goldens", golden_counts["active"]),
-                _evidence("blocking_goldens", golden_counts["blocking"]),
-                _evidence(
-                    "blocking_behavioral_goldens", golden_counts["blocking_behavioral"]
-                ),
-                _evidence(
-                    "blocking_text_only_goldens", golden_counts["blocking_text_only"]
-                ),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_goldens.py",
-            ],
-        )
+    pending_graphs = _count(
+        db,
+        FinalOutcomeGraph,
+        FinalOutcomeGraph.created_at >= since,
+        FinalOutcomeGraph.classification.in_(("pending", "unknown")),
     )
-
-    ci_blockers = []
-    if ci_counts["fail"] > 0:
-        ci_blockers.append("blocking_ci_failures")
-    if ci_counts["error"] > 0:
-        ci_blockers.append("ci_executor_errors")
-    ci_missing = []
-    if ci_counts["total"] <= 0:
-        ci_missing.append("ci_gate_run_missing")
-    if ci_counts["not_verified"] > 0:
-        ci_missing.append("ci_not_verified")
-    gates.append(
-        _gate(
-            code="durable_ci_gate",
-            title="Durable CI Gate",
-            status=_status_for(blockers=ci_blockers, missing=ci_missing),
-            summary="CI must run durable Golden gates and fail repeat regressions or not_verified safety checks.",
-            blockers=ci_blockers + ci_missing,
-            evidence=[
-                _evidence("ci_runs_7d", ci_counts["total"]),
-                _evidence("ci_pass_7d", ci_counts["pass"]),
-                _evidence("ci_warn_7d", ci_counts["warn"]),
-                _evidence("ci_fail_7d", ci_counts["fail"]),
-                _evidence("ci_not_verified_7d", ci_counts["not_verified"]),
-                _evidence("ci_error_7d", ci_counts["error"]),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_regression_ci_routes.py tests/test_regression_ci_orchestrator.py",
-                "npm test",
-            ],
-        )
-    )
-
-    runtime_missing = []
-    if runtime_counts["risk_stopped"] <= 0:
-        runtime_missing.append("runtime_risk_stop_evidence_missing")
-    gates.append(
-        _gate(
-            code="runtime_risk_stop",
-            title="Runtime Risk Stop",
-            status=_status_for(blockers=[], missing=runtime_missing),
-            summary="Risky autonomous actions must be blocked or paused before side effects execute.",
-            blockers=runtime_missing,
-            evidence=[
-                _evidence("risk_stopped_7d", runtime_counts["risk_stopped"]),
-                _evidence("blocked_7d", runtime_counts["blocked"]),
-                _evidence("pending_approvals_7d", runtime_counts["pending_approval"]),
-                _evidence("approved_7d", runtime_counts["approved"]),
-                _evidence("rejected_7d", runtime_counts["rejected"]),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_runtime_policy_gate.py",
-            ],
-        )
-    )
-
-    outcome_blockers: list[str] = []
-    if reconciliation_counts["mismatched"] > 0:
-        outcome_blockers.append("outcome_mismatch_detected")
-    outcome_missing: list[str] = []
-    if reconciliation_counts["total"] <= 0:
-        outcome_missing.append("outcome_reconciliation_missing")
-    if reconciliation_counts["not_verified"] > 0:
-        outcome_missing.append("outcome_not_verified")
-    if reconciliation_counts["matched"] <= 0:
-        outcome_missing.append("matched_outcome_proof_missing")
+    outcome_missing = []
+    if recent_graphs == 0:
+        outcome_missing.append("outcome_graph_missing")
+    if verified_graphs == 0:
+        outcome_missing.append("verified_outcome_proof_missing")
     gates.append(
         _gate(
             code="outcome_verification",
             title="Outcome Verification",
-            status=_status_for(blockers=outcome_blockers, missing=outcome_missing),
-            summary="Money-touching actions must be reconciled against the system of record; green output alone is not proof.",
-            blockers=outcome_blockers + outcome_missing,
+            summary="System-of-record proof, not agent output, must decide whether an action succeeded.",
+            blockers=[],
+            missing=outcome_missing,
             evidence=[
-                _evidence("reconciliation_checks_7d", reconciliation_counts["total"]),
-                _evidence("matched_7d", reconciliation_counts["matched"]),
-                _evidence("mismatched_7d", reconciliation_counts["mismatched"]),
-                _evidence("not_verified_7d", reconciliation_counts["not_verified"]),
-                _evidence(
-                    "checks_linked_to_calls_7d", reconciliation_counts["linked_calls"]
-                ),
-                _evidence(
-                    "checks_linked_to_runtime_policy_7d",
-                    reconciliation_counts["linked_runtime_policy"],
-                ),
+                _evidence("outcome_graphs_7d", recent_graphs),
+                _evidence("verified_7d", verified_graphs),
+                _evidence("caught_7d", caught_graphs),
+                _evidence("pending_or_unknown_7d", pending_graphs),
             ],
             verification_commands=[
-                "python -m pytest tests/test_outcome_reconciliation.py",
-                "npm test -- src/app/(dashboard)/outcomes/page.test.tsx",
+                "python -m pytest tests/test_final_outcome_graph_ledger.py tests/test_final_outcome_graph.py -q",
             ],
         )
     )
 
-    billing_blockers = list(platform.billing_launch_blockers or [])
+    incidents = _count(db, FinalOutcomeIncident, FinalOutcomeIncident.created_at >= since)
+    unresolved_incidents = _count(
+        db,
+        FinalOutcomeIncident,
+        FinalOutcomeIncident.created_at >= since,
+        FinalOutcomeIncident.status.in_(("open", "recovering", "unresolved")),
+    )
+    successful_plans = _count(
+        db,
+        FinalRecoveryPlan,
+        FinalRecoveryPlan.created_at >= since,
+        FinalRecoveryPlan.execution_status == "succeeded",
+    )
+    proven_recoveries = int(
+        db.scalar(
+            select(func.count(func.distinct(FinalOutcomeIncident.id)))
+            .select_from(FinalOutcomeIncident)
+            .join(FinalRecoveryPlan, FinalRecoveryPlan.incident_id == FinalOutcomeIncident.id)
+            .join(FinalOutcomeGraph, FinalOutcomeGraph.id == FinalOutcomeIncident.outcome_graph_id)
+            .where(
+                FinalOutcomeIncident.created_at >= since,
+                FinalOutcomeIncident.status == "resolved",
+                FinalOutcomeIncident.resolved_at.is_not(None),
+                FinalRecoveryPlan.execution_status == "succeeded",
+                FinalOutcomeGraph.classification == "verified",
+            )
+        )
+        or 0
+    )
+    recovery_missing = []
+    if incidents == 0:
+        recovery_missing.append("actionable_incident_missing")
+    if successful_plans == 0:
+        recovery_missing.append("successful_recovery_missing")
+    if proven_recoveries == 0:
+        recovery_missing.append("proof_resolved_incident_missing")
     gates.append(
         _gate(
-            code="billing_quota",
-            title="Billing + Quota",
-            status=_status_for(blockers=billing_blockers, missing=[]),
-            summary="Plan entitlements, usage, metering, payment lifecycle, and provider proof must be reliable and owner-visible.",
+            code="proof_driven_recovery",
+            title="Proof-driven Recovery",
+            summary="Recovery succeeds only when fresh system-of-record proof resolves the incident.",
+            blockers=[],
+            missing=recovery_missing,
+            evidence=[
+                _evidence("incidents_7d", incidents),
+                _evidence("successful_recovery_plans_7d", successful_plans),
+                _evidence("proof_resolved_incidents_7d", proven_recoveries),
+                _evidence("currently_unresolved_incidents", unresolved_incidents),
+            ],
+            verification_commands=[
+                "python -m pytest tests/test_final_intents_api.py -k recovery -q",
+            ],
+        )
+    )
+
+    signing_ready = _looks_like_ed25519_private_key(settings.ACTION_RECEIPT_ED25519_PRIVATE_KEY)
+    evidence_missing = []
+    if not signing_ready:
+        evidence_missing.append("attestation_signing_key_missing")
+    if verified_graphs == 0:
+        evidence_missing.append("attestable_verified_graph_missing")
+    gates.append(
+        _gate(
+            code="signed_evidence",
+            title="Signed Evidence",
+            summary="Verified outcomes must be exportable as independently verifiable Ed25519 DSSE attestations.",
+            blockers=[],
+            missing=evidence_missing,
+            evidence=[
+                _evidence("attestation_signing_configured", signing_ready),
+                _evidence("attestable_verified_graphs_7d", verified_graphs),
+            ],
+            verification_commands=[
+                "python -m pytest tests/test_final_outcome_graph_ledger.py -k 'attestation or evidence_export' -q",
+            ],
+        )
+    )
+
+    provider_verification = money_path.platform.billing_provider_verification
+    billing_blockers = []
+    if not settings.BILLING_ENABLED:
+        billing_blockers.append("billing_disabled")
+    if provider_verification.state != "verified":
+        billing_blockers.append("billing_provider_unverified")
+    gates.append(
+        _gate(
+            code="billing",
+            title="Billing",
+            summary="Paid launch requires enabled billing and one successfully applied provider event.",
             blockers=billing_blockers,
             evidence=[
-                _evidence("billing_launch_blockers", len(billing_blockers)),
-                _evidence(
-                    "metering_failure_tenants", platform.metering_failure_tenants
-                ),
-                _evidence(
-                    "event_counter_failure_count", platform.event_counter_failure_count
-                ),
+                _evidence("billing_enabled", settings.BILLING_ENABLED),
                 _evidence(
                     "billing_provider_verification",
-                    platform.billing_provider_verification.state,
-                    detail=platform.billing_provider_verification.detail,
-                ),
-                _evidence("tenants_with_quota_risk", platform.tenants_with_quota_risk),
-                _evidence(
-                    "tenants_with_billing_risk", platform.tenants_with_billing_risk
+                    provider_verification.state,
+                    detail=provider_verification.detail,
                 ),
             ],
             verification_commands=[
-                "python -m pytest tests/test_billing_v2.py tests/test_owner_money_path_health.py",
-            ],
-        )
-    )
-
-    getting_value_tenants = sum(
-        1 for row in tenants if row.value_status == "getting_value"
-    )
-    owner_value_blockers = [
-        code
-        for code in platform.launch_blockers
-        if code
-        in {
-            "deployment_smoke_not_passing",
-            "billing_provider_unverified",
-            "pricing_contract_drift",
-        }
-    ]
-    owner_value_missing = []
-    if getting_value_tenants <= 0:
-        owner_value_missing.append("no_tenant_getting_value")
-    gates.append(
-        _gate(
-            code="owner_value_proof",
-            title="Owner Value Proof",
-            status=_status_for(
-                blockers=owner_value_blockers, missing=owner_value_missing
-            ),
-            summary="Owner must see who is getting reliability value and where money path is blocked.",
-            blockers=owner_value_blockers + owner_value_missing,
-            evidence=[
-                _evidence("getting_value_tenants", getting_value_tenants),
-                _evidence("blocked_regressions_7d", platform.blocked_regressions_7d),
-                _evidence("verified_fixes_7d", platform.verified_fixes_7d),
-                _evidence(
-                    "deployment_smoke",
-                    platform.last_deployed_smoke.status,
-                    detail=platform.last_deployed_smoke.detail,
-                ),
-                _evidence("launch_blockers", len(platform.launch_blockers)),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_owner_money_path_health.py",
-                "python scripts/run_money_path_demo.py --json",
-                "npm test -- --run src/app/owner/page.test.tsx src/app/owner/money-path/page.test.tsx",
-            ],
-        )
-    )
-
-    real_customer_missing = []
-    if real_customer_counts["real_matched"] <= 0:
-        real_customer_missing.append("real_customer_outcome_proof_missing")
-    gates.append(
-        _gate(
-            code="real_customer_proof",
-            title="Real Customer Proof",
-            status=_status_for(blockers=[], missing=real_customer_missing),
-            summary="Paid launch requires at least one non-demo customer or pilot action with runtime policy evidence and matched system-of-record outcome proof.",
-            blockers=real_customer_missing,
-            evidence=[
-                _evidence(
-                    "candidate_matched_outcomes_7d",
-                    real_customer_counts["candidate_matched"],
-                ),
-                _evidence(
-                    "real_customer_matched_outcomes_7d",
-                    real_customer_counts["real_matched"],
-                ),
-                _evidence(
-                    "demo_or_synthetic_outcomes_7d",
-                    real_customer_counts["demo_or_synthetic"],
-                ),
-                _evidence(
-                    "real_customer_projects_7d",
-                    real_customer_counts["distinct_projects"],
-                ),
-                _evidence(
-                    "real_customer_amount_usd_7d",
-                    round(float(real_customer_counts["amount_usd"]), 2),
-                ),
-            ],
-            verification_commands=[
-                "python -m pytest tests/test_owner_money_path_health.py -k real_customer_proof",
-                "python scripts/run_deployment_smoke.py --api-base-url $ZROKY_STAGING_API_URL --provisioning-token $STAGING_PROVISIONING_TOKEN --backend-only",
-            ],
-        )
-    )
-
-    gates.append(
-        _gate(
-            code="single_source_of_truth",
-            title="Single Source Of Truth",
-            status=source_status,
-            summary="Only root README.md may guide product direction; stale planning Markdown must not steer implementation.",
-            blockers=source_blockers,
-            evidence=source_evidence,
-            verification_commands=[
-                'git ls-files "*.md"',
-                "python scripts/check_docs_drift.py",
+                "python -m pytest tests/test_billing_v2.py tests/test_owner_money_path_health.py -q",
             ],
         )
     )
@@ -892,19 +324,11 @@ def build_launch_readiness(
         f"{gate.code}:{blocker}"
         for gate in gates
         for blocker in gate.blockers
-        if gate.status != "pass"
     ]
-    if paid_launch_allowed:
-        overall_status = "pass"
-    elif any(gate.status == "fail" for gate in gates):
-        overall_status = "blocked"
-    else:
-        overall_status = "not_verified"
-
     return OwnerLaunchReadinessResponse(
         generated_at=now,
         product_standard=PRODUCT_STANDARD,
-        overall_status=overall_status,
+        overall_status="pass" if paid_launch_allowed else "blocked",
         paid_launch_allowed=paid_launch_allowed,
         gates=gates,
         hard_blockers=hard_blockers,

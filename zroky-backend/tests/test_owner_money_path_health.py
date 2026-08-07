@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,18 +10,23 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
-from app.api.routes._internal import owner_launch_readiness_builder
 from app.db.base import Base
 from app.db.models import (
     Anomaly,
     BillingEvent,
     Call,
     EventCount,
+    FinalAssurancePack,
+    FinalOutcomeGraph,
+    FinalOutcomeIncident,
+    FinalPolicyDecision,
+    FinalRecoveryPlan,
+    FinalSourceConnector,
+    FinalWorkflowIntent,
     GatewayCaptureHealth,
     GoldenSet,
     GoldenTrace,
     Issue,
-    OutcomeReconciliationCheck,
     Project,
     ProjectAlert,
     ProviderKeyVault,
@@ -439,580 +443,184 @@ def test_owner_money_path_health_reports_deployment_smoke_evidence(
     assert smoke["ci_run_id"] == "rr_smoke_ci"
 
 
-def test_source_truth_manifest_matches_root_readme() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    readme = repo_root / "README.md"
-    manifest = json.loads(
-        (repo_root / "zroky-backend" / "source_truth_manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
-
-    assert owner_launch_readiness_builder.SOURCE_TRUTH_MARKER in readme.read_text(
-        encoding="utf-8"
-    )
-    assert manifest["source"] == "README.md"
-    assert (
-        manifest["readme_marker"]
-        == owner_launch_readiness_builder.SOURCE_TRUTH_MARKER
-    )
-    assert manifest["readme_sha256"] == hashlib.sha256(readme.read_bytes()).hexdigest()
-
-
-def test_source_truth_status_uses_runtime_manifest_when_repo_root_is_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    manifest = tmp_path / "source_truth_manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "source": "README.md",
-                "readme_marker": owner_launch_readiness_builder.SOURCE_TRUTH_MARKER,
-                "readme_sha256": "a" * 64,
-                "stale_product_doc_paths_present": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        owner_launch_readiness_builder, "_repo_root_for_source_truth", lambda: None
-    )
-    monkeypatch.setenv("SOURCE_TRUTH_MANIFEST_PATH", str(manifest))
-
-    status, blockers, evidence = owner_launch_readiness_builder._source_truth_status()
-
-    assert status == "pass"
-    assert blockers == []
-    assert [item.label for item in evidence] == [
-        "runtime source manifest",
-        "README sha256",
-        "stale planning docs",
-    ]
-
-
-def test_source_truth_status_fails_closed_when_runtime_manifest_has_stale_docs(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    manifest = tmp_path / "source_truth_manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "source": "README.md",
-                "readme_marker": owner_launch_readiness_builder.SOURCE_TRUTH_MARKER,
-                "readme_sha256": "b" * 64,
-                "stale_product_doc_paths_present": [".kiro/specs/old-plan.md"],
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        owner_launch_readiness_builder, "_repo_root_for_source_truth", lambda: None
-    )
-    monkeypatch.setenv("SOURCE_TRUTH_MANIFEST_PATH", str(manifest))
-
-    status, blockers, _ = owner_launch_readiness_builder._source_truth_status()
-
-    assert status == "fail"
-    assert blockers == ["stale_doc:.kiro/specs/old-plan.md"]
-
-
-def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proof(
+def test_owner_launch_readiness_uses_final_product_proof(
     client,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     test_client, session_factory = client
     owner_headers = _set_owner_auth(monkeypatch)
-    now = datetime.now(UTC)
-
-    with session_factory() as db:
-        db.add(
-            Project(
-                id="proj_launch",
-                name="Launch Tenant",
-                owner_ref="launch",
-                is_active=True,
-            )
-        )
-        db.add(
-            Subscription(
-                id="sub_launch",
-                org_id="proj_launch",
-                plan_code="pro",
-                status="active",
-                current_period_end=now + timedelta(days=30),
-            )
-        )
-        db.add(
-            EventCount(
-                id="ec_launch",
-                tenant_id="proj_launch",
-                month=now.strftime("%Y-%m"),
-                event_count=25,
-                last_event_at=now,
-            )
-        )
-        db.add(
-            BillingEvent(
-                id="be_launch",
-                provider="razorpay",
-                provider_event_id="razorpay_verify:pay_launch",
-                event_type="payment.succeeded",
-                provider_created_at=now,
-                processed_at=now,
-                result="applied",
-                affected_org_id="proj_launch",
-                payload_json="{}",
-            )
-        )
-        db.add(
-            _call(
-                "proj_launch",
-                "call_launch",
-                created_at=now - timedelta(minutes=20),
-                agent_name="deployment-smoke-agent",
-            )
-        )
-        db.add(
-            Issue(
-                id="issue_launch",
-                project_id="proj_launch",
-                failure_code="TOOL_ARGUMENT_MISMATCH",
-                prompt_fingerprint="fp_launch",
-                agent_name="refund-agent",
-                status="open",
-                severity="high",
-                occurrence_count=12,
-                first_seen_at=now - timedelta(hours=2),
-                last_seen_at=now - timedelta(minutes=30),
-                sample_call_id="call_launch",
-            )
-        )
-        db.add(
-            ProviderKeyVault(
-                id="pk_launch",
-                project_id="proj_launch",
-                provider="openai",
-                ciphertext=b"encrypted",
-                key_fingerprint="fp_launch_provider",
-                key_last4="9999",
-                is_active=True,
-            )
-        )
-        db.add(
-            GoldenSet(
-                id="gs_launch",
-                project_id="proj_launch",
-                name="Launch Golden",
-                blocks_ci=True,
-                is_flaky=False,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        db.add(
-            GoldenTrace(
-                id="gt_launch",
-                golden_set_id="gs_launch",
-                project_id="proj_launch",
-                call_id="call_launch",
-                status="active",
-                expected_output_text="policy checked before refund",
-                criteria_json=json.dumps(
-                    {
-                        "golden_contract_v1": {
-                            "final_output_assertion": {"contains": "policy checked"},
-                            "tool_sequence": ["lookup_policy", "refund_customer"],
-                            "tool_args": {
-                                "refund_customer": {
-                                    "requires": ["customer_id", "amount"]
-                                }
-                            },
-                            "policy_checks": ["refund_policy_approved"],
-                            "rag_grounding": {"required": True},
-                            "business_outcome": {"status": "success"},
-                        }
-                    },
-                    separators=(",", ":"),
-                ),
-                source_evidence_json=json.dumps({"source": "deployment-smoke"}),
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        db.add(
-            ReplayRun(
-                id="rr_launch_ci",
-                project_id="proj_launch",
-                golden_set_id="gs_launch",
-                trigger="github",
-                git_sha="deploy-smoke-launch",
-                status="pass",
-                summary_json=json.dumps(
-                    {
-                        "verified_fix": True,
-                        "verification_status": "verified_fix",
-                        "requested_replay_mode": "real_llm",
-                        "replay_mode": "real_llm",
-                    },
-                    separators=(",", ":"),
-                ),
-                created_at=now - timedelta(minutes=10),
-            )
-        )
-        db.add(
-            RuntimePolicyDecision(
-                id="rpd_launch",
-                project_id="proj_launch",
-                trace_id="trace_launch",
-                call_id="call_launch",
-                agent_name="refund-agent",
-                action_type="refund",
-                tool_name="refund_customer",
-                decision="block",
-                status="blocked",
-                reasons_json=json.dumps(["refund requires approval"]),
-                created_at=now - timedelta(minutes=5),
-            )
-        )
-        db.add(
-            OutcomeReconciliationCheck(
-                id="orc_launch",
-                project_id="proj_launch",
-                call_id="call_launch",
-                trace_id="trace_launch",
-                runtime_policy_decision_id="rpd_launch",
-                action_type="refund",
-                connector_type="ledger_api",
-                system_ref="ledger:rf_launch",
-                verdict="matched",
-                reason="all_compared_fields_matched",
-                amount_usd=42.5,
-                currency="USD",
-                claimed_json=json.dumps(
-                    {"refund_id": "rf_launch", "amount_usd": 42.5, "currency": "USD"},
-                    separators=(",", ":"),
-                ),
-                actual_json=json.dumps(
-                    {
-                        "refund_id": "rf_launch",
-                        "amount_usd": "42.50",
-                        "currency": "usd",
-                    },
-                    separators=(",", ":"),
-                ),
-                comparison_json=json.dumps(
-                    {
-                        "verdict": "matched",
-                        "compared_fields": [
-                            {
-                                "field": "amount_usd",
-                                "claimed": 42.5,
-                                "actual": "42.50",
-                                "matched": True,
-                            }
-                        ],
-                    },
-                    separators=(",", ":"),
-                ),
-                checked_at=now - timedelta(minutes=4),
-            )
-        )
-        db.commit()
-
-    response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
-    assert response.status_code == 200
-    payload = response.json()
-
-    assert payload["product_standard"] == (
-        "Did Zroky prevent an important AI agent failure from silently repeating?"
+    monkeypatch.setenv(
+        "ACTION_RECEIPT_ED25519_PRIVATE_KEY",
+        "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",
     )
-    assert payload["paid_launch_allowed"] is True
-    assert payload["overall_status"] == "pass"
-    assert payload["hard_blockers"] == []
-    gates = {gate["code"]: gate for gate in payload["gates"]}
-    assert set(gates) == {
-        "durable_capture",
-        "tenant_isolation",
-        "failure_intelligence",
-        "honest_replay_proof",
-        "behavioral_goldens",
-        "durable_ci_gate",
-        "runtime_risk_stop",
-        "outcome_verification",
-        "billing_quota",
-        "owner_value_proof",
-        "real_customer_proof",
-        "single_source_of_truth",
-    }
-    assert all(gate["status"] == "pass" for gate in gates.values())
-    assert gates["behavioral_goldens"]["evidence"][2]["value"] == 1
-    assert gates["runtime_risk_stop"]["evidence"][0]["value"] == 1
-    assert gates["outcome_verification"]["evidence"][1]["value"] == 1
-    assert gates["real_customer_proof"]["evidence"][1]["value"] == 1
-    assert any(
-        "verify_paid_launch_readiness.ps1" in command
-        for command in payload["verification_commands"]
-    )
-
-
-def test_owner_launch_readiness_rejects_demo_outcome_as_paid_launch_proof(
-    client,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    test_client, session_factory = client
-    owner_headers = _set_owner_auth(monkeypatch)
+    monkeypatch.setenv("BILLING_ENABLED", "true")
+    get_settings.cache_clear()
     now = datetime.now(UTC)
 
     with session_factory() as db:
-        db.add(
-            Project(
-                id="proj_demo_proof",
-                name="Demo Proof Tenant",
-                owner_ref="demo-proof",
-                is_active=True,
-            )
-        )
-        db.add(
-            _call(
-                "proj_demo_proof",
-                "call_demo_proof",
-                created_at=now - timedelta(minutes=10),
-                agent_name="refund-agent",
-            )
-        )
-        db.add(
-            RuntimePolicyDecision(
-                id="rpd_demo_proof",
-                project_id="proj_demo_proof",
-                trace_id="trace_demo_proof",
-                call_id="call_demo_proof",
-                agent_name="refund-agent",
-                action_type="refund",
-                tool_name="refund_customer",
-                decision="block",
-                status="blocked",
-                reasons_json=json.dumps(["demo proof should not allow paid launch"]),
-                created_at=now - timedelta(minutes=9),
-            )
-        )
-        db.add(
-            OutcomeReconciliationCheck(
-                id="orc_demo_proof",
-                project_id="proj_demo_proof",
-                call_id="call_demo_proof",
-                trace_id="trace_demo_proof",
-                runtime_policy_decision_id="rpd_demo_proof",
-                action_type="refund",
-                connector_type="ledger_api",
-                system_ref="ledger:demo",
-                verdict="matched",
-                reason="demo ledger matched",
-                amount_usd=42.18,
-                currency="USD",
-                claimed_json=json.dumps({"refund_id": "demo", "amount_usd": 42.18}),
-                actual_json=json.dumps({"refund_id": "demo", "amount_usd": 42.18}),
-                comparison_json=json.dumps({"amount_usd": {"matched": True}}),
-                idempotency_key="orc-demo-proof",
-                metadata_json=json.dumps(
-                    {"source": "money_path_demo", "launch_readiness": True},
-                    separators=(",", ":"),
-                ),
-                checked_at=now - timedelta(minutes=8),
-            )
-        )
-        db.add(
-            OutcomeReconciliationCheck(
-                id="orc_install_kit_local_proof",
-                project_id="proj_demo_proof",
-                call_id="call_demo_proof",
-                trace_id="trace_demo_proof",
-                runtime_policy_decision_id="rpd_demo_proof",
-                action_type="refund",
-                connector_type="ledger_refund_api",
-                system_ref="ledger:install-kit-local",
-                verdict="matched",
-                reason="local install-kit stub matched",
-                amount_usd=19.25,
-                currency="USD",
-                claimed_json=json.dumps(
-                    {"refund_id": "install-kit-local", "amount_usd": 19.25}
-                ),
-                actual_json=json.dumps(
-                    {"refund_id": "install-kit-local", "amount_usd": 19.25}
-                ),
-                comparison_json=json.dumps({"amount_usd": {"matched": True}}),
-                idempotency_key="orc-install-kit-local-proof",
-                metadata_json=json.dumps(
-                    {
-                        "source": "design_partner_install_kit",
-                        "proof_mode": "local_demo",
-                    },
-                    separators=(",", ":"),
-                ),
-                checked_at=now - timedelta(minutes=7),
-            )
-        )
-        db.commit()
-
-    response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
-    assert response.status_code == 200
-    payload = response.json()
-    gates = {gate["code"]: gate for gate in payload["gates"]}
-
-    assert payload["paid_launch_allowed"] is False
-    assert gates["real_customer_proof"]["status"] == "not_verified"
-    assert "real_customer_outcome_proof_missing" in gates["real_customer_proof"]["blockers"]
-    assert "real_customer_proof:real_customer_outcome_proof_missing" in payload["hard_blockers"]
-    assert gates["real_customer_proof"]["evidence"][0]["value"] == 2
-    assert gates["real_customer_proof"]["evidence"][1]["value"] == 0
-    assert gates["real_customer_proof"]["evidence"][2]["value"] == 2
-
-
-def test_owner_launch_readiness_blocks_on_fake_stub_replay_and_text_only_golden(
-    client,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    test_client, session_factory = client
-    owner_headers = _set_owner_auth(monkeypatch)
-    now = datetime.now(UTC)
-
-    with session_factory() as db:
-        db.add(
-            Project(id="proj_bad", name="Bad Tenant", owner_ref="bad", is_active=True)
-        )
-        db.add(_call("proj_bad", "call_bad", created_at=now - timedelta(minutes=10)))
-        db.add(
-            Issue(
-                id="issue_bad",
-                project_id="proj_bad",
-                failure_code="SCHEMA_VIOLATION",
-                prompt_fingerprint="fp_bad",
-                agent_name="agent",
-                status="open",
-                severity="high",
-                occurrence_count=4,
-                first_seen_at=now - timedelta(hours=1),
-                last_seen_at=now - timedelta(minutes=10),
-                sample_call_id="call_bad",
-            )
-        )
-        db.add(
-            GoldenSet(
-                id="gs_bad",
-                project_id="proj_bad",
-                name="Text Golden",
-                blocks_ci=True,
-                is_flaky=False,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        db.add(
-            GoldenTrace(
-                id="gt_bad",
-                golden_set_id="gs_bad",
-                project_id="proj_bad",
-                call_id="call_bad",
-                status="active",
-                expected_output_text="ok",
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        db.add(
-            ReplayRun(
-                id="rr_bad_stub",
-                project_id="proj_bad",
-                golden_set_id="gs_bad",
-                trigger="github",
-                git_sha="stub-bad",
-                status="pass",
-                summary_json=json.dumps(
-                    {
-                        "verified_fix": True,
-                        "verification_status": "verified_fix",
-                        "requested_replay_mode": "stub",
-                        "replay_mode": "stub",
-                    },
-                    separators=(",", ":"),
-                ),
-                created_at=now,
-            )
-        )
         db.add_all(
             [
-                OutcomeReconciliationCheck(
-                    id="orc_bad_mismatch",
-                    project_id="proj_bad",
-                    call_id="call_bad",
-                    trace_id="trace_bad",
-                    action_type="refund",
-                    connector_type="ledger_api",
-                    system_ref="ledger:rf_bad",
-                    verdict="mismatched",
-                    reason="field_mismatch",
-                    amount_usd=99,
-                    currency="USD",
-                    claimed_json=json.dumps(
-                        {"refund_id": "rf_bad", "amount_usd": 99}, separators=(",", ":")
-                    ),
-                    actual_json=json.dumps(
-                        {"refund_id": "rf_bad", "amount_usd": 12}, separators=(",", ":")
-                    ),
-                    comparison_json=json.dumps(
-                        {
-                            "mismatches": [
-                                {"field": "amount_usd", "claimed": 99, "actual": 12}
-                            ]
-                        },
-                        separators=(",", ":"),
-                    ),
-                    checked_at=now,
+                Project(
+                    id="proj_final_launch",
+                    name="Final Launch Tenant",
+                    owner_ref="final-launch",
+                    is_active=True,
                 ),
-                OutcomeReconciliationCheck(
-                    id="orc_bad_missing_record",
-                    project_id="proj_bad",
-                    call_id="call_bad",
-                    trace_id="trace_bad",
-                    action_type="payment",
-                    connector_type="ledger_api",
-                    system_ref="ledger:pay_missing",
-                    verdict="not_verified",
-                    reason="system_of_record_missing",
-                    amount_usd=40,
-                    currency="USD",
-                    claimed_json=json.dumps(
-                        {"payment_id": "pay_missing", "amount_usd": 40},
-                        separators=(",", ":"),
-                    ),
-                    actual_json=None,
-                    comparison_json=json.dumps(
-                        {"reason": "system_of_record_missing"}, separators=(",", ":")
-                    ),
-                    checked_at=now,
+                BillingEvent(
+                    id="be_final_launch",
+                    provider="razorpay",
+                    provider_event_id="razorpay_verify:pay_final_launch",
+                    event_type="payment.succeeded",
+                    provider_created_at=now,
+                    processed_at=now,
+                    result="applied",
+                    affected_org_id="proj_final_launch",
+                    payload_json="{}",
+                ),
+                FinalAssurancePack(
+                    id="pack_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    workflow_key="refund_flow_v1",
+                    version="1",
+                    pack_digest="sha256:pack",
+                    pack_json="{}",
+                    status="active",
+                    created_at=now,
+                ),
+                FinalSourceConnector(
+                    id="connector_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    capability="stripe_refund.read",
+                    connector_kind="stripe",
+                    secret_ref="STRIPE_KEY_FINAL_LAUNCH",
+                    config_json="{}",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                ),
+                FinalWorkflowIntent(
+                    id="intent_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    idempotency_key="intent-final-launch",
+                    agent_ref="refund-agent",
+                    intent_digest="sha256:intent",
+                    intent_json="{}",
+                    status="authorized",
+                    created_at=now,
+                ),
+                FinalPolicyDecision(
+                    id="decision_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    intent_id="intent_final_launch",
+                    decision="approval_required",
+                    policy_digest="sha256:policy",
+                    decision_json="{}",
+                    decided_at=now,
+                ),
+                RuntimePolicyDecision(
+                    id="runtime_decision_final_launch",
+                    project_id="proj_final_launch",
+                    action_type="refund",
+                    tool_name="refund_customer",
+                    decision="block",
+                    status="blocked",
+                    reasons_json='["approval required"]',
+                    created_at=now,
+                ),
+                FinalOutcomeGraph(
+                    id="graph_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    intent_id="intent_final_launch",
+                    idempotency_key="graph-final-launch",
+                    graph_digest="sha256:graph",
+                    graph_json="{}",
+                    verification_status="verified",
+                    classification="verified",
+                    last_checked_at=now,
+                    verified_at=now,
+                    created_at=now,
+                ),
+                FinalOutcomeIncident(
+                    id="incident_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    outcome_graph_id="graph_final_launch",
+                    severity="high",
+                    status="resolved",
+                    incident_json="{}",
+                    created_at=now,
+                    resolved_at=now,
+                ),
+                FinalRecoveryPlan(
+                    id="plan_final_launch",
+                    project_id="proj_final_launch",
+                    environment="production",
+                    incident_id="incident_final_launch",
+                    plan_digest="sha256:plan",
+                    plan_json="{}",
+                    approval_status="approved",
+                    execution_status="succeeded",
+                    created_at=now,
+                    updated_at=now,
                 ),
             ]
         )
         db.commit()
 
     response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
+
     assert response.status_code == 200
     payload = response.json()
+    assert payload["product_standard"] == (
+        "Did Zroky stop a risky agent action and prove the real-world outcome?"
+    )
+    assert payload["paid_launch_allowed"] is True
+    assert payload["hard_blockers"] == []
     gates = {gate["code"]: gate for gate in payload["gates"]}
+    assert set(gates) == {
+        "workflow_proof_contracts",
+        "runtime_policy_control",
+        "outcome_verification",
+        "proof_driven_recovery",
+        "signed_evidence",
+        "billing",
+    }
+    assert all(gate["status"] == "pass" for gate in gates.values())
+    assert gates["runtime_policy_control"]["evidence"][0]["value"] == 2
+    assert gates["runtime_policy_control"]["evidence"][2]["value"] == 1
+    assert gates["runtime_policy_control"]["evidence"][3]["value"] == 1
+    assert gates["outcome_verification"]["evidence"][1]["value"] == 1
+    assert gates["proof_driven_recovery"]["evidence"][2]["value"] == 1
 
+
+def test_owner_launch_readiness_fails_closed_without_final_product_proof(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, _ = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    monkeypatch.setenv("BILLING_ENABLED", "false")
+    monkeypatch.delenv("ACTION_RECEIPT_ED25519_PRIVATE_KEY", raising=False)
+    get_settings.cache_clear()
+
+    response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
     assert payload["paid_launch_allowed"] is False
     assert payload["overall_status"] == "blocked"
-    assert gates["honest_replay_proof"]["status"] == "fail"
-    assert "stub_replay_marked_verified" in gates["honest_replay_proof"]["blockers"]
-    assert gates["behavioral_goldens"]["status"] == "fail"
-    assert "blocking_text_only_goldens" in gates["behavioral_goldens"]["blockers"]
-    assert gates["outcome_verification"]["status"] == "fail"
-    assert "outcome_mismatch_detected" in gates["outcome_verification"]["blockers"]
-    assert "outcome_not_verified" in gates["outcome_verification"]["blockers"]
+    assert "workflow_proof_contracts:active_assurance_pack_missing" in payload["hard_blockers"]
+    assert "runtime_policy_control:runtime_policy_decision_missing" in payload["hard_blockers"]
+    assert "outcome_verification:verified_outcome_proof_missing" in payload["hard_blockers"]
+    assert "proof_driven_recovery:proof_resolved_incident_missing" in payload["hard_blockers"]
+    assert "signed_evidence:attestation_signing_key_missing" in payload["hard_blockers"]
+    assert "billing:billing_disabled" in payload["hard_blockers"]
+    assert not any("replay" in blocker or "golden" in blocker for blocker in payload["hard_blockers"])
 
 
 def test_owner_money_path_health_reports_gateway_capture_durability_blockers(
