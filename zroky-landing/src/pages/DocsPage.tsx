@@ -46,10 +46,14 @@ const receipt = await protect({
 console.log(receipt.proofStatus);`;
 
 const gatewaySnippet = `docker run -d \\
-  -p 8090:8090 \\
+  -p 127.0.0.1:8090:8090 \\
+  -v zroky-gateway-spool:/var/lib/zroky \\
   -e ZROKY_API_URL=https://api.zroky.com \\
-  -e ZROKY_GATEWAY_API_KEY=$ZROKY_GATEWAY_API_KEY \\
-  ghcr.io/zroky-ai/zroky-gateway:latest
+  -e ZROKY_EMIT_MODE=http \\
+  -e ZROKY_GATEWAY_API_KEY=$ZROKY_API_KEY \\
+  -e ZROKY_ALLOWED_PROJECT_IDS=$ZROKY_PROJECT \\
+  -e ZROKY_SPOOL_DIR=/var/lib/zroky \\
+  ghcr.io/zrokyprod/zroky-gateway:latest
 
 export OPENAI_BASE_URL=http://localhost:8090/v1`;
 

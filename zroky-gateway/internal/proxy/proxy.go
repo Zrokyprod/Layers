@@ -137,6 +137,11 @@ func HandlerWithOptions(
 
 		// ── 2. Extract tenant / project ID from header ───────────────────
 		capture := readCaptureHeaders(r.Header)
+		if strings.TrimSpace(capture.ProjectID) == "" && len(opts.AllowedProjectIDs) == 1 {
+			for projectID := range opts.AllowedProjectIDs {
+				capture.ProjectID = projectID
+			}
+		}
 		if capture.WorkflowName == "" {
 			capture.WorkflowName = opts.DefaultWorkflowName
 		}
