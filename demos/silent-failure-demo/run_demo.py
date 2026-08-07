@@ -102,8 +102,6 @@ def main() -> None:
         body={"incident_id": incident["id"], "playbook_key": PLAYBOOK_KEY},
     )
     plan = compiled["plan"]
-    for step in plan["steps"]:
-        step.setdefault("target", {})["charge"] = state["charge_id"]
     print("Compiled recovery plan:")
     print(json.dumps(plan["steps"], indent=2))
 
