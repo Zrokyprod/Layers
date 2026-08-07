@@ -453,6 +453,28 @@ describe("OperationsPage", () => {
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
   });
 
+  it("prefers the visible run when an intent also has a resolved incident", async () => {
+    api.listFinalIncidents.mockReturnValue([
+      {
+        id: "incident_resolved_1",
+        project_id: "project_1",
+        environment: "production",
+        outcome_graph_id: "run_1",
+        status: "resolved",
+        severity: "high",
+        created_at: "2026-07-21T10:01:00Z",
+        resolved_at: "2026-07-21T10:05:00Z",
+        incident: { intent_id: "intent_1", deviation_type: "Recovered refund" },
+      },
+    ]);
+    window.history.pushState(null, "", "/operations?intent_id=intent_1");
+
+    render(<OperationsPage />);
+
+    expect(await screen.findByLabelText("Runs table")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "refund-workflow" })).toBeInTheDocument();
+  });
+
   it("applies agent_name as a Runs facet", async () => {
     window.history.pushState(null, "", "/operations?agent_name=stripe-agent");
 

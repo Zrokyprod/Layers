@@ -600,10 +600,10 @@ function selectionFromUrl(
 
   const intentId = params.get("intent_id");
   if (intentId) {
-    const incident = incidents.find((item) => recordOptionalText(item.incident, "intent_id") === intentId);
-    if (incident) return { agentName: null, id: incident.id, tab: "incidents" };
     const run = runs.find((item) => item.intent_id === intentId);
     if (run) return { agentName: null, id: run.id, tab: "runs" };
+    const incident = incidents.find((item) => recordOptionalText(item.incident, "intent_id") === intentId);
+    if (incident) return { agentName: null, id: incident.id, tab: "incidents" };
     const approval = approvals.find((item) => item.intent_id === intentId);
     return { agentName: null, id: approval?.id ?? intentId, tab: approval ? "approvals" : "runs" };
   }
