@@ -12,7 +12,7 @@ on:
           - dry-run
           - npm
       expected_version:
-        description: "Optional version check (example: 0.1.0)"
+        description: "Optional version check (example: 0.2.0)"
         required: false
         type: string
   push:
@@ -90,6 +90,9 @@ jobs:
 
       - name: Pack tarball dry run
         run: npm pack --dry-run
+
+      - name: Verify type declarations contain current public surface
+        run: grep -q "declare function protect" dist/index.d.ts
 
       - name: Pack tarball
         run: npm pack
@@ -178,7 +181,15 @@ jobs:
           npm install "@zroky-ai/sdk@$VERSION" --ignore-scripts --registry=https://registry.npmjs.org
           node - <<'JS'
           const sdk = require("@zroky-ai/sdk");
-          for (const name of ["init", "wrap", "traceRun", "captureToolCall"]) {
+          for (const name of [
+            "init",
+            "wrap",
+            "traceRun",
+            "guard",
+            "protect",
+            "verifiedAction",
+            "verifyOutcome",
+          ]) {
             if (typeof sdk[name] !== "function") {
               throw new Error(`Missing @zroky-ai/sdk export: ${name}`);
             }

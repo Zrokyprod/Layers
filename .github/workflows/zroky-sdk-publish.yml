@@ -12,7 +12,7 @@ on:
           - testpypi
           - pypi
       expected_version:
-        description: "Optional version check (example: 0.1.0)"
+        description: "Optional version check (example: 0.2.0)"
         required: false
         type: string
       auth_method:
@@ -100,6 +100,25 @@ jobs:
 
       - name: Build distribution artifacts
         run: python -m build
+
+      - name: Verify wheel contains current public surface
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheel = next(Path("dist").glob("*.whl"))
+          required = {
+              "zroky/_protect.py",
+              "zroky/attestation.py",
+              "zroky/recovery_runner.py",
+              "zroky/verify_attestation.py",
+          }
+          with zipfile.ZipFile(wheel) as archive:
+              missing = required.difference(archive.namelist())
+          if missing:
+              raise SystemExit(f"Wheel is missing current SDK modules: {sorted(missing)}")
+          PY
 
       - name: Twine metadata check
         run: python -m twine check dist/*
@@ -266,7 +285,15 @@ jobs:
           done
           /tmp/zroky-testpypi-smoke/bin/python - <<'PY'
           import zroky
-          for name in ("init", "trace_run", "capture_tool_call", "flush"):
+          for name in (
+              "init",
+              "trace_run",
+              "flush",
+              "guard",
+              "protect",
+              "verify_attestation",
+              "RecoveryRunner",
+          ):
               if not callable(getattr(zroky, name, None)):
                   raise SystemExit(f"Missing zroky export: {name}")
           PY
@@ -315,7 +342,15 @@ jobs:
           done
           /tmp/zroky-pypi-smoke/bin/python - <<'PY'
           import zroky
-          for name in ("init", "trace_run", "capture_tool_call", "flush"):
+          for name in (
+              "init",
+              "trace_run",
+              "flush",
+              "guard",
+              "protect",
+              "verify_attestation",
+              "RecoveryRunner",
+          ):
               if not callable(getattr(zroky, name, None)):
                   raise SystemExit(f"Missing zroky export: {name}")
           PY
