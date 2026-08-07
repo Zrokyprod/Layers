@@ -25,7 +25,7 @@ const readiness: OwnerProductionReadiness = {
   checked_at: "2026-06-23T10:00:00Z",
   hard_blockers: [
     "provider_key_vault_kek:PROVIDER_KEY_VAULT_KEK is missing, placeholder, or too short.",
-    "replay_real_llm:REPLAY_REAL_LLM_ENABLED or REPLAY_WORKER_TOKEN is not production-ready.",
+    "attestation_signing:ACTION_RECEIPT_ED25519_PRIVATE_KEY is missing or invalid.",
   ],
   checks: [
     {
@@ -43,11 +43,11 @@ const readiness: OwnerProductionReadiness = {
       detail: "PROVIDER_KEY_VAULT_KEK is missing, placeholder, or too short.",
     },
     {
-      code: "replay_real_llm",
-      label: "Real replay enabled",
+      code: "attestation_signing",
+      label: "Attestation signing",
       status: "fail",
       required_for_launch: true,
-      detail: "REPLAY_REAL_LLM_ENABLED or REPLAY_WORKER_TOKEN is not production-ready.",
+      detail: "ACTION_RECEIPT_ED25519_PRIVATE_KEY is missing or invalid.",
     },
   ],
 };
@@ -106,7 +106,7 @@ describe("OwnerSettingsPage", () => {
     expect(within(section).getByText("production")).toBeInTheDocument();
     expect(within(section).getByText("2")).toBeInTheDocument();
     expect(within(section).getAllByText("Connector key vault KEK").length).toBeGreaterThan(0);
-    expect(within(section).getAllByText("Proof worker enabled").length).toBeGreaterThan(0);
+    expect(within(section).getAllByText("Attestation signing").length).toBeGreaterThan(0);
     expect(within(section).getByText("Owner routes enabled")).toBeInTheDocument();
     expect(section.textContent).not.toContain("owner-secret-production");
   });

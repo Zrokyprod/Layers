@@ -52,16 +52,11 @@ OPEN_SUPPORT_STATUSES = ("open", "pending", "waiting", "in_progress")
 URGENT_SUPPORT_PRIORITIES = ("high", "urgent")
 BILLING_RISK_STATUSES = {"past_due", "canceled", "unpaid", "incomplete"}
 PRICING_STALE_AFTER_DAYS = 30
-PRODUCT_STANDARD = "Did Zroky prevent an important AI agent failure from silently repeating?"
+PRODUCT_STANDARD = "Did Zroky stop a risky agent action and prove the real-world outcome?"
 FINAL_READINESS_COMMANDS = [
-    "powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1",
-    "python scripts/run_money_path_demo.py --json",
-    "python -m pytest tests/test_tenant_session_project_selection.py tests/test_tenant_project_route_scoping.py tests/test_ingest.py tests/test_failure_intelligence.py tests/test_replay_runs.py tests/test_replay_worker_claiming.py tests/test_goldens.py tests/test_regression_ci_routes.py tests/test_runtime_policy_gate.py tests/test_billing_v2.py tests/test_owner_money_path_health.py",
-    "npm test -- --run src/app/owner/launch-readiness/page.test.tsx src/app/owner/page.test.tsx src/app/owner/money-path/page.test.tsx",
-    "go test ./...",
-    "python -m pytest",
-    "npm test",
-    "python scripts/check_docs_drift.py",
+    "python -m pytest tests/test_final_intents_api.py tests/test_final_outcome_graph_ledger.py tests/test_owner_money_path_health.py -q",
+    "python scripts/run_admin_deployment_smoke.py --admin-url https://ops.zroky.com --require-owner-token",
+    "python demos/silent-failure-demo/run_demo.py --yes",
 ]
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
