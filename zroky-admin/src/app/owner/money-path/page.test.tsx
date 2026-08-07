@@ -131,7 +131,7 @@ function setHookData(data: OwnerMoneyPathHealth | null, error: Error | null = nu
     error,
     dataUpdatedAt: data ? Date.parse(data.generated_at) : 0,
     refetch: vi.fn(),
-  } as ReturnType<typeof hooks.useOwnerMoneyPathHealth>);
+  } as unknown as ReturnType<typeof hooks.useOwnerMoneyPathHealth>);
 }
 
 describe("OwnerMoneyPathPage", () => {
