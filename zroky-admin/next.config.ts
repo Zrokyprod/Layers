@@ -43,6 +43,11 @@ const nextConfig: NextConfig = {
         destination: "/owner/infrastructure",
         permanent: true,
       },
+      {
+        source: "/owner/ops",
+        destination: "/owner/infrastructure",
+        permanent: true,
+      },
     ];
   },
 };
