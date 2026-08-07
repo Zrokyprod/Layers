@@ -102,6 +102,8 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByRole("heading", { name: "Checkout Agent" })).toBeInTheDocument();
     expect(screen.getByText("Project ID")).toBeInTheDocument();
     expect(screen.getByText("proj_2")).toBeInTheDocument();
+    expect(screen.getByText("available", { selector: ".status-pill" })).toBeInTheDocument();
+    expect(screen.getByText("Project data is not immediately erased.", { exact: false })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Make active" }));
 
