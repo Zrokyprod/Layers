@@ -111,7 +111,7 @@ describe("ProjectsPage", () => {
   it("renders accessible projects with subscription project usage", async () => {
     render(<ProjectsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Projects" })).toBeInTheDocument();
     expect(screen.getByText("2 / 3 projects used")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Refund Agent" }).getAttribute("href")).toBe("/projects/proj_1");
     expect(screen.getByRole("link", { name: "Open Checkout Agent" }).getAttribute("href")).toBe("/projects/proj_2");

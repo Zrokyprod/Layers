@@ -1,4 +1,4 @@
-const rawDashboardUrl = import.meta.env.VITE_DASHBOARD_URL ?? 'https://zroky.com';
+const rawDashboardUrl = import.meta.env.VITE_DASHBOARD_URL ?? 'https://app.zroky.com';
 const rawDemoUrl =
   import.meta.env.VITE_DEMO_URL ?? 'mailto:hello@zroky.com?subject=Zroky%20demo';
 

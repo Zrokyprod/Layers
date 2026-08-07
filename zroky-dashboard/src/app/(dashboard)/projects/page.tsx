@@ -212,7 +212,7 @@ export default function ProjectsPage() {
           <div className="settings-project-command">
             <div className="settings-project-toolbar">
               <div>
-                <h2>Projects</h2>
+                <h1>Projects</h1>
                 <p>Project context controls SDK keys, provider vaults, runner credentials, policies, and evidence.</p>
               </div>
               <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
