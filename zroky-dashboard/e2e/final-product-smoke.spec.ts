@@ -10,13 +10,13 @@ test.describe("final product deployment smoke", () => {
 
     const rootDir = path.resolve(__dirname, "..", "..");
     const result = spawnSync(
-      "python",
+      process.env.ZROKY_E2E_PYTHON ?? "python",
       [
         path.join(rootDir, "scripts", "run_final_product_smoke.py"),
         "--api-base-url",
-        process.env.ZROKY_E2E_API_BASE_URL ?? "http://127.0.0.1:8010",
+        process.env.ZROKY_E2E_API_BASE_URL ?? `http://127.0.0.1:${process.env.ZROKY_E2E_API_PORT ?? "8010"}`,
         "--dashboard-url",
-        process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3010",
+        process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${process.env.ZROKY_E2E_DASHBOARD_PORT ?? "3010"}`,
         "--dashboard-auth-state",
         path.join(rootDir, "zroky-dashboard", "e2e", ".auth", "user.json"),
         "--allow-skipped-ready-checks",

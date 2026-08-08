@@ -4,24 +4,19 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  CheckCircle2,
   ClipboardCheck,
   Copy,
-  Database,
   PlugZap,
   Power,
   PowerOff,
+  RefreshCw,
   Save,
   Search,
   ShieldCheck,
 } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
-import {
-  DashboardMetricStrip,
-  DashboardVerdictHero,
-  DashboardWorkspace,
-} from "@/components/dashboard-scaffold";
+import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import {
   activateMcpUpstream,
@@ -103,7 +98,7 @@ import {
 import { ConnectorLogo } from "@/lib/connector-logo";
 import { connectorSetupProfile } from "@/lib/connector-setup-profile";
 import { externalNavigator } from "@/lib/external-navigation";
-import { compactJson, formatCount, humanize } from "@/lib/format";
+import { compactJson, humanize } from "@/lib/format";
 import type {
   GithubConnectionStatusResponse,
   SlackInstallStatusResponse,
@@ -785,99 +780,6 @@ function Fact({
   );
 }
 
-function ConnectorOneClickFlow() {
-  const steps = [
-    ["Authorize read-only", "Grant read-only access"],
-    ["Validate manifest", "Verify schema & permissions"],
-    ["Run test-read", "Execute safe dry-run"],
-    ["Bind workflow", "Attach to workflows"],
-  ];
-
-  return (
-    <ol className="connectors-one-click-flow" aria-label="One-click connector setup flow">
-      {steps.map(([step, detail], index) => (
-        <li key={step}>
-          <span>{index + 1}</span>
-          <strong>{step}</strong>
-          <small>{detail}</small>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function ConnectorReadinessStrip({ inventory }: { inventory: ConnectorInventory }) {
-  const counts = inventory.counts;
-  const connectedSources = Math.max(
-    0,
-    counts.proofTotal - counts.notConfigured,
-  );
-  const coverageTone =
-    counts.actionTypesTotal === 0
-      ? "neutral"
-      : counts.unverifiableActionTypes > 0
-        ? "warning"
-        : "success";
-
-  return (
-    <DashboardMetricStrip
-      ariaLabel="Connector readiness"
-      className="connectors-readiness-strip"
-      columns={6}
-      metrics={[
-        {
-          id: "connected",
-          label: "Connected sources",
-          value: formatCount(connectedSources),
-          helper: "read-only proof access saved",
-          icon: <PlugZap aria-hidden="true" />,
-          tone: connectedSources > 0 ? "success" : "warning",
-        },
-        {
-          id: "ready",
-          label: "Test-read ready",
-          value: formatCount(counts.healthyVerifiers),
-          helper: "source reads passing",
-          icon: <CheckCircle2 aria-hidden="true" />,
-          tone: counts.healthyVerifiers > 0 ? "success" : "neutral",
-        },
-        {
-          id: "needs-test",
-          label: "Needs test-read",
-          value: formatCount(counts.notTested),
-          helper: "connected but not proven",
-          icon: <ClipboardCheck aria-hidden="true" />,
-          tone: counts.notTested > 0 ? "warning" : "neutral",
-        },
-        {
-          id: "blocked",
-          label: "Blocked",
-          value: formatCount(counts.failingVerifiers),
-          helper: "mismatch or source failure",
-          icon: <AlertTriangle aria-hidden="true" />,
-          tone: counts.failingVerifiers > 0 ? "danger" : "neutral",
-        },
-        {
-          id: "coverage",
-          label: "Coverage",
-          value: `${counts.coveragePercent}%`,
-          helper: `${formatCount(counts.actionTypesTotal)} action types observed`,
-          icon: <ShieldCheck aria-hidden="true" />,
-          tone: coverageTone,
-        },
-        {
-          id: "unconfigured",
-          label: "Unconfigured",
-          value: formatCount(counts.notConfigured),
-          helper: "available proof presets",
-          icon: <Database aria-hidden="true" />,
-          tone: counts.notConfigured > 0 ? "warning" : "success",
-        },
-      ]}
-    />
-  );
-}
-
 function connectorScopeLabel(row: ConnectorInventoryRow): string {
   if (row.id === "stripe_refund" || row.id === "stripe_payment") return "Payments · Transactions · Refunds";
   if (row.id === "razorpay_refund") return "Payments · Payouts · Refunds";
@@ -1025,14 +927,18 @@ function SourceAudit({
 
 function ConnectorInventoryList({
   groups,
+  loading,
   searchQuery,
   selectedId,
+  onRefresh,
   onSearchQueryChange,
   onSelect,
 }: {
   groups: ConnectorCategoryGroup[];
+  loading: boolean;
   searchQuery: string;
   selectedId: ConnectorInventoryId | null;
+  onRefresh: () => void;
   onSearchQueryChange: (value: string) => void;
   onSelect: (id: ConnectorInventoryId) => void;
 }) {
@@ -1040,9 +946,19 @@ function ConnectorInventoryList({
     <section className="panel connectors-inventory-panel" aria-label="Connector inventory" id="connector-catalog">
       <div className="connectors-section-head">
         <div>
-          <span className="dashboard-eyebrow">Connectors</span>
-          <h2>Available systems</h2>
+          <span className="dashboard-eyebrow">Available systems</span>
+          <h1>Connectors</h1>
         </div>
+        <DashboardButton
+          icon={<RefreshCw />}
+          loading={loading}
+          onClick={onRefresh}
+          size="sm"
+          type="button"
+          variant="soft"
+        >
+          Refresh
+        </DashboardButton>
       </div>
 
       <label className="connector-search-field">
@@ -3524,7 +3440,6 @@ function ConnectorInspector({
   onZohoStatusChange,
   onMcpStatusChange,
   row,
-  setupRequest,
 }: {
   mcpStatus: McpUpstreamBindingResponse | null;
   genericStatus: GenericRestConnectorStatusResponse | null;
@@ -3554,7 +3469,6 @@ function ConnectorInspector({
   onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
   onMcpStatusChange: (status: McpUpstreamBindingResponse) => void;
   row: ConnectorInventoryRow | null;
-  setupRequest: number;
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -3562,10 +3476,6 @@ function ConnectorInspector({
   useEffect(() => {
     setSetupOpen(false);
   }, [row?.id]);
-
-  useEffect(() => {
-    if (setupRequest > 0 && row?.kind === "proof") setSetupOpen(true);
-  }, [row?.kind, setupRequest]);
 
   if (!row) {
     return (
@@ -3828,9 +3738,8 @@ export default function IntegrationsPage() {
   const [partialFailure, setPartialFailure] = useState(false);
   const [selectedId, setSelectedId] = useState<ConnectorInventoryId | null>(initialConnectorFromUrl);
   const [connectorSearch, setConnectorSearch] = useState("");
-  const [setupRequest, setSetupRequest] = useState(0);
 
-  const loadOverview = useCallback(async () => {
+  const loadOverview = useCallback(async (includeMcp = false) => {
     setLoading(true);
     const [
       mcpResult,
@@ -3852,7 +3761,7 @@ export default function IntegrationsPage() {
       registryResult,
       sourceConnectorsResult,
     ] = await Promise.allSettled([
-      getMcpUpstreamBinding(),
+      includeMcp ? getMcpUpstreamBinding() : Promise.resolve(null),
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
       getGenericRestConnectorStatus(),
@@ -3948,51 +3857,20 @@ export default function IntegrationsPage() {
     () => filterCategoryGroups(visibleInventory.categoryGroups, connectorSearch),
     [connectorSearch, visibleInventory.categoryGroups],
   );
-  const openSelectedConnectorSetup = () => {
-    const targetId = selectedRow?.kind === "proof" ? selectedRow.id : firstSelectedId(visibleInventory);
-    if (targetId) setSelectedId(targetId);
-    setSetupRequest((current) => current + 1);
-  };
   return (
     <div className="dashboard-page integrations-page connectors-page">
-      <DashboardVerdictHero
-        actions={
-          <>
-            <DashboardButton loading={loading} onClick={() => void loadOverview()} variant="soft">
-              Refresh
-            </DashboardButton>
-            {selectedRow?.kind === "support" ? (
-              <DashboardButtonLink href={selectedRow.href} variant="primary">
-                {connectorPrimaryCtaLabel(selectedRow)}
-              </DashboardButtonLink>
-            ) : (
-              <DashboardButton loading={loading} onClick={openSelectedConnectorSetup} variant="primary">
-                {selectedRow ? connectorPrimaryCtaLabel(selectedRow) : "Connect verifier"}
-              </DashboardButton>
-            )}
-          </>
-        }
-        copy={`${visibleInventory.verdict.copy} One-click means read-only access, manifest validation, test-read, then Assurance Pack binding.`}
-        eyebrow="Connectors"
-        pill="One-click · read-only"
-        tone={visibleInventory.verdict.tone}
-        title="Connectors"
-        updatedLabel={loading ? "Refreshing" : "Updated now"}
-      />
-
-      <section className="connectors-flow-strip" aria-label="One-click connector setup">
-        <ConnectorOneClickFlow />
-      </section>
-
-      <ConnectorReadinessStrip inventory={visibleInventory} />
-
       <DashboardWorkspace
         className="connectors-workspace"
         left={
           <ConnectorInventoryList
             groups={filteredCategoryGroups}
+            loading={loading}
+            onRefresh={() => void loadOverview(selectedId === "mcp_upstream")}
             onSearchQueryChange={setConnectorSearch}
-            onSelect={setSelectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              if (id === "mcp_upstream") void loadOverview(true);
+            }}
             searchQuery={connectorSearch}
             selectedId={selectedId}
           />
@@ -4029,7 +3907,6 @@ export default function IntegrationsPage() {
             onZohoStatusChange={(zoho) => setOverview((current) => ({ ...current, zoho }))}
             onMcpStatusChange={(mcp) => setOverview((current) => ({ ...current, mcp }))}
             row={selectedRow}
-            setupRequest={setupRequest}
           />
         }
       />

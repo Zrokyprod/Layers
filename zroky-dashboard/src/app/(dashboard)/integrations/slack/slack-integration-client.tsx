@@ -150,7 +150,7 @@ export default function SlackIntegrationPage() {
       <section className="panel settings-hero-panel slack-proof-hero">
         <div>
           <p className="eyebrow">Integrations</p>
-          <h2>Slack notifications</h2>
+          <h1>Slack notifications</h1>
           <p className="hint">
             Connect a Slack channel and Zroky will send high and critical alerts automatically.
           </p>

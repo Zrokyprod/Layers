@@ -363,7 +363,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     selectedProjectMembership?.project_name?.trim() ||
     (localProjectFallback ? "Local preview" : null) ||
     (projectContextUnavailable ? "Workspace unavailable" : null) ||
-    (projectSelectionRequired ? "Select project" : "ZROKY workspace");
+    (projectSelectionRequired ? "Select project" : "Zroky workspace");
 
   function toggleMenu(menu: ShellMenu) {
     setOpenMenu((current) => (current === menu ? null : menu));

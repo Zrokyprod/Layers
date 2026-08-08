@@ -84,6 +84,7 @@ export function EvidenceLedger({
               key={item.value}
               className="ev-filter-chip"
               data-active={filter === item.value ? "true" : undefined}
+              aria-pressed={filter === item.value}
               type="button"
               onClick={() => onFilterChange(item.value)}
             >
@@ -106,6 +107,8 @@ export function EvidenceLedger({
         <label className="ev-search-field">
           <Search size={14} aria-hidden="true" />
           <input
+            aria-label="Search evidence"
+            type="search"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search outcome graphs..."
@@ -124,7 +127,7 @@ export function EvidenceLedger({
           <span />
         </div>
       ) : isError ? (
-        <div className="ev-empty-state">Evidence could not load. Verify backend connectivity and project access.</div>
+        <div className="ev-empty-state" role="alert">Evidence could not load. Verify backend connectivity and project access.</div>
       ) : projectTotal === 0 ? (
         <div className="ev-empty-state">
           <strong>Declare your first intent.</strong>
@@ -135,7 +138,7 @@ export function EvidenceLedger({
             <span>Read source</span>
             <span>Store graph</span>
           </div>
-          <a href="/docs">Read setup docs</a>
+          <Link href="/docs">Read setup docs</Link>
         </div>
       ) : rows.length === 0 ? (
         <div className="ev-empty-state">No records match this classification.</div>
@@ -174,10 +177,18 @@ export function EvidenceLedger({
                         </span>
                       </td>
                       <td>
-                        <span className="ev-proof-name">
+                        <button
+                          type="button"
+                          className="ev-proof-name"
+                          aria-label={`Inspect ${row.title} proof`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSelectRow(row);
+                          }}
+                        >
                           <span className="ev-proof-dot" aria-hidden="true" />
                           <strong>{row.title}</strong>
-                        </span>
+                        </button>
                       </td>
                       <td><StatusPill value={row.status} label={row.statusLabel} tone={row.tone} /></td>
                       <td>

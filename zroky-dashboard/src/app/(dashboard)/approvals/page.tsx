@@ -243,7 +243,7 @@ export default function RuntimeApprovalsPage() {
   }
 
   return (
-    <main className="approvals-v2-page">
+    <div className="approvals-v2-page">
       <ApprovalsVerdictHero
         title={hero.title}
         copy={hero.copy}
@@ -320,6 +320,6 @@ export default function RuntimeApprovalsPage() {
         </>
       )}
 
-    </main>
+    </div>
   );
 }

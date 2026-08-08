@@ -1247,7 +1247,6 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("heading", { name: "Available systems" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Payments · Transactions · Refunds").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Missing / Not connected").length).toBeGreaterThan(0);

@@ -1194,6 +1194,8 @@ export default function SystemOfRecordConnectors() {
     : "No database URL stored";
 
   function onStartGithubConnect() {
+    // OAuth requires a full-document redirect so the browser follows the provider handoff.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/api/zroky/v1/settings/github/connect/start";
   }
 

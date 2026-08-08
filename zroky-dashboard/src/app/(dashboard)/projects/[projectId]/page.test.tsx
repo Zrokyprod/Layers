@@ -121,7 +121,7 @@ describe("ProjectDetailPage", () => {
   it("renders project facts and can switch the selected project", async () => {
     render(<ProjectDetailPage />);
 
-    expect(await screen.findByRole("heading", { name: "Checkout Agent" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Checkout Agent" })).toBeInTheDocument();
     expect(screen.getByText("Project ID")).toBeInTheDocument();
     expect(screen.getByText("proj_2")).toBeInTheDocument();
     expect(screen.getByText("available", { selector: ".status-pill" })).toBeInTheDocument();

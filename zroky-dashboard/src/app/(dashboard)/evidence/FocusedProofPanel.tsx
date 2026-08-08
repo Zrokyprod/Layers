@@ -47,7 +47,7 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
   if (row.reasonCode === "sor_unreachable") {
     return (
       <div className="ev-empty-state">
-        <strong>The system was unreachable; ZROKY will retry</strong>
+        <strong>The system was unreachable; Zroky will retry</strong>
         <span>Next check {timeUntil(row.nextCheckAt)}</span>
       </div>
     );

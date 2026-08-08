@@ -1182,7 +1182,7 @@ export default function HomePage() {
   const firstRun = stats !== null && !active && !loading && !loadFailed && !authRequired;
 
   return (
-    <main className={`${styles.homeDashboard} zh-home`} aria-label="ZROKY Home dashboard">
+    <div className={`${styles.homeDashboard} zh-home`}>
       <div className="zh-page-title">
         <div>
           <h1>Home</h1>
@@ -1231,6 +1231,6 @@ export default function HomePage() {
           </div>
         </>
       ) : null}
-    </main>
+    </div>
   );
 }

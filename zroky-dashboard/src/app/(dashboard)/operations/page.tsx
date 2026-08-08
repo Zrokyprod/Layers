@@ -316,7 +316,7 @@ function actionForReason(reason: UnverifiableReason): string {
 
 function detailForReason(reason: UnverifiableReason): string {
   if (reason === "no_connector") return "No read-only source connector is configured for this action.";
-  if (reason === "missing_correlation") return "ZROKY could not map the agent claim to a source-of-truth object.";
+  if (reason === "missing_correlation") return "Zroky could not map the agent claim to a source-of-truth object.";
   if (reason === "sor_unreachable") return "The source-of-truth system could not be reached for an authoritative read.";
   if (reason === "runner_offline") return "The customer runner is offline, so local proof or recovery cannot complete.";
   if (reason === "stale_source") return "The latest source read is stale and cannot prove this outcome.";
@@ -1158,7 +1158,7 @@ export default function OperationsPage() {
   });
 
   return (
-    <main className={styles.operationsPage} aria-label="Operations workbench">
+    <div className={styles.operationsPage}>
       <header className={styles.header}>
         <div className={styles.headerTop}>
           <div>
@@ -1324,6 +1324,6 @@ export default function OperationsPage() {
           />
         </div>
       )}
-    </main>
+    </div>
   );
 }
