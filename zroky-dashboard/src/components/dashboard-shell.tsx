@@ -247,7 +247,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
   const [compactShell, setCompactShell] = useState(false);
-  const [, setCompactSidebarOpen] = useState(false);
+  const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(false);
   const accountMenuOpen = openMenu === "account";
 
@@ -368,7 +368,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const issuesCount = issuesQuery.data?.items?.length ?? 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
-  const sidebarVisible = true;
+  const sidebarVisible = !compactShell || compactSidebarOpen;
 
   const badges: Record<string, number> = {};
   if (issuesCount > 0) badges.issues = issuesCount;
@@ -430,7 +430,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       data-dashboard-system="control-v1"
     >
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarVisible ? "" : " sidebar-hidden"}`}>
         <div className="sidebar-logo-row">
           <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
             <Image
@@ -446,12 +446,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             type="button"
             className="sidebar-logo-toggle"
             onClick={onToggleSidebar}
-            aria-label="Toggle sidebar"
-            hidden
-            aria-hidden="true"
-            tabIndex={-1}
+            aria-label="Close navigation"
+            hidden={!compactShell || !compactSidebarOpen}
+            aria-hidden={!compactShell || !compactSidebarOpen}
+            tabIndex={compactShell && compactSidebarOpen ? 0 : -1}
           >
-            {sidebarVisible ? <X size={15} aria-hidden="true" /> : <Menu size={15} aria-hidden="true" />}
+            <X size={15} aria-hidden="true" />
           </button>
         </div>
 
@@ -485,6 +485,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </nav>
       </aside>
 
+      {compactShell && compactSidebarOpen ? (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setCompactSidebarOpen(false)}
+        />
+      ) : null}
+
       {/* Content */}
       <section className="content">
         <header className="topbar">
@@ -493,12 +502,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               type="button"
               className="sidebar-toggle"
               onClick={onToggleSidebar}
-              aria-label="Toggle sidebar"
-              hidden
-              aria-hidden="true"
-              tabIndex={-1}
+              aria-label="Open navigation"
+              hidden={!compactShell || compactSidebarOpen}
+              aria-hidden={!compactShell || compactSidebarOpen}
+              tabIndex={compactShell && !compactSidebarOpen ? 0 : -1}
             >
-              {sidebarVisible ? <X size={16} /> : <Menu size={16} />}
+              <Menu size={16} aria-hidden="true" />
             </button>
             <button
               type="button"

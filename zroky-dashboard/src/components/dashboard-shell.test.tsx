@@ -224,6 +224,15 @@ function navItem(id: string): Element {
 
 describe("DashboardShell primary navigation", () => {
   beforeEach(() => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockImplementation(() => ({
+        addEventListener: vi.fn(),
+        matches: false,
+        removeEventListener: vi.fn(),
+      })),
+      writable: true,
+    });
     navState.pathname = "/home";
     navState.planTemplate = {
       "actions.protected.monthly_quota": 10_000,
@@ -592,10 +601,29 @@ describe("DashboardShell primary navigation", () => {
 
     expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(false);
     expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(false);
-    expect(screen.queryByRole("button", { name: "Toggle sidebar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open navigation" })).not.toBeInTheDocument();
     rerender(<DashboardShell>content</DashboardShell>);
     expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(false);
     expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(false);
+  });
+
+  it("opens and closes the navigation drawer on compact screens", async () => {
+    vi.mocked(window.matchMedia).mockImplementation(() => ({
+      addEventListener: vi.fn(),
+      matches: true,
+      removeEventListener: vi.fn(),
+    }) as unknown as MediaQueryList);
+
+    const { container } = render(<DashboardShell>content</DashboardShell>);
+
+    const openButton = await screen.findByRole("button", { name: "Open navigation" });
+    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(true);
+
+    fireEvent.click(openButton);
+    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(false);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Close navigation" })[0]);
+    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(true);
   });
 
   it("keeps the profile and utility actions in the topbar while footer stays operational", () => {

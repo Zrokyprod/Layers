@@ -56,10 +56,9 @@ export async function expectHealthyPage(page: Page): Promise<void> {
 
 export async function expectDashboardShell(page: Page): Promise<void> {
   const viewport = page.viewportSize();
-  if (viewport && viewport.width <= 640) {
-    await expect(page.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
+  if (viewport && viewport.width <= 1023) {
+    await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
   } else {
-    await expect(page.getByRole("button", { name: "Open dashboard navigation menu" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Zroky dashboard home" })).toBeVisible();
   }
   await expectHealthyPage(page);

@@ -116,11 +116,7 @@ setup("seed deterministic demo and save authenticated state", async ({ page, req
   );
 
   await page.goto("/home", { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expect(page.getByRole("button", { name: "Open dashboard navigation menu" })).toBeVisible({ timeout: 60_000 });
-  await expect(
-    page.getByRole("heading", {
-      name: /Action mismatch|Get Home reporting real activity|Setup required|Proof missing|Production promotion blocked|Capture stale|Protected|Agent safety status/,
-    }).first(),
-  ).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("link", { name: "Zroky dashboard home" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible({ timeout: 60_000 });
   await page.context().storageState({ path: authStatePath });
 });
