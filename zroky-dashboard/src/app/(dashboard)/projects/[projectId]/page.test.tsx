@@ -7,7 +7,9 @@ import ProjectDetailPage from "./page";
 const api = vi.hoisted(() => ({
   deleteProject: vi.fn(),
   getProjectSettings: vi.fn(),
+  listActionRunners: vi.fn(),
   listMyProjects: vi.fn(),
+  registerActionRunner: vi.fn(),
 }));
 
 const navigation = vi.hoisted(() => ({
@@ -87,12 +89,32 @@ describe("ProjectDetailPage", () => {
     vi.clearAllMocks();
     navigation.params = { projectId: "proj_2" };
     api.getProjectSettings.mockResolvedValue(activeProject);
+    api.listActionRunners.mockResolvedValue({ items: [] });
     api.listMyProjects.mockResolvedValue(projectRows);
     api.deleteProject.mockResolvedValue({
       ...activeProject,
       project_id: "proj_2",
       name: "Checkout Agent",
       is_active: false,
+    });
+    api.registerActionRunner.mockResolvedValue({
+      runner_id: "runner_123",
+      project_id: "proj_1",
+      name: "Protected action runner",
+      runner_type: "customer_hosted",
+      environment: "production",
+      status: "registered",
+      supported_operation_kinds: ["TRANSFER"],
+      credential_scope: {
+        allowed_prefixes: ["customer-runner-secret://payments/stripe"],
+        default_credential_ref: "customer-runner-secret://payments/stripe",
+      },
+      capability_manifest: {},
+      heartbeat_payload: {},
+      capability_version: null,
+      last_heartbeat_at: null,
+      created_at: "2026-08-08T04:00:00.000Z",
+      updated_at: "2026-08-08T04:00:00.000Z",
     });
   });
 
@@ -146,5 +168,34 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("Project access unavailable")).toBeInTheDocument();
     expect(screen.queryByLabelText("Type project name")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete project" })).not.toBeInTheDocument();
+  });
+
+  it("registers a scoped runner and renders secret-safe launch instructions", async () => {
+    navigation.params = { projectId: "proj_1" };
+
+    render(<ProjectDetailPage />);
+
+    fireEvent.change(await screen.findByLabelText("Credential reference"), {
+      target: { value: "customer-runner-secret://payments/stripe" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Register runner" }));
+
+    await waitFor(() => {
+      expect(api.registerActionRunner).toHaveBeenCalledWith({
+        name: "Protected action runner",
+        runner_type: "customer_hosted",
+        environment: "production",
+        supported_operation_kinds: ["TRANSFER"],
+        credential_scope: {
+          allowed_prefixes: ["customer-runner-secret://payments/stripe"],
+          default_credential_ref: "customer-runner-secret://payments/stripe",
+        },
+      });
+    });
+
+    fireEvent.click(await screen.findByText("Launch this runner"));
+    expect(screen.getByText(/ZROKY_RUNNER_SECRET_PAYMENTS_STRIPE=<local-secret-or-json>/)).toBeInTheDocument();
+    expect(screen.getByText(/ZROKY_API_KEY=<project-api-key>/)).toBeInTheDocument();
+    expect(screen.queryByText(/sk_live_|sk_test_/)).not.toBeInTheDocument();
   });
 });

@@ -28480,3 +28480,259 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .connectors-source-audit-panel {
   margin-top: 0 !important;
 }
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-section {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-top: 1px solid var(--dash-border);
+  background: var(--dash-surface);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-header,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-card-head,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-header > div,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-card-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-header span:first-child {
+  color: var(--dash-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-header h3 {
+  margin: 0;
+  color: var(--dash-text);
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-header p,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-launch p,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-credential-field small,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-permission {
+  margin: 0;
+  color: var(--dash-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dash-text-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-count svg,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-launch summary svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--dash-border);
+  border-radius: 8px;
+  background: var(--dash-surface-subtle);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-card-head strong {
+  color: var(--dash-text);
+  font-size: 14px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-card-head span {
+  color: var(--dash-text-soft);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 16px 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-facts > div {
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-facts dt {
+  margin-bottom: 3px;
+  color: var(--dash-text-muted);
+  font-size: 11px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--dash-text);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-launch,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-register {
+  border-top: 1px solid var(--dash-border);
+  padding-top: 13px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-launch summary,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-register summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--dash-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-launch[open] summary,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-register[open] summary {
+  margin-bottom: 14px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-launch pre {
+  max-width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--dash-border);
+  border-radius: 6px;
+  background: #0b1220;
+  color: #e5edf8;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 14px;
+  border: 1px dashed var(--dash-border-strong);
+  border-radius: 8px;
+  color: var(--dash-text-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-empty svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-empty > div {
+  display: grid;
+  gap: 3px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-empty strong {
+  color: var(--dash-text);
+  font-size: 13px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-empty span {
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-register form {
+  display: grid;
+  gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.45fr);
+  gap: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-field,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-operation-fieldset {
+  display: grid;
+  gap: 7px;
+  color: var(--dash-text-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-field input,
+.app-shell[data-dashboard-system="control-v1"] .project-runner-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 6px;
+  background: var(--dash-surface);
+  color: var(--dash-text);
+  font: inherit;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-credential-field {
+  grid-column: 1 / -1;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-operation-fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-operation-fieldset legend {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-operation-fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dash-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .project-runner-register .btn-primary {
+  width: fit-content;
+}
+
+@media (max-width: 720px) {
+  .app-shell[data-dashboard-system="control-v1"] .project-runner-section {
+    padding: 18px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .project-runner-header,
+  .app-shell[data-dashboard-system="control-v1"] .project-runner-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .project-runner-fields,
+  .app-shell[data-dashboard-system="control-v1"] .project-runner-facts {
+    grid-template-columns: 1fr;
+  }
+}
