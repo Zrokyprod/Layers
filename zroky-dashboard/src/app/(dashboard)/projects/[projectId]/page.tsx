@@ -2,18 +2,29 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   CircleDot,
+  Copy,
   FolderOpen,
   RefreshCw,
+  Server,
+  Terminal,
   Trash2,
 } from "lucide-react";
 
-import { deleteProject, getProjectSettings, listMyProjects } from "@/lib/api";
+import {
+  deleteProject,
+  getProjectSettings,
+  listActionRunners,
+  listMyProjects,
+  registerActionRunner,
+  type ActionRunnerResponse,
+} from "@/lib/api";
 import { formatDateTime, safeString } from "@/lib/format";
 import { useDashboardStore } from "@/lib/store";
 import type { CurrentUserProjectResponse, ProjectResponse } from "@/lib/types";
@@ -22,7 +33,10 @@ import { StatusPill } from "@/components/status-pill";
 type ProjectDetailState = {
   activeProject: ProjectResponse | null;
   projects: CurrentUserProjectResponse[];
+  runners: ActionRunnerResponse[];
 };
+
+const runnerOperationKinds = ["TRANSFER", "UPDATE", "SEND", "EXECUTE"] as const;
 
 const projectDetailLoadTimeoutMs = 15_000;
 
@@ -74,31 +88,74 @@ function isProblemMessage(value: string): boolean {
   return text.includes("failed") || text.includes("error") || text.includes("unavailable") || text.includes("cannot");
 }
 
+function runnerCredentialRef(runner: ActionRunnerResponse): string | null {
+  const direct = runner.credential_scope.default_credential_ref;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const prefixes = runner.credential_scope.allowed_prefixes;
+  if (!Array.isArray(prefixes)) return null;
+  const first = prefixes.find((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  return first?.trim() ?? null;
+}
+
+function credentialEnvName(credentialRef: string): string {
+  const withoutScheme = credentialRef.trim().replace(
+    /^(customer-runner-secret|zroky-secret|vault|aws-secretsmanager|gcp-secretmanager|azure-keyvault):\/\//,
+    "",
+  );
+  const token = withoutScheme.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
+  return `ZROKY_RUNNER_SECRET_${token || "YOUR_CREDENTIAL"}`;
+}
+
+function runnerSetupText(projectId: string, runner: ActionRunnerResponse): string {
+  const credentialRef = runnerCredentialRef(runner) ?? "customer-runner-secret://your/credential";
+  const operationArgs = runner.supported_operation_kinds
+    .map((kind) => ` --supported-operation-kind ${kind}`)
+    .join("");
+  return [
+    `ZROKY_PROJECT_ID=${projectId}`,
+    "ZROKY_API_KEY=<project-api-key>",
+    `ZROKY_RUNNER_ID=${runner.runner_id}`,
+    "ZROKY_RUNNER_INSTANCE_ID=<unique-host-name>",
+    `${credentialEnvName(credentialRef)}=<local-secret-or-json>`,
+    "",
+    "python -m pip install zroky",
+    `zroky runner daemon${operationArgs}`,
+  ].join("\n");
+}
+
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId?: string }>();
   const router = useRouter();
   const routeProjectId = typeof params.projectId === "string" ? decodeURIComponent(params.projectId) : "";
-  const [state, setState] = useState<ProjectDetailState>({ activeProject: null, projects: [] });
+  const [state, setState] = useState<ProjectDetailState>({ activeProject: null, projects: [], runners: [] });
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projectListError, setProjectListError] = useState<string | null>(null);
+  const [runnerListError, setRunnerListError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [registeringRunner, setRegisteringRunner] = useState(false);
+  const [runnerName, setRunnerName] = useState("Protected action runner");
+  const [runnerEnvironment, setRunnerEnvironment] = useState("production");
+  const [credentialRef, setCredentialRef] = useState("");
+  const [operationKinds, setOperationKinds] = useState<string[]>(["TRANSFER"]);
   const setActiveProject = useDashboardStore((store) => store.setSelectedProject);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setProjectListError(null);
+    setRunnerListError(null);
 
     try {
-      const [activeResult, projectsResult] = await Promise.allSettled([
+      const [activeResult, projectsResult, runnersResult] = await Promise.allSettled([
         withProjectTimeout(
           getProjectSettings(),
           `Backend API timed out after ${projectDetailLoadTimeoutMs}ms. Start the Zroky backend and retry.`,
         ),
         withProjectTimeout(listMyProjects(), "Project list load timed out."),
+        withProjectTimeout(listActionRunners(), "Runner status load timed out."),
       ]);
 
       if (activeResult.status === "rejected") {
@@ -107,10 +164,14 @@ export default function ProjectDetailPage() {
 
       const activeProject = activeResult.value;
       const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [];
-      setState({ activeProject, projects });
+      const runners = runnersResult.status === "fulfilled" ? runnersResult.value.items : [];
+      setState({ activeProject, projects, runners });
 
       if (projectsResult.status === "rejected") {
         setProjectListError(errorMessage(projectsResult.reason, "Project list could not load."));
+      }
+      if (runnersResult.status === "rejected") {
+        setRunnerListError(errorMessage(runnersResult.reason, "Runner status could not load."));
       }
     } catch (loadError) {
       setError(errorMessage(loadError, "Failed to load project."));
@@ -129,6 +190,14 @@ export default function ProjectDetailPage() {
   const activeProjectId = state.activeProject?.project_id ?? null;
   const selectedIsActive = Boolean(selectedProject && selectedProject.project_id === activeProjectId);
   const selectedRole = selectedProject?.role?.trim().toLowerCase() ?? "";
+  const canManageRunners = selectedIsActive && ["owner", "admin"].includes(selectedRole);
+  const canRegisterRunner = Boolean(
+    canManageRunners &&
+      runnerName.trim().length >= 3 &&
+      credentialRef.trim() &&
+      operationKinds.length > 0 &&
+      !registeringRunner,
+  );
   const selectedProjectUpdated = selectedProject ? formatDateTime(selectedProject.updated_at) : "Unavailable";
   const canDeleteSelected = Boolean(
     selectedProject &&
@@ -179,6 +248,53 @@ export default function ProjectDetailPage() {
       setStatusMessage(errorMessage(deleteError, "Failed to delete project."));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  function toggleOperationKind(kind: string) {
+    setOperationKinds((current) =>
+      current.includes(kind) ? current.filter((value) => value !== kind) : [...current, kind],
+    );
+  }
+
+  async function onRegisterRunner(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedProject || !canRegisterRunner) {
+      setStatusMessage("Enter a runner name, credential reference, and at least one operation kind.");
+      return;
+    }
+    setStatusMessage("");
+    setRegisteringRunner(true);
+    try {
+      const normalizedCredentialRef = credentialRef.trim();
+      const runner = await registerActionRunner({
+        name: runnerName.trim(),
+        runner_type: "customer_hosted",
+        environment: runnerEnvironment,
+        supported_operation_kinds: operationKinds,
+        credential_scope: {
+          allowed_prefixes: [normalizedCredentialRef],
+          default_credential_ref: normalizedCredentialRef,
+        },
+      });
+      setState((current) => ({
+        ...current,
+        runners: [runner, ...current.runners.filter((item) => item.runner_id !== runner.runner_id)],
+      }));
+      setStatusMessage("Runner registered. Start it in your environment to confirm the heartbeat.");
+    } catch (registerError) {
+      setStatusMessage(errorMessage(registerError, "Failed to register runner."));
+    } finally {
+      setRegisteringRunner(false);
+    }
+  }
+
+  async function copyRunnerSetup(projectId: string, runner: ActionRunnerResponse) {
+    try {
+      await navigator.clipboard.writeText(runnerSetupText(projectId, runner));
+      setStatusMessage("Runner setup copied.");
+    } catch {
+      setStatusMessage("Runner setup could not be copied. Select the command text manually.");
     }
   }
 
@@ -330,6 +446,160 @@ export default function ProjectDetailPage() {
                   </div>
                 </aside>
               </div>
+
+              {selectedIsActive ? (
+                <section className="project-runner-section" aria-label="Protected action runners">
+                  <header className="project-runner-header">
+                    <div>
+                      <span>Protected execution</span>
+                      <h3>Action runners</h3>
+                      <p>Runners execute approved actions with credentials that stay in your environment.</p>
+                    </div>
+                    <span className="project-runner-count">
+                      <Server aria-hidden="true" />
+                      {state.runners.length} registered
+                    </span>
+                  </header>
+
+                  {runnerListError ? (
+                    <div className="settings-project-warning" role="status">
+                      <AlertTriangle aria-hidden="true" />
+                      <span>{runnerListError}</span>
+                    </div>
+                  ) : null}
+
+                  {state.runners.length > 0 ? (
+                    <div className="project-runner-list" role="list">
+                      {state.runners.map((runner) => {
+                        const localCredentialRef = runnerCredentialRef(runner);
+                        return (
+                          <article className="project-runner-card" key={runner.runner_id} role="listitem">
+                            <div className="project-runner-card-head">
+                              <div>
+                                <strong>{runner.name}</strong>
+                                <span>{runner.environment} / {runner.runner_type.replace(/_/g, " ")}</span>
+                              </div>
+                              <StatusPill value={runner.status} />
+                            </div>
+                            <dl className="project-runner-facts">
+                              <div>
+                                <dt>Runner ID</dt>
+                                <dd className="mono">{runner.runner_id}</dd>
+                              </div>
+                              <div>
+                                <dt>Last heartbeat</dt>
+                                <dd>{runner.last_heartbeat_at ? formatDateTime(runner.last_heartbeat_at) : "Not received"}</dd>
+                              </div>
+                              <div>
+                                <dt>Allowed operations</dt>
+                                <dd>{runner.supported_operation_kinds.join(", ") || "None"}</dd>
+                              </div>
+                              <div>
+                                <dt>Credential reference</dt>
+                                <dd className="mono">{localCredentialRef ?? "Not configured"}</dd>
+                              </div>
+                            </dl>
+                            <details className="project-runner-launch">
+                              <summary>
+                                <Terminal aria-hidden="true" />
+                                Launch this runner
+                              </summary>
+                              <p>
+                                Create a project API key, keep the real credential on this host, then run the daemon.
+                              </p>
+                              <pre>{runnerSetupText(selectedProject.project_id, runner)}</pre>
+                              <div className="project-runner-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-soft"
+                                  onClick={() => void copyRunnerSetup(selectedProject.project_id, runner)}
+                                >
+                                  <Copy aria-hidden="true" />
+                                  Copy setup
+                                </button>
+                                <Link href="/settings/keys" className="btn btn-soft">
+                                  Create API key
+                                </Link>
+                              </div>
+                            </details>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : runnerListError ? null : (
+                    <div className="project-runner-empty" role="status">
+                      <Server aria-hidden="true" />
+                      <div>
+                        <strong>No runner registered</strong>
+                        <span>Register one before protected actions can execute.</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {canManageRunners ? (
+                    <details className="project-runner-register" open={state.runners.length === 0}>
+                      <summary>Register a customer-hosted runner</summary>
+                      <form onSubmit={(event) => void onRegisterRunner(event)}>
+                        <div className="project-runner-fields">
+                          <div className="project-runner-field">
+                            <label htmlFor="runnerName">Runner name</label>
+                            <input
+                              id="runnerName"
+                              value={runnerName}
+                              onChange={(event) => setRunnerName(event.target.value)}
+                              minLength={3}
+                              required
+                            />
+                          </div>
+                          <div className="project-runner-field">
+                            <label htmlFor="runnerEnvironment">Environment</label>
+                            <select
+                              id="runnerEnvironment"
+                              value={runnerEnvironment}
+                              onChange={(event) => setRunnerEnvironment(event.target.value)}
+                            >
+                              <option value="production">Production</option>
+                              <option value="staging">Staging</option>
+                              <option value="development">Development</option>
+                            </select>
+                          </div>
+                          <div className="project-runner-field project-runner-credential-field">
+                            <label htmlFor="runnerCredentialRef">Credential reference</label>
+                            <input
+                              id="runnerCredentialRef"
+                              value={credentialRef}
+                              onChange={(event) => setCredentialRef(event.target.value)}
+                              placeholder="customer-runner-secret://payments/stripe"
+                              aria-describedby="runnerCredentialHelp"
+                              required
+                            />
+                            <small id="runnerCredentialHelp">This is a name only. The credential value stays on the runner host.</small>
+                          </div>
+                        </div>
+                        <fieldset className="project-runner-operation-fieldset">
+                          <legend>Allowed operation kinds</legend>
+                          {runnerOperationKinds.map((kind) => (
+                            <label key={kind}>
+                              <input
+                                type="checkbox"
+                                checked={operationKinds.includes(kind)}
+                                onChange={() => toggleOperationKind(kind)}
+                              />
+                              {kind.charAt(0) + kind.slice(1).toLowerCase()}
+                            </label>
+                          ))}
+                        </fieldset>
+                        <button type="submit" className="btn btn-primary" disabled={!canRegisterRunner}>
+                          <Server aria-hidden="true" />
+                          {registeringRunner ? "Registering..." : "Register runner"}
+                        </button>
+                      </form>
+                    </details>
+                  ) : (
+                    <p className="project-runner-permission">Only a project owner or admin can register a runner.</p>
+                  )}
+                </section>
+              ) : null}
             </>
           ) : projectListError ? (
             <div className="settings-project-empty projects-not-found" role="status">

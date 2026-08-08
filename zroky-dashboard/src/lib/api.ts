@@ -778,11 +778,23 @@ export interface ActionRunnerResponse {
   status: string;
   supported_operation_kinds: string[];
   credential_scope: Record<string, unknown>;
+  capability_manifest?: Record<string, unknown>;
   heartbeat_payload: Record<string, unknown>;
   capability_version: string | null;
   last_heartbeat_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ActionRunnerRegisterPayload {
+  name: string;
+  runner_type: "customer_hosted";
+  environment: string;
+  supported_operation_kinds: string[];
+  credential_scope: {
+    allowed_prefixes: string[];
+    default_credential_ref: string;
+  };
 }
 
 export interface ActionRunnerListResponse {
@@ -5556,6 +5568,13 @@ export function listProjectActionExecutionAttempts(
 
 export function listActionRunners(signal?: AbortSignal): Promise<ActionRunnerListResponse> {
   return request<ActionRunnerListResponse>("/v1/action-runners", { signal });
+}
+
+export function registerActionRunner(payload: ActionRunnerRegisterPayload): Promise<ActionRunnerResponse> {
+  return request<ActionRunnerResponse>("/v1/action-runners", {
+    method: "POST",
+    body: payload,
+  });
 }
 
 // ── Runtime Policy Gate ─────────────────────────────────────────────────────
