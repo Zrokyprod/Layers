@@ -11,6 +11,11 @@ const api = vi.hoisted(() => ({
   fetchOutcomeGraphEvidenceExport: vi.fn(),
   fetchOutcomeGraphs: vi.fn(),
 }));
+const navigation = vi.hoisted(() => ({ searchParams: new URLSearchParams() }));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => navigation.searchParams,
+}));
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: ReactNode; [key: string]: unknown }) => (
@@ -102,6 +107,7 @@ describe("EvidencePage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    navigation.searchParams = new URLSearchParams();
     window.history.pushState({}, "", "/evidence");
     api.fetchOutcomeGraphCoverage.mockResolvedValue(coverage());
     api.fetchOutcomeGraphEvidenceExport.mockResolvedValue({
@@ -156,6 +162,23 @@ describe("EvidencePage", () => {
       expect.objectContaining({ classification: ["verified"], limit: 100, offset: 0 }),
       expect.any(AbortSignal),
     ));
+  });
+
+  it("honors a filter supplied by client-side route state", async () => {
+    navigation.searchParams = new URLSearchParams("filter=caught");
+    window.history.replaceState({}, "", "/home");
+
+    renderEvidencePage();
+
+    await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: ["wrong", "missing", "forbidden", "duplicate"],
+        limit: 100,
+        offset: 0,
+      }),
+      expect.any(AbortSignal),
+    ));
+    expect(screen.getByRole("button", { name: "Caught" }).getAttribute("data-active")).toBe("true");
   });
 
   it("loads a compound caught filter with one indexed request", async () => {

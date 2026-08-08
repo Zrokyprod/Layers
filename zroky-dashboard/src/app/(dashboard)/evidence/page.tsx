@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
@@ -38,15 +39,8 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function readFilter(): EvidenceLedgerFilter {
-  if (typeof window === "undefined") return "all";
-  const value = new URLSearchParams(window.location.search).get("filter");
+function evidenceFilter(value: string | null): EvidenceLedgerFilter {
   return value === "proven" || value === "caught" || value === "pending" || value === "needs_attention" ? value : "all";
-}
-
-function readGraphId(): string | null {
-  if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get("graph_id")?.trim() || null;
 }
 
 function replaceUrl(href: string) {
@@ -214,9 +208,11 @@ function downloadJsonFile(payload: unknown, filename: string) {
 }
 
 export default function EvidencePage() {
-  const [filter, setFilter] = useState<EvidenceLedgerFilter>(() => readFilter());
+  const searchParams = useSearchParams();
+  const routeGraphId = searchParams.get("graph_id")?.trim() || null;
+  const [filter, setFilter] = useState<EvidenceLedgerFilter>(() => evidenceFilter(searchParams.get("filter")));
   const [search, setSearch] = useState("");
-  const [selectedRowId, setSelectedRowId] = useState<string | null>(() => readGraphId());
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(routeGraphId);
   const [message, setMessage] = useState("");
   const [exporting, setExporting] = useState(false);
 
@@ -251,6 +247,16 @@ export default function EvidencePage() {
   const isRefreshing = graphQuery.isFetching || coverageQuery.isFetching;
 
   useEffect(() => {
+    function syncRouteState() {
+      const params = new URLSearchParams(window.location.search);
+      setFilter(evidenceFilter(params.get("filter")));
+      setSelectedRowId(params.get("graph_id")?.trim() || null);
+    }
+    window.addEventListener("popstate", syncRouteState);
+    return () => window.removeEventListener("popstate", syncRouteState);
+  }, []);
+
+  useEffect(() => {
     if (loading || selectedRowId && rows.some((row) => row.id === selectedRowId)) return;
     setSelectedRowId(rows[0]?.id ?? null);
   }, [loading, rows, selectedRowId]);
@@ -268,7 +274,7 @@ export default function EvidencePage() {
 
   function selectRow(row: EvidenceLedgerRow) {
     setSelectedRowId(row.id);
-    replaceUrl(row.href);
+    replaceUrl(`/evidence?filter=${filter}&graph_id=${encodeURIComponent(row.id)}`);
   }
 
   async function refreshEvidence() {
