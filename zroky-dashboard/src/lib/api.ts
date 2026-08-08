@@ -1391,8 +1391,9 @@ export function upsertSourceConnector(body: SourceConnectorUpsertPayload): Promi
   });
 }
 
-export function listFinalRuns(signal?: AbortSignal): Promise<FinalRunListResponse> {
-  return request<FinalRunListResponse>("/v1/runs", { signal });
+export function listFinalRuns(signal?: AbortSignal, intentId?: string): Promise<FinalRunListResponse> {
+  const query = intentId ? `?intent_id=${encodeURIComponent(intentId)}` : "";
+  return request<FinalRunListResponse>(`/v1/runs${query}`, { signal });
 }
 
 export function listFinalIncidents(signal?: AbortSignal): Promise<FinalIncidentResponse[]> {
