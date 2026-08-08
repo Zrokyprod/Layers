@@ -421,11 +421,11 @@ describe("PoliciesPage mandate control", () => {
     );
   });
 
-  it("enables sequence-risk holds through the mandate toggle", async () => {
+  it("keeps opt-in sequence-risk holds out of mandatory readiness", async () => {
     mockPolicies({ payload: policy({ runtime_sequence_risk_enabled: false }) });
     renderPoliciesPage();
 
-    await screen.findByRole("heading", { name: "Guardrails incomplete" });
+    await screen.findByRole("heading", { name: "Human review waiting" });
     fireEvent.click(screen.getByLabelText(/Sequence risk holds/i));
     fireEvent.click(screen.getByRole("button", { name: "Save advanced changes" }));
 
