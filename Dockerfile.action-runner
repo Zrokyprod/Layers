@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY zroky-sdk/pyproject.toml zroky-sdk/LICENSE ./
+COPY zroky-sdk/zroky ./zroky
+
+RUN pip install --upgrade pip \
+    && pip install . \
+    && adduser --disabled-password --gecos "" zroky
+
+USER zroky
+
+ENTRYPOINT ["zroky", "runner", "daemon"]
+CMD ["--supported-operation-kind", "TRANSFER"]
