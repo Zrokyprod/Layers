@@ -27,6 +27,15 @@ test("keeps the evidence ledger inside the mobile viewport", async ({ page }, te
   });
 
   expect(overflow).toEqual([]);
+
+  const clippedHeroContent = await page.locator(".ev-operator-hero").evaluate((hero) => {
+    return [hero, hero.querySelector(".ev-operator-hero-top"), hero.querySelector(".ev-operator-summary")]
+      .filter((element): element is Element => element !== null)
+      .filter((element) => element.scrollWidth > element.clientWidth + 1)
+      .map((element) => element.className);
+  });
+
+  expect(clippedHeroContent).toEqual([]);
   await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(page.locator(".sidebar")).toHaveCSS("width", "214px");
   await expect(page.getByRole("link", { name: "Operations" })).toBeVisible();

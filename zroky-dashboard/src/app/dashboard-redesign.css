@@ -1386,16 +1386,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero-top,
   .app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-workspace,
   .app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-strip {
     grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-summary {
-    padding: 14px 0 0 !important;
-    border-top: 1px solid var(--zk-border) !important;
-    border-left: 0 !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table {
@@ -26276,6 +26269,18 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   font-size: 11px !important;
   font-weight: 700 !important;
   text-transform: none !important;
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero-top {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-summary {
+    padding: 14px 0 0 !important;
+    border-top: 1px solid var(--zk-border) !important;
+    border-left: 0 !important;
+  }
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-readiness-strip .dashboard-metric-card strong {
