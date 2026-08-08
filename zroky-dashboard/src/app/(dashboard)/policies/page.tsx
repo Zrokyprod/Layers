@@ -59,7 +59,6 @@ const GUARDRAIL_FIELDS: Array<keyof PilotPolicyPayload> = [
   "runtime_block_prompt_injected_external_action",
   "runtime_production_deploys_require_approval",
   "runtime_changed_recipient_deny",
-  "runtime_sequence_risk_enabled",
 ];
 const ENVIRONMENT_OPTIONS = ["production", "staging", "development"];
 
