@@ -291,7 +291,7 @@ export default function WorkflowsPage() {
   }
 
   return (
-    <main className={styles.workflowsDashboard} aria-label="ZROKY Workflows dashboard">
+    <div className={styles.workflowsDashboard}>
       <div className={styles.pageTitle}>
         <div>
           <h1>Workflows</h1>
@@ -431,7 +431,7 @@ export default function WorkflowsPage() {
             <div>
               <p className={styles.kicker}>Assurance Pack</p>
               <h2 id="workflow-contract-title">Workflow contract</h2>
-              <p>What must be true before ZROKY trusts an agent action.</p>
+              <p>What must be true before Zroky trusts an agent action.</p>
             </div>
             <label className={styles.selectField}>
               <span>Environment</span>
@@ -489,6 +489,6 @@ export default function WorkflowsPage() {
           onChange={(event) => setDraft(event.target.value)}
         />
       </section>
-    </main>
+    </div>
   );
 }

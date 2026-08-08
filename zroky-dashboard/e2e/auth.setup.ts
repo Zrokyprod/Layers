@@ -74,7 +74,10 @@ setup("seed deterministic demo and save authenticated state", async ({ page, req
   expect(setSession.status(), await setSession.text()).toBe(200);
 
   const requestState = await request.storageState();
-  await page.context().addCookies(requestState.cookies);
+  const dashboardUrl = process.env.PLAYWRIGHT_BASE_URL
+    ?? `http://localhost:${process.env.ZROKY_E2E_DASHBOARD_PORT ?? "3010"}`;
+  const secure = new URL(dashboardUrl).protocol === "https:";
+  await page.context().addCookies(requestState.cookies.map((cookie) => ({ ...cookie, secure })));
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.evaluate(
     ({ emailVerified, projectId, accessMaxAgeSeconds, refreshMaxAgeSeconds }) => {

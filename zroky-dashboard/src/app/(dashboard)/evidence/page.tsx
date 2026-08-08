@@ -305,7 +305,7 @@ export default function EvidencePage() {
 
   return (
     <div className="dashboard-page evidence-page evidence-ledger-page ev-page">
-      {message ? <div className="alert-strip ev-alert-strip">{message}</div> : null}
+      {message ? <div className="alert-strip ev-alert-strip" role="status" aria-live="polite">{message}</div> : null}
       <EvidenceVerdictHero
         {...verdict}
         isRefreshing={isRefreshing}

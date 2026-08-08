@@ -355,7 +355,7 @@ export default function ProjectDetailPage() {
               <div className="settings-project-command">
                 <div className="settings-project-toolbar">
                   <div>
-                    <h2>{safeString(selectedProject.project_name, "Untitled project")}</h2>
+                    <h1>{safeString(selectedProject.project_name, "Untitled project")}</h1>
                     <p>Manage this project context, active selection, and deletion controls.</p>
                   </div>
                   <StatusPill value={selectedIsActive ? "active" : "available"} />

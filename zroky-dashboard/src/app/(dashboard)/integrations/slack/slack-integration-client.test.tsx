@@ -104,7 +104,7 @@ describe("SlackIntegrationPage", () => {
   it("renders disconnected state without requiring Slack credentials", async () => {
     render(<SlackIntegrationPage />);
 
-    expect(await screen.findByRole("heading", { name: "Slack notifications" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Slack notifications" })).toBeInTheDocument();
     expect(screen.getByText("Connect a Slack channel and Zroky will send high and critical alerts automatically.")).toBeInTheDocument();
     expect(screen.getByText("Choose where high and critical alerts should be sent.")).toBeInTheDocument();
     expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);

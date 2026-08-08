@@ -302,7 +302,7 @@ describe("OperationsPage", () => {
     const table = screen.getByLabelText("Unverifiable table");
     expect(within(table).getByText("missing_correlation")).toBeInTheDocument();
     expect(within(table).getByText("Fix correlation")).toBeInTheDocument();
-    expect(screen.getByText("ZROKY could not map the agent claim to a source-of-truth object.")).toBeInTheDocument();
+    expect(screen.getByText("Zroky could not map the agent claim to a source-of-truth object.")).toBeInTheDocument();
   });
 
   it("approves exact payload approvals with the stored binding digest", async () => {

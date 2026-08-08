@@ -178,7 +178,8 @@ describe("EvidencePage", () => {
       }),
       expect.any(AbortSignal),
     ));
-    expect(screen.getByRole("button", { name: "Caught" }).getAttribute("data-active")).toBe("true");
+    expect(screen.getByRole("button", { name: "Caught" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("searchbox", { name: "Search evidence" })).toBeInTheDocument();
   });
 
   it("loads a compound caught filter with one indexed request", async () => {

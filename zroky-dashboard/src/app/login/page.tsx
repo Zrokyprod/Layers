@@ -98,6 +98,8 @@ function LoginForm() {
 
   const handleOAuthLogin = (provider: "github" | "google") => {
     setPendingPostAuthRedirectPath(nextPath);
+    // OAuth requires a full-document redirect so the browser follows the provider handoff.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign(`/api/zroky/v1/auth/${provider}/start`);
   };
 

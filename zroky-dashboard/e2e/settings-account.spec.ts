@@ -9,16 +9,16 @@ test.describe("settings and account", () => {
     test.setTimeout(180_000);
 
     const pages = [
-      { path: "/settings", labels: ["Settings", "Workspace control plane", "Create project key"] },
-      { path: "/settings/keys", labels: ["Project API keys", "Create project key"] },
-      { path: "/settings/providers", labels: ["Settings", "Workspace control plane", "API Keys"] },
-      { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
-      { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
-      { path: "/settings/evaluation", labels: ["Settings", "Workspace control plane", "Plan & Billing"] },
-      { path: "/settings/integrations", labels: ["Connectors", "Slack"] },
-      { path: "/settings/integrations/slack", labels: ["Slack", "Not connected", "Connect Slack"] },
-      { path: "/settings/workspace", labels: ["Workspace boundary", "Workspace identity", "Manage members"] },
-      { path: "/account", labels: ["Your identity", "Account security"] },
+      { path: "/settings", labels: ["API keys", "Project keys", "Create key"] },
+      { path: "/settings/keys", labels: ["API keys", "Project keys", "Create key"] },
+      { path: "/settings/providers", labels: ["API keys", "Project keys", "Create key"] },
+      { path: "/settings/team", labels: ["Members", "Invite member", "Project members"] },
+      { path: "/settings/billing", labels: ["Plan & Billing", "Usage this month", "Available plans"] },
+      { path: "/settings/evaluation", labels: ["API keys", "Project keys", "Create key"] },
+      { path: "/settings/integrations", labels: ["Connectors", "Available systems", "Recent test-reads"] },
+      { path: "/settings/integrations/slack", labels: ["Slack notifications", "Connected channel", "Test message"] },
+      { path: "/settings/workspace", labels: ["Workspace", "Workspace details"] },
+      { path: "/account", labels: ["Personal account", "Plan and workspace access"] },
     ];
 
     for (const item of pages) {
@@ -32,7 +32,8 @@ test.describe("settings and account", () => {
     await page.goto("/settings/profile");
     await expect(page).toHaveURL(/\/account/);
     await expectDashboardShell(page);
-    await expect(page.getByText("Your identity", { exact: false })).toBeVisible();
+    await expect(page.getByText("Personal account", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 
   test("API key create, rotate, and revoke flow works", async ({ page }, testInfo) => {
@@ -44,15 +45,15 @@ test.describe("settings and account", () => {
     const keyName = `E2E key ${Date.now()}`;
     await page.getByLabel("Key name").fill(keyName);
     await page.getByLabel("Expires in days").fill("30");
-    await page.getByRole("button", { name: "Create project key" }).click();
-    await expect(page.getByRole("heading", { name: "Copy this project key now." })).toBeVisible();
+    await page.getByRole("button", { name: "Create key" }).click();
+    await expect(page.getByRole("heading", { name: "Key created" })).toBeVisible();
     await expect(page.locator(".settings-key-reveal")).toContainText("zk_live_");
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Rotate" }).first().click();
     await expect(page.getByRole("dialog", { name: "Rotate API key" })).toBeVisible();
     await page.getByRole("button", { name: "Rotate and show replacement" }).click();
-    await expect(page.getByRole("heading", { name: "Copy this project key now." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Key created" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Revoke" }).first().click();
@@ -89,18 +90,36 @@ test.describe("settings and account", () => {
   });
 
   test("account profile, password, sessions, and delete confirmation are wired", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Password mutation runs once in the desktop Chromium project.");
+    test.skip(testInfo.project.name !== "mobile-chromium", "Session-revoking password mutation runs once at the end of the mobile project.");
     test.setTimeout(60_000);
 
     const seed = readSeed();
     const temporaryPassword = "ZrokyDemo124!";
+    const restoreSession = async (password: string) => {
+      const login = await page.request.post("/api/zroky/v1/auth/login", {
+        data: { email: seed.email, password },
+      });
+      expect(login.status(), await login.text()).toBe(200);
+      const tokens = await login.json();
+      const setSession = await page.request.post("/api/auth/set-session", {
+        data: {
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          access_max_age_seconds: tokens.access_expires_in_seconds,
+          refresh_max_age_seconds: tokens.refresh_expires_in_seconds,
+        },
+      });
+      expect(setSession.status(), await setSession.text()).toBe(200);
+      await page.goto("/account");
+      await expectDashboardShell(page);
+    };
     const submitPasswordChange = async () => {
       const responsePromise = page.waitForResponse((response) => {
         return response.url().includes("/v1/auth/me/password") && response.request().method() === "PATCH";
       });
       await page.getByRole("button", { name: "Change password" }).click();
       const response = await responsePromise;
-      expect(response.ok()).toBeTruthy();
+      expect(response.ok(), await response.text()).toBeTruthy();
       await expect(page.getByText("Password changed successfully.")).toBeVisible({ timeout: 15_000 });
     };
 
@@ -115,6 +134,7 @@ test.describe("settings and account", () => {
     await page.getByRole("textbox", { name: "New password", exact: true }).fill(temporaryPassword);
     await page.getByRole("textbox", { name: "Confirm new password" }).fill(temporaryPassword);
     await submitPasswordChange();
+    await restoreSession(temporaryPassword);
 
     await page.getByRole("textbox", { name: "Current password" }).fill(temporaryPassword);
     await page.getByRole("textbox", { name: "New password", exact: true }).fill(seed.password);
