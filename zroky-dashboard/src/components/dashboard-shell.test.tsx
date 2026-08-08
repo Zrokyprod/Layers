@@ -558,15 +558,27 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.getByRole("menuitem", { name: /Profile & security/ }).getAttribute("href")).toBe("/account");
   });
 
-  it("logs out only from the explicit account menu action", () => {
+  it("waits for session cleanup before leaving the dashboard", async () => {
+    let finishLogout: (() => void) | undefined;
+    authState.clearAccessToken.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishLogout = resolve;
+      }),
+    );
     render(<DashboardShell>content</DashboardShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Log out" }));
 
     expect(authState.clearAccessToken).toHaveBeenCalledTimes(1);
-    expect(routerState.replace).toHaveBeenCalledWith("/login?logged_out=1");
-    expect(routerState.refresh).toHaveBeenCalledTimes(1);
+    expect(routerState.replace).not.toHaveBeenCalled();
+
+    finishLogout?.();
+
+    await waitFor(() => {
+      expect(routerState.replace).toHaveBeenCalledWith("/login?logged_out=1");
+    });
+    expect(routerState.refresh).not.toHaveBeenCalled();
   });
 
   it("keeps search in the global top utility bar without page route menus", () => {

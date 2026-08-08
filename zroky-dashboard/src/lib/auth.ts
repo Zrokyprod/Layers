@@ -151,19 +151,25 @@ export function readEmailVerifiedFromBrowser(): boolean | null {
   return val === "true";
 }
 
-export function clearAuthSession(): void {
-  // Clear HttpOnly cookies via server route
-  void fetch("/api/auth/clear-session", { method: "POST", credentials: "same-origin" });
+export function clearAuthSession(): Promise<void> {
+  const cookieCleanup = fetch("/api/auth/clear-session", {
+    method: "POST",
+    credentials: "same-origin",
+  }).then(
+    () => undefined,
+    () => undefined,
+  );
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
     clearLegacyStoredTokens();
     window.localStorage.removeItem(LS_EMAIL_VERIFIED_KEY);
   }
   notifyAuthSessionChanged();
+  return cookieCleanup;
 }
 
-export function clearAccessToken(): void {
-  clearAuthSession();
+export function clearAccessToken(): Promise<void> {
+  return clearAuthSession();
 }
 
 export function readAuthSessionFromBrowser(): BrowserAuthSession {
