@@ -27,5 +27,7 @@ test("keeps the evidence ledger inside the mobile viewport", async ({ page }, te
   });
 
   expect(overflow).toEqual([]);
-  await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.locator(".sidebar")).toHaveCSS("width", "214px");
+  await expect(page.getByRole("link", { name: "Operations" })).toBeVisible();
 });

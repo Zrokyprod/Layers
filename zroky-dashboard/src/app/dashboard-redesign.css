@@ -28002,7 +28002,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   padding: 14px 16px 20px !important;
 }
 
-@media (max-width: 1279px) {
+@media (min-width: 1024px) and (max-width: 1279px) {
   .app-shell[data-dashboard-system="control-v1"] {
     grid-template-columns: 68px minmax(0, 1fr) !important;
   }
