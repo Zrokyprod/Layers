@@ -475,6 +475,28 @@ describe("OperationsPage", () => {
     expect(screen.getByRole("heading", { name: "refund-workflow" })).toBeInTheDocument();
   });
 
+  it("prefers an actionable incident when the intent also has a run", async () => {
+    api.listFinalIncidents.mockReturnValue([
+      {
+        id: "incident_open_1",
+        project_id: "project_1",
+        environment: "production",
+        outcome_graph_id: "run_1",
+        status: "open",
+        severity: "high",
+        created_at: "2026-07-21T10:01:00Z",
+        resolved_at: null,
+        incident: { intent_id: "intent_1", deviation_type: "Missing refund" },
+      },
+    ]);
+    window.history.pushState(null, "", "/operations?intent_id=intent_1");
+
+    render(<OperationsPage />);
+
+    expect(await screen.findByLabelText("Incidents table")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Missing refund" })).toBeInTheDocument();
+  });
+
   it("applies agent_name as a Runs facet", async () => {
     window.history.pushState(null, "", "/operations?agent_name=stripe-agent");
 
