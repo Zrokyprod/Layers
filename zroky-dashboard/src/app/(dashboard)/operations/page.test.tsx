@@ -45,6 +45,10 @@ const queryClient = vi.hoisted(() => ({
 
 vi.mock("@/lib/api", () => api);
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useMutation: vi.fn(({ mutationFn, onError, onSuccess }) => ({
     isPending: false,
@@ -451,6 +455,15 @@ describe("OperationsPage", () => {
 
     expect(await screen.findByLabelText(tableLabel)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
+  it("requests the exact intent run for an Evidence deep-link", async () => {
+    window.history.pushState(null, "", "/operations?intent_id=intent_1");
+
+    render(<OperationsPage />);
+
+    expect(api.listFinalRuns).toHaveBeenCalledWith(undefined, "intent_1");
+    expect(await screen.findByRole("heading", { name: "refund-workflow" })).toBeInTheDocument();
   });
 
   it("prefers the visible run when an intent also has a resolved incident", async () => {

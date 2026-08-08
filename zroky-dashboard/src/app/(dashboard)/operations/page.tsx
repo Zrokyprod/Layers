@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -966,16 +967,19 @@ function recoveryIdempotencyKey(incidentId: string): string {
 
 export default function OperationsPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const deepLinkKey = searchParams.toString();
+  const deepLinkedIntentId = searchParams.get("intent_id")?.trim() || undefined;
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const deepLinkHandled = useRef(false);
+  const deepLinkHandled = useRef<string | null>(null);
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const liveQueryOptions = { refetchInterval: realTimeEnabled ? 30_000 : false as const };
   const [explicitDemo, setExplicitDemo] = useState(demoOperationsEnabled);
   const localPreview = explicitDemo;
   const runs = useQuery({
-    queryKey: ["final-runs"],
-    queryFn: ({ signal }) => listFinalRuns(signal),
+    queryKey: ["final-runs", deepLinkedIntentId ?? "latest"],
+    queryFn: ({ signal }) => listFinalRuns(signal, deepLinkedIntentId),
     enabled: !localPreview,
     ...liveQueryOptions,
   });
@@ -1098,19 +1102,20 @@ export default function OperationsPage() {
   }, []);
 
   useEffect(() => {
-    if (deepLinkHandled.current || isLoading) return;
+    if (deepLinkHandled.current === deepLinkKey || isLoading) return;
     const selection = selectionFromUrl(runItems, incidentItems, approvalItems);
-    deepLinkHandled.current = true;
+    deepLinkHandled.current = deepLinkKey;
     if (selection) {
       setActiveTab(selection.tab);
       setSelectedId(selection.id);
       setActiveAgent(selection.agentName);
     }
-  }, [approvalItems, incidentItems, isLoading, runItems]);
+  }, [approvalItems, deepLinkKey, incidentItems, isLoading, runItems]);
 
   function selectRow(row: OpsRow) {
     setSelectedId(row.id);
     if (typeof window !== "undefined") {
+      deepLinkHandled.current = new URL(row.href, window.location.origin).search.slice(1);
       window.history.replaceState(null, "", row.href);
     }
   }

@@ -597,6 +597,33 @@ def test_run_intake_declares_external_run_without_execution_ownership(client: Te
     assert listed.json()["items"][0]["id"] == body["id"]
 
 
+def test_run_list_filters_by_tenant_scoped_intent(client: TestClient) -> None:
+    intents = [
+        client.post(
+            "/v1/intents",
+            json={"intent": {"action": action}},
+            headers={"Idempotency-Key": f"intent-filter-{action}"},
+        ).json()
+        for action in ("refund", "invoice")
+    ]
+    runs = [
+        client.post(
+            "/v1/runs",
+            json={"intent_id": intent["id"], "run": {"action": intent["intent"]["action"]}},
+            headers={"Idempotency-Key": f"run-filter-{intent['id']}"},
+        ).json()
+        for intent in intents
+    ]
+
+    response = client.get("/v1/runs", params={"intent_id": intents[0]["id"]})
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [runs[0]["id"]]
+
+    client.tenant_project["value"] = "proj_other"
+    assert client.get("/v1/runs", params={"intent_id": intents[0]["id"]}).json()["items"] == []
+
+
 def test_cloudevents_run_declared_normalizes_to_run(client: TestClient) -> None:
     response = client.post(
         "/v1/events/cloudevents",

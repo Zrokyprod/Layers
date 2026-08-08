@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -168,15 +168,19 @@ def _ensure_run_graph(db: Session, *, run: FinalAgentRun, intent: FinalWorkflowI
 @limiter.limit("120/minute")
 def list_runs(
     request: Request,
+    intent_id: str | None = Query(default=None, min_length=1, max_length=36),
     context: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> AgentRunListResponse:
-    rows = db.execute(
+    statement = (
         select(FinalAgentRun)
         .where(FinalAgentRun.project_id == context.tenant_id)
         .order_by(FinalAgentRun.created_at.desc())
         .limit(50)
-    ).scalars().all()
+    )
+    if intent_id:
+        statement = statement.where(FinalAgentRun.intent_id == intent_id)
+    rows = db.execute(statement).scalars().all()
     return AgentRunListResponse(items=[_response(row) for row in rows])
 
 
