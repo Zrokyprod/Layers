@@ -21,9 +21,9 @@
   min-height: calc(100vh - 78px);
   max-width: 1600px;
   color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   padding: 14px;
 }
 
@@ -49,7 +49,7 @@
   font-size: 22px;
   font-weight: 760;
   line-height: 1.05;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .homeDashboard :global(.zh-page-title p),
@@ -68,7 +68,7 @@
 .homeDashboard :global(.zh-metric-strip) {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: none;
 }
 
@@ -81,7 +81,7 @@
   color: var(--faint);
   font-size: 10px;
   font-weight: 650;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -124,7 +124,7 @@
   font-size: 30px;
   font-weight: 760;
   line-height: 1;
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
 }
 
 .homeDashboard :global(.zh-proof-status > p:not(.zh-kicker)) {
@@ -147,41 +147,12 @@
   color: var(--text);
   font-size: 25px;
   font-weight: 760;
-  letter-spacing: -0.055em;
+  letter-spacing: 0;
 }
 
 .homeDashboard :global(.zh-proof-summary span) {
   color: var(--muted);
   font-size: 12px;
-}
-
-.homeDashboard :global(.zh-window-switch) {
-  display: inline-flex;
-  width: fit-content;
-  gap: 2px;
-  margin-top: 6px;
-  padding: 2px;
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.homeDashboard :global(.zh-window-switch button) {
-  height: 26px;
-  padding: 0 9px;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.homeDashboard :global(.zh-window-switch button.is-active) {
-  color: #ffffff;
-  background: var(--accent);
-  box-shadow: none;
 }
 
 .homeDashboard :global(.zh-proof-actions) {
@@ -322,7 +293,7 @@
   color: var(--text);
   font-size: 25px;
   font-weight: 760;
-  letter-spacing: -0.055em;
+  letter-spacing: 0;
 }
 
 .homeDashboard :global(.zh-operational-grid) {
@@ -369,7 +340,7 @@
   color: var(--text);
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .homeDashboard :global(.zh-panel-header p),
@@ -523,7 +494,7 @@
   font-family: var(--mono);
   font-size: 19px;
   font-weight: 760;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   line-height: 1;
 }
 
@@ -716,7 +687,7 @@
   font-size: clamp(30px, 4vw, 58px);
   font-weight: 780;
   line-height: 0.95;
-  letter-spacing: -0.07em;
+  letter-spacing: 0;
 }
 
 .homeDashboard :global(.zh-first-run p:not(.zh-kicker)) {
@@ -794,7 +765,7 @@
     --surface-2: #f1f5f9;
     --surface-3: #e2e8f0;
     --border: rgba(15, 23, 42, 0.12);
-    --border-strong: rgba(99, 102, 241, 0.32);
+    --border-strong: rgba(15, 23, 42, 0.2);
     --text: #111827;
     --muted: #566174;
     --faint: #7c879a;

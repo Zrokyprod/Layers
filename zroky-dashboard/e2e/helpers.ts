@@ -58,6 +58,12 @@ export async function expectDashboardShell(page: Page): Promise<void> {
   const viewport = page.viewportSize();
   if (viewport && viewport.width <= 1023) {
     await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
+    const contentBounds = await page.locator(".app-shell > .content").evaluate((content) => {
+      const rect = content.getBoundingClientRect();
+      return { left: rect.left, right: rect.right };
+    });
+    expect(contentBounds.left).toBeGreaterThanOrEqual(-1);
+    expect(contentBounds.right).toBeLessThanOrEqual(viewport.width + 1);
   } else {
     await expect(page.getByRole("link", { name: "Zroky dashboard home" })).toBeVisible();
   }

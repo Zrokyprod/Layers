@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell,
   ChevronDown,
   FileJson,
   FolderOpen,
@@ -24,7 +23,7 @@ import {
 } from "lucide-react";
 
 import { clearAccessToken } from "@/lib/auth";
-import { getBillingMe, listIssues } from "@/lib/api";
+import { getBillingMe } from "@/lib/api";
 import { DASHBOARD_PRIMARY_ROUTES } from "@/lib/dashboard-route-contract";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
@@ -39,7 +38,6 @@ type NavItem = {
   label: string;
   subtitle: string;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
-  badgeKey?: "issues";
   requiredEntitlement?: string;
   placeholder?: boolean;
   visibleInNav?: boolean;
@@ -85,14 +83,12 @@ function navClass(pathname: string, href: string): string {
 function NavFeatureGate({
   item,
   pathname,
-  badgeCount,
   planTemplate,
   planCode,
   entitlementLoading,
 }: {
   item: NavItem;
   pathname: string;
-  badgeCount: number;
   planTemplate: Record<string, unknown> | undefined;
   planCode: string | null | undefined;
   entitlementLoading: boolean;
@@ -116,10 +112,6 @@ function NavFeatureGate({
         </span>
       ) : item.placeholder ? (
         <span className="nav-link-soon">soon</span>
-      ) : badgeCount > 0 ? (
-        <span className={`nav-badge${item.badgeKey === "issues" ? " nav-badge-danger" : ""}`}>
-          {badgeCount}
-        </span>
       ) : null}
     </>
   );
@@ -350,14 +342,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     };
   }, [openMenu]);
 
-  const issuesQuery = useQuery({
-    queryKey: ["shell-issues-count"],
-    queryFn: () => listIssues({ status: "open", limit: 50 }),
-    enabled: projectContextReady && !localProjectFallback,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
-
   const billingQuery = useQuery({
     queryKey: ["billing", "me"],
     queryFn: ({ signal }) => getBillingMe(signal),
@@ -365,13 +349,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  const issuesCount = issuesQuery.data?.items?.length ?? 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
   const sidebarVisible = !compactShell || compactSidebarOpen;
-
-  const badges: Record<string, number> = {};
-  if (issuesCount > 0) badges.issues = issuesCount;
 
   const accountEmail = meQuery.data?.email?.trim() || null;
   const accountName =
@@ -468,14 +448,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <nav className="nav-links" aria-label="Primary">
           <span className="nav-section-label">Navigation</span>
           {VISIBLE_NAV.map((item) => {
-            const { badgeKey } = item;
-            const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
             return (
               <NavFeatureGate
                 key={item.id}
                 item={item}
                 pathname={pathname}
-                badgeCount={count}
                 planTemplate={planTemplate}
                 planCode={planCode}
                 entitlementLoading={billingQuery.isLoading}
@@ -522,12 +499,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="topbar-controls">
-            <button type="button" className="topbar-icon-btn" aria-label="Notifications">
-              <Bell size={14} aria-hidden="true" />
-              {issuesCount > 0 ? <span className="topbar-notification-dot" aria-hidden="true" /> : null}
-            </button>
-            <span className="topbar-separator" aria-hidden="true" />
-
             <div className="topbar-menu-wrap topbar-account-menu" ref={accountMenuRef}>
               <button
                 type="button"

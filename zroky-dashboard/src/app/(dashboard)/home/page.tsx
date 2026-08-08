@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -128,7 +128,7 @@ type ProofEvent = {
   href: string;
 };
 
-const DEFAULT_HOME_WINDOW_DAYS = 7;
+const HOME_SUMMARY_DAYS = 30;
 const MS_PER_DAY = 86_400_000;
 const DEMO_HOME_STORAGE_KEY = "zroky:demo-home";
 
@@ -289,7 +289,7 @@ const DEMO_ATTENTION_ROWS: AttentionRow[] = [
     workflow: "Payroll Export WF",
     age: "12m",
     action: "Investigate",
-    href: "/operations",
+    href: "/operations?view=incidents",
   },
   {
     priority: "P1",
@@ -298,7 +298,7 @@ const DEMO_ATTENTION_ROWS: AttentionRow[] = [
     workflow: "Vendor Payments WF",
     age: "18m",
     action: "Review",
-    href: "/operations",
+    href: "/operations?view=approvals",
   },
   {
     priority: "P2",
@@ -307,7 +307,7 @@ const DEMO_ATTENTION_ROWS: AttentionRow[] = [
     workflow: "Quote Approval WF",
     age: "34m",
     action: "Analyze",
-    href: "/operations",
+    href: "/operations?view=unverifiable",
   },
   {
     priority: "P2",
@@ -325,7 +325,7 @@ const DEMO_ATTENTION_ROWS: AttentionRow[] = [
     workflow: "DB Recovery WF",
     age: "1h 03m",
     action: "Retry",
-    href: "/operations",
+    href: "/operations?view=recovery",
   },
   {
     priority: "P3",
@@ -334,29 +334,21 @@ const DEMO_ATTENTION_ROWS: AttentionRow[] = [
     workflow: "Evidence Pack WF",
     age: "2h 11m",
     action: "Inspect",
-    href: "/evidence",
+    href: "/evidence?filter=needs_attention",
   },
 ];
 
 const DEMO_PROOF_EVENTS: ProofEvent[] = [
-  { tone: "Critical", id: "run_pay_042", label: "Mismatch caught in payroll export", outcome: "mismatch", signature: "sig:9f42c1a8", time: "8m", href: "/evidence" },
-  { tone: "Ready", id: "run_ref_318", label: "Action verified: Stripe refund", outcome: "verified", signature: "sig:71ad03be", time: "14m", href: "/evidence" },
-  { tone: "Pending", id: "apr_118", label: "Approval required: policy exception", outcome: "pending", signature: "sig:e2019c4d", time: "18m", href: "/operations" },
-  { tone: "Ready", id: "run_git_907", label: "Action verified: GitHub workflow", outcome: "verified", signature: "sig:4b88a119", time: "31m", href: "/evidence" },
-  { tone: "Stale", id: "src_sap_22", label: "Connector read failed: SAP S/4HANA", outcome: "stale", signature: "sig:aa17d2c0", time: "47m", href: "/operations" },
+  { tone: "Critical", id: "run_pay_042", label: "Mismatch caught in payroll export", outcome: "caught", signature: "sig:9f42c1a8", time: "8m", href: "/evidence?filter=caught" },
+  { tone: "Ready", id: "run_ref_318", label: "Action verified: Stripe refund", outcome: "verified", signature: "sig:71ad03be", time: "14m", href: "/evidence?filter=proven" },
+  { tone: "Pending", id: "apr_118", label: "Approval required: policy exception", outcome: "pending", signature: "sig:e2019c4d", time: "18m", href: "/operations?view=approvals" },
+  { tone: "Ready", id: "run_git_907", label: "Action verified: GitHub workflow", outcome: "verified", signature: "sig:4b88a119", time: "31m", href: "/evidence?filter=proven" },
+  { tone: "Stale", id: "src_sap_22", label: "Connector read failed: SAP S/4HANA", outcome: "stale", signature: "sig:aa17d2c0", time: "47m", href: "/operations?view=recovery" },
 ];
 
 function canChangeHomeSetup(role: HomeRole): boolean {
   const normalized = role?.trim().toLowerCase();
   return normalized === "owner" || normalized === "admin";
-}
-
-function homeWindowDays(dateRange: { from: Date | null; to: Date | null }): number {
-  if (!dateRange.from || !dateRange.to) return DEFAULT_HOME_WINDOW_DAYS;
-  const fromMs = new Date(dateRange.from).getTime();
-  const toMs = new Date(dateRange.to).getTime();
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return DEFAULT_HOME_WINDOW_DAYS;
-  return Math.max(1, Math.min(90, Math.ceil((toMs - fromMs) / MS_PER_DAY)));
 }
 
 function missionDataFromSummary(summary: HomeSummaryResponse): HomeData {
@@ -462,8 +454,10 @@ function postureExplanation(status: PostureStatus, blocker: string): string {
 
 function primaryCta(status: PostureStatus, stats: ProofStats, readiness: ReadinessRow[]) {
   if (status === "INACTIVE") return { label: "Connect source", href: "/integrations" };
-  if (stats.pendingApprovals > Math.max(stats.mismatches, stats.needsAttention)) return { label: "Open approvals", href: "/operations" };
-  if (status === "CRITICAL") return { label: "Review incidents", href: "/operations" };
+  if (stats.pendingApprovals > Math.max(stats.mismatches, stats.needsAttention)) {
+    return { label: "Open approvals", href: "/operations?view=approvals" };
+  }
+  if (status === "CRITICAL") return { label: "Review caught actions", href: "/evidence?filter=caught" };
   if (status === "DEGRADED") {
     const blocked = readiness.find(
       (item) => item.postureRelevant !== false && ["Blocked", "Stale", "Missing"].includes(item.status),
@@ -629,7 +623,7 @@ function buildAttentionRows(data: HomeData): AttentionRow[] {
         workflow: typeof detail.workflow_key === "string" ? detail.workflow_key : incident.outcome_graph_id,
         age: timeSince(incident.created_at),
         action: "Investigate",
-        href: "/operations",
+        href: `/operations?incident_id=${encodeURIComponent(incident.id)}`,
       });
     });
 
@@ -644,7 +638,7 @@ function buildAttentionRows(data: HomeData): AttentionRow[] {
         workflow: approval.agent_name ?? "Agent workflow",
         age: timeSince(approval.created_at),
         action: "Review",
-        href: "/operations",
+        href: `/operations?decision_id=${encodeURIComponent(approval.id)}`,
       });
     });
 
@@ -656,7 +650,7 @@ function buildAttentionRows(data: HomeData): AttentionRow[] {
       workflow: attempt.action_id,
       age: timeSince(attempt.updated_at),
       action: "Retry",
-      href: "/operations",
+      href: `/operations?action_id=${encodeURIComponent(attempt.action_id)}`,
     });
   });
 
@@ -671,7 +665,9 @@ function buildAttentionRows(data: HomeData): AttentionRow[] {
         workflow: mutation.action_type ?? mutation.resource_type ?? "Unknown workflow",
         age: timeSince(mutation.occurred_at),
         action: "Analyze",
-        href: "/operations",
+        href: mutation.zroky_action_id
+          ? `/operations?action_id=${encodeURIComponent(mutation.zroky_action_id)}`
+          : "/operations",
       });
     });
 
@@ -735,8 +731,6 @@ function VerdictHero({
   canAct,
   errorCount,
   quota,
-  currentWindowDays,
-  onWindowChange,
   onRefresh,
 }: {
   stats: ProofStats;
@@ -746,16 +740,13 @@ function VerdictHero({
   canAct: boolean;
   errorCount: number;
   quota: string | null;
-  currentWindowDays: number;
-  onWindowChange: (days: number) => void;
   onRefresh: () => void;
 }) {
   const cta = primaryCta(status, stats, readiness);
-  const windows = [
-    ["24h", 1],
-    ["7d", 7],
-    ["30d", 30],
-  ] as const;
+  const secondaryActions = [
+    { label: "Go to Operations", href: "/operations", className: "zh-btn zh-btn-outline" },
+    { label: "View evidence", href: "/evidence", className: "zh-btn zh-btn-ghost" },
+  ].filter((action) => action.href !== cta.href);
 
   return (
     <section className="zh-card zh-proof-posture zh-verdict-hero" aria-label="Proof posture">
@@ -774,18 +765,6 @@ function VerdictHero({
         <div className="zh-proof-summary" aria-label="Proof denominator">
           <strong>{heroHeadline(stats)}</strong>
           <span>{denominatorLine(stats)}</span>
-          <div className="zh-window-switch" aria-label="Home time window">
-            {windows.map(([label, days]) => (
-              <button
-                key={label}
-                type="button"
-                className={currentWindowDays === days ? "is-active" : undefined}
-                onClick={() => onWindowChange(days)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -798,12 +777,11 @@ function VerdictHero({
           <PermissionGate canAct={canAct} ownerOnly href={cta.href} className="zh-btn zh-btn-primary">
             {cta.label}
           </PermissionGate>
-          <Link className="zh-btn zh-btn-outline" href="/operations">
-            Go to Operations
-          </Link>
-          <Link className="zh-btn zh-btn-ghost" href="/evidence">
-            View evidence
-          </Link>
+          {secondaryActions.map((action) => (
+            <Link className={action.className} href={action.href} key={action.href}>
+              {action.label}
+            </Link>
+          ))}
           <button className="zh-icon-btn" type="button" aria-label="Refresh Home dashboard" onClick={onRefresh}>
             <RotateCcw size={14} aria-hidden="true" />
           </button>
@@ -815,11 +793,11 @@ function VerdictHero({
 
 function ProofMetricsStrip({ stats, loading }: { stats: ProofStats; loading: boolean }) {
   const cells = [
-    { label: "Mismatches caught", value: stats.mismatches, href: "/operations", tone: "critical", Icon: ShieldAlert },
-    { label: "Proven outcomes", value: stats.proven, href: "/evidence", tone: "ready", Icon: ShieldCheck },
+    { label: "Mismatches caught", value: stats.mismatches, href: "/evidence?filter=caught", tone: "critical", Icon: ShieldAlert },
+    { label: "Proven outcomes", value: stats.proven, href: "/evidence?filter=proven", tone: "ready", Icon: ShieldCheck },
     { label: "Needs attention", value: stats.needsAttention, href: "/evidence?filter=needs_attention", tone: "stale", Icon: AlertTriangle },
     { label: "Open incidents", value: stats.openIncidents, href: "/operations?view=incidents", tone: "critical", Icon: BellDot },
-    { label: "Pending approvals", value: stats.pendingApprovals, href: "/operations", tone: "pending", Icon: LockKeyhole },
+    { label: "Pending approvals", value: stats.pendingApprovals, href: "/operations?view=approvals", tone: "pending", Icon: LockKeyhole },
     { label: "Coverage", value: `${stats.coveragePercent}%`, href: "/evidence", tone: "neutral", Icon: BarChart3 },
   ];
 
@@ -931,7 +909,7 @@ function RecentProof({ events, empty }: { events: ProofEvent[]; empty: boolean }
             })}
           </div>
           <div className="zh-proof-footer">
-            <span>Durable records</span>
+            <span>Recorded history</span>
             <time>Latest event {events[0]?.time}</time>
           </div>
         </>
@@ -991,10 +969,10 @@ function buildProofEvents(data: HomeData): ProofEvent[] {
       outcome.verdict === "mismatched" || outcome.verification_status === "mismatched"
         ? `Mismatch caught in ${outcome.action_type ?? "agent action"}`
         : `Action verified: ${outcome.action_type ?? "agent action"}`,
-    outcome: outcome.verdict === "mismatched" ? "mismatch" : "verified",
+    outcome: outcome.verdict === "mismatched" ? "caught" : "verified",
     signature: outcome.idempotency_key ?? outcome.id,
     time: timeSince(outcome.checked_at),
-    href: "/evidence",
+    href: outcome.verdict === "mismatched" ? "/evidence?filter=caught" : "/evidence?filter=proven",
   }));
   const approvalEvents = data.approvals.slice(0, 2).map((approval): ProofEvent => ({
     tone: approval.status === "approved" ? "Ready" : "Pending",
@@ -1003,7 +981,7 @@ function buildProofEvents(data: HomeData): ProofEvent[] {
     outcome: approval.status.replaceAll("_", " "),
     signature: approval.id,
     time: timeSince(approval.created_at),
-    href: "/operations",
+    href: `/operations?decision_id=${encodeURIComponent(approval.id)}`,
   }));
   const staleEvents = data.staleAttempts.slice(0, 1).map((attempt): ProofEvent => ({
     tone: "Stale",
@@ -1012,7 +990,7 @@ function buildProofEvents(data: HomeData): ProofEvent[] {
     outcome: attempt.status,
     signature: attempt.plan_digest.slice(0, 12),
     time: timeSince(attempt.updated_at),
-    href: "/operations",
+    href: `/operations?action_id=${encodeURIComponent(attempt.action_id)}`,
   }));
   return [...outcomeEvents, ...approvalEvents, ...staleEvents].slice(0, 6);
 }
@@ -1085,11 +1063,7 @@ function HomeAuthRequired() {
 export default function HomePage() {
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
-  const dateRange = useDashboardStore((state) => state.dateRange);
-  const setDateRange = useDashboardStore((state) => state.setDateRange);
-  const summaryDays = useMemo(() => homeWindowDays(dateRange), [dateRange]);
   const [data, setData] = useState<HomeData>(EMPTY_DATA);
-  const [availability, setAvailability] = useState<HomeAvailability>(NO_SOURCES_AVAILABLE);
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
   const [loadIssue, setLoadIssue] = useState<HomeLoadIssue>(null);
@@ -1100,7 +1074,7 @@ export default function HomePage() {
     setIsLoading(true);
     try {
       if (localDemoHomeEnabled()) {
-        const summary = demoHomeSummary(summaryDays);
+        const summary = demoHomeSummary(HOME_SUMMARY_DAYS);
         if (signal?.aborted) return;
         setData({
           ...missionDataFromSummary(summary),
@@ -1137,7 +1111,6 @@ export default function HomePage() {
             },
           ],
         });
-        setAvailability(availabilityFromSummary(summary));
         setLoadErrors(0);
         setLoadIssue(null);
         setLastLoadedAt(summary.generated_at);
@@ -1145,7 +1118,7 @@ export default function HomePage() {
         return;
       }
       const [summary, coverage, incidents, projects] = await Promise.all([
-        getHomeSummary(summaryDays, signal),
+        getHomeSummary(HOME_SUMMARY_DAYS, signal),
         fetchOutcomeGraphCoverage(signal).catch(() => null),
         listFinalIncidents(signal).catch(() => null),
         listMyProjects(signal).catch(() => []),
@@ -1159,14 +1132,12 @@ export default function HomePage() {
         : projects[0] ?? null;
       const nextAvailability = availabilityFromSummary(summary);
       setData({ ...missionDataFromSummary(summary), outcomeGraphCoverage: coverage, incidents });
-      setAvailability(nextAvailability);
       setLoadErrors(unavailableSourceCount(nextAvailability));
       setLoadIssue(null);
       setLastLoadedAt(summary.generated_at ?? new Date().toISOString());
       setProjectRole(project?.role ?? null);
     } catch (error) {
       if (signal?.aborted) return;
-      setAvailability(NO_SOURCES_AVAILABLE);
       setData(EMPTY_DATA);
       setLoadErrors(isUnauthorizedError(error) ? 0 : unavailableSourceCount(NO_SOURCES_AVAILABLE));
       setLoadIssue(isUnauthorizedError(error) ? "auth" : "source");
@@ -1174,7 +1145,7 @@ export default function HomePage() {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [selectedProject, summaryDays]);
+  }, [selectedProject]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1202,17 +1173,13 @@ export default function HomePage() {
   const displayedAttentionRows = demoMode ? DEMO_ATTENTION_ROWS : attentionRows;
   const proofEvents = buildProofEvents(data);
   const displayedProofEvents = demoMode ? DEMO_PROOF_EVENTS : proofEvents;
+  const recoveryActivity = stats
+    ? stats.mismatches + stats.openIncidents + stats.blockedAttempts + stats.needsAttention > 0
+    : false;
   const loading = isLoading && lastLoadedAt == null;
   const authRequired = loadIssue === "auth" && lastLoadedAt == null && !loading;
   const loadFailed = loadIssue === "source" && loadErrors > 0 && lastLoadedAt == null && !loading;
   const firstRun = stats !== null && !active && !loading && !loadFailed && !authRequired;
-
-  function setWindowDays(days: number) {
-    const to = new Date();
-    const from = new Date(to);
-    from.setDate(to.getDate() - days);
-    setDateRange({ from, to });
-  }
 
   return (
     <main className={`${styles.homeDashboard} zh-home`} aria-label="ZROKY Home dashboard">
@@ -1246,8 +1213,6 @@ export default function HomePage() {
             canAct={canAct}
             errorCount={loadErrors}
             quota={quotaWarning(data.billingUsage)}
-            currentWindowDays={summaryDays}
-            onWindowChange={setWindowDays}
             onRefresh={() => void load()}
           />
 
@@ -1260,7 +1225,7 @@ export default function HomePage() {
             </div>
 
             <aside className="zh-right-stack" aria-label="Home side panels">
-              <AgentRecoveryPressure stats={stats} />
+              {recoveryActivity ? <AgentRecoveryPressure stats={stats} /> : null}
               <RecentProof events={displayedProofEvents} empty={displayedProofEvents.length === 0} />
             </aside>
           </div>
