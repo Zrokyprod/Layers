@@ -22,7 +22,7 @@ test.describe("settings and account", () => {
     ];
 
     for (const item of pages) {
-      await page.goto(item.path);
+      await page.goto(item.path, { waitUntil: "networkidle" });
       await expectDashboardShell(page);
       await expectVisibleTexts(page, item.labels);
     }

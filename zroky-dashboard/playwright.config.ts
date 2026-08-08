@@ -34,12 +34,6 @@ export default defineConfig({
       testIgnore: /.*\.setup\.ts/,
       use: { ...devices["Desktop Chrome"], storageState: authStatePath },
     },
-    {
-      name: "mobile-chromium",
-      dependencies: ["setup"],
-      testIgnore: /.*\.setup\.ts/,
-      use: { ...devices["Pixel 5"], storageState: authStatePath },
-    },
     ...(runAllBrowsers
       ? [
           {
@@ -56,6 +50,12 @@ export default defineConfig({
           },
         ]
       : []),
+    {
+      name: "mobile-chromium",
+      dependencies: ["setup"],
+      testIgnore: /.*\.setup\.ts/,
+      use: { ...devices["Pixel 5"], storageState: authStatePath },
+    },
   ],
   webServer: [
     {

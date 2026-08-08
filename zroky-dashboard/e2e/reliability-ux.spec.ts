@@ -51,7 +51,7 @@ test.describe("dashboard release structure", () => {
 
     for (const route of canonicalRoutes) {
       await test.step(route, async () => {
-        await page.goto(route);
+        await page.goto(route, { waitUntil: "networkidle" });
         await expectDashboardShell(page);
         await expectAccessiblePageStructure(page);
       });

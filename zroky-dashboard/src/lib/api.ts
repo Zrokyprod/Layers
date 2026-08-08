@@ -1088,7 +1088,7 @@ async function refreshAuthSession(): Promise<boolean> {
 
     if (!response.ok) {
       if (response.status === 401) {
-        clearAuthSession(); // refresh token genuinely rejected — log out
+        void clearAuthSession(); // refresh token genuinely rejected — log out
       }
       return false;
     }

@@ -396,11 +396,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     });
   }
 
-  function onLogout() {
+  async function onLogout() {
     setOpenMenu(null);
-    clearAccessToken();
+    await clearAccessToken();
     router.replace("/login?logged_out=1");
-    router.refresh();
   }
 
   return (
@@ -539,7 +538,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     className="user-menu-item user-menu-danger"
                     role="menuitem"
                     aria-label="Log out"
-                    onClick={onLogout}
+                    onClick={() => void onLogout()}
                   >
                     <LogOut size={15} aria-hidden="true" />
                     <span>
