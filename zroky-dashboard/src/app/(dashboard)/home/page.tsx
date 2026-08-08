@@ -514,6 +514,12 @@ function buildReadinessRows(data: HomeData): ReadinessRow[] {
   const testedConnectors = health?.tested_sor_connectors ?? 0;
   const configuredPacks = health?.configured_action_packs ?? 0;
   const onlineRunners = health?.online_runners ?? 0;
+  const productionRunners = (data.homeSummary?.data?.action_runners ?? []).filter(
+    (runner) => runner.environment === "production" && runner.status !== "disabled",
+  );
+  const runnerHref = data.homeSummary?.project_id
+    ? `/projects/${encodeURIComponent(data.homeSummary.project_id)}`
+    : "/projects";
   const policyReady = Boolean(
     health
     && health.active_agents > 0
@@ -557,10 +563,18 @@ function buildReadinessRows(data: HomeData): ReadinessRow[] {
     },
     {
       component: "Protected action runner",
-      status: !health ? "Stale" : onlineRunners > 0 ? "Ready" : "Missing",
-      details: !health ? "Control health unavailable" : `${formatCount(onlineRunners)} action runners online`,
+      status: !health
+        ? "Stale"
+        : productionRunners.length === 0
+          ? "Missing"
+          : onlineRunners >= productionRunners.length
+            ? "Ready"
+            : "Stale",
+      details: !health
+        ? "Control health unavailable"
+        : `${formatCount(onlineRunners)} of ${formatCount(productionRunners.length)} production runners online`,
       action: "View",
-      href: "/operations",
+      href: runnerHref,
       postureRelevant: false,
     },
     {

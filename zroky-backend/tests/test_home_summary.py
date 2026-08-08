@@ -15,6 +15,7 @@ from app.db.models import (
     ActionContractVersion,
     ActionIntent,
     ActionReceipt,
+    ActionRunner,
     OutcomeReconciliationCheck,
     Project,
     RuntimePolicyDecision,
@@ -224,3 +225,47 @@ def test_home_summary_reports_missing_production_attestation_key(client: TestCli
 
     assert response.status_code == 200
     assert response.json()["data"]["control_health"]["attestation_signing_ready"] is False
+
+
+def test_home_summary_only_counts_fresh_production_runner_heartbeats(client: TestClient) -> None:
+    project_id = "proj_home_runner_health"
+    now = datetime.now(timezone.utc)
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        session.add(Project(id=project_id, name="Home runner health", is_active=True))
+        session.add_all(
+            [
+                ActionRunner(
+                    id="runner_fresh",
+                    project_id=project_id,
+                    name="fresh-production",
+                    runner_type="customer_hosted",
+                    environment="production",
+                    status="online",
+                    last_heartbeat_at=now - timedelta(seconds=30),
+                ),
+                ActionRunner(
+                    id="runner_stale",
+                    project_id=project_id,
+                    name="stale-production",
+                    runner_type="customer_hosted",
+                    environment="production",
+                    status="online",
+                    last_heartbeat_at=now - timedelta(minutes=3),
+                ),
+                ActionRunner(
+                    id="runner_development",
+                    project_id=project_id,
+                    name="fresh-development",
+                    runner_type="customer_hosted",
+                    environment="development",
+                    status="online",
+                    last_heartbeat_at=now,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/v1/home/summary?days=7", headers={"x-project-id": project_id})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["control_health"]["online_runners"] == 1
