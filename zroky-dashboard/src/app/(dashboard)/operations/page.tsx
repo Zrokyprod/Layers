@@ -600,6 +600,12 @@ function selectionFromUrl(
 
   const intentId = params.get("intent_id");
   if (intentId) {
+    const activeIncident = incidents.find(
+      (item) =>
+        recordOptionalText(item.incident, "intent_id") === intentId &&
+        !["resolved", "closed"].includes(item.status),
+    );
+    if (activeIncident) return { agentName: null, id: activeIncident.id, tab: "incidents" };
     const run = runs.find((item) => item.intent_id === intentId);
     if (run) return { agentName: null, id: run.id, tab: "runs" };
     const incident = incidents.find((item) => recordOptionalText(item.incident, "intent_id") === intentId);
