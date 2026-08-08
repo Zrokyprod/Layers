@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,8 +17,6 @@ const api = vi.hoisted(() => ({
 const storeState = vi.hoisted(() => ({
   selectedProject: "proj_1",
   realTimeEnabled: false,
-  dateRange: { from: null, to: null },
-  setDateRange: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -42,8 +40,6 @@ vi.mock("@/lib/store", () => ({
     selector: (state: {
       selectedProject: string;
       realTimeEnabled: boolean;
-      dateRange: { from: Date | null; to: Date | null };
-      setDateRange: (range: { from: Date | null; to: Date | null }) => void;
     }) => T,
   ) => selector(storeState),
 }));
@@ -76,8 +72,8 @@ function project(role = "owner"): CurrentUserProjectResponse {
 function summary(overrides: Partial<HomeSummaryResponse> = {}): HomeSummaryResponse {
   return {
     project_id: "proj_1",
-    window_days: 7,
-    window_start: "2026-05-22T10:00:00.000Z",
+    window_days: 30,
+    window_start: "2026-04-29T10:00:00.000Z",
     generated_at: now,
     metrics: {
       controlled_actions: 300,
@@ -336,10 +332,6 @@ describe("Home dashboard", () => {
     api.listMyProjects.mockResolvedValue([project()]);
     storeState.selectedProject = "proj_1";
     storeState.realTimeEnabled = false;
-    storeState.dateRange = { from: null, to: null };
-    storeState.setDateRange.mockImplementation((range) => {
-      storeState.dateRange = range;
-    });
     window.history.pushState({}, "", "/home");
     window.localStorage.clear();
   });
@@ -361,7 +353,10 @@ describe("Home dashboard", () => {
     expect(screen.queryByLabelText("Agent/system scope")).not.toBeInTheDocument();
 
     const proofMetrics = screen.getByLabelText("Proof metrics");
-    expect(within(proofMetrics).getByText("Mismatches caught")).toBeInTheDocument();
+    const caughtCell = within(proofMetrics).getByText("Mismatches caught").closest("a");
+    expect(caughtCell?.getAttribute("href")).toBe("/evidence?filter=caught");
+    const provenCell = within(proofMetrics).getByText("Proven outcomes").closest("a");
+    expect(provenCell?.getAttribute("href")).toBe("/evidence?filter=proven");
     expect(within(proofMetrics).getByText("3")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("Coverage")).toBeInTheDocument();
     expect(within(proofMetrics).getByText("94%")).toBeInTheDocument();
@@ -370,7 +365,11 @@ describe("Home dashboard", () => {
     expect(within(needsAttention as HTMLElement).getByText("0")).toBeInTheDocument();
 
     expect(screen.getByText("Connector test-read")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open approvals" }).getAttribute("href")).toBe("/operations");
+    expect(screen.getByRole("link", { name: "Open approvals" }).getAttribute("href")).toBe("/operations?view=approvals");
+    expect(screen.queryByLabelText("Home time window")).not.toBeInTheDocument();
+    const recentEvents = screen.getByLabelText("Recent control events");
+    expect(within(recentEvents).getByText(/Mismatch caught in/).closest("a")?.getAttribute("href")).toBe("/evidence?filter=caught");
+    expect(within(recentEvents).getByText("caught")).toBeInTheDocument();
     expect(screen.queryByText("Good morning")).not.toBeInTheDocument();
     expect(screen.queryByText("Mission Control")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Agent health over time")).not.toBeInTheDocument();
@@ -421,6 +420,7 @@ describe("Home dashboard", () => {
     const approvalCell = within(metrics).getByText("Pending approvals").closest("a");
     expect(approvalCell).not.toBeNull();
     expect(within(approvalCell as HTMLElement).getByText("2")).toBeInTheDocument();
+    expect(approvalCell?.getAttribute("href")).toBe("/operations?view=approvals");
   });
 
   it("keeps all-proven posture active when only the separate action runner is offline", async () => {
@@ -469,20 +469,20 @@ describe("Home dashboard", () => {
     expect(screen.getByText("Protected action runner")).toBeInTheDocument();
     expect(screen.getByText("0 of 1 production runners online")).toBeInTheDocument();
     expect(screen.getByText("No current blocker")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "View evidence" })).toHaveLength(1);
+    expect(screen.queryByLabelText("Recovery snapshot")).not.toBeInTheDocument();
     expect(screen.queryByText(/source pollers successful/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no signed receipt generated/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review blocker" })).not.toBeInTheDocument();
   });
 
-  it("refetches summary data when the Home window changes", async () => {
-    const { rerender } = render(<HomePage />);
+  it("uses one fixed support-data window without implying ledger filtering", async () => {
+    render(<HomePage />);
 
-    await waitFor(() => expect(api.getHomeSummary).toHaveBeenCalledWith(7, expect.any(AbortSignal)));
-    fireEvent.click(screen.getByRole("button", { name: "24h" }));
-    expect(storeState.setDateRange).toHaveBeenCalled();
-    rerender(<HomePage />);
-
-    await waitFor(() => expect(api.getHomeSummary).toHaveBeenCalledWith(1, expect.any(AbortSignal)));
+    await waitFor(() => expect(api.getHomeSummary).toHaveBeenCalledWith(30, expect.any(AbortSignal)));
+    expect(screen.queryByRole("button", { name: "24h" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "7d" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "30d" })).not.toBeInTheDocument();
   });
 
   it("keeps owner-only remediation disabled for viewer role", async () => {

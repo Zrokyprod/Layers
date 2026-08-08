@@ -32,7 +32,6 @@ const navState = vi.hoisted(() => ({
     state: string;
     resets_at: string | null;
   },
-  issueCount: 0,
   projectData: { project_id: "proj_1", name: "Acme Corp" } as { project_id: string; name: string } | undefined,
   projectLoading: false,
   myProjects: [
@@ -148,9 +147,6 @@ vi.mock("@tanstack/react-query", () => ({
         isLoading: navState.billingUsageLoading,
       };
     }
-    if (key === "shell-issues-count") {
-      return { data: { items: Array.from({ length: navState.issueCount }, (_, index) => ({ id: `issue_${index}` })) } };
-    }
     return { data: undefined };
   }),
   useQueryClient: () => queryClientState,
@@ -159,7 +155,6 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/lib/api", () => ({
   getBillingMe: vi.fn(),
   getBillingUsage: vi.fn(),
-  listIssues: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -253,7 +248,6 @@ describe("DashboardShell primary navigation", () => {
       state: "ok",
       resets_at: null,
     };
-    navState.issueCount = 0;
     navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
     navState.projectLoading = false;
     navState.myProjects = [
@@ -308,15 +302,6 @@ describe("DashboardShell primary navigation", () => {
     const { container } = render(<DashboardShell>content</DashboardShell>);
 
     expect(container.querySelector(".app-shell")?.getAttribute("data-dashboard-system")).toBe("control-v1");
-  });
-
-  it("keeps incident counts out of the minimal primary nav", () => {
-    navState.issueCount = 3;
-
-    render(<DashboardShell>content</DashboardShell>);
-
-    expect(within(navItem("home") as HTMLElement).queryByText("3")).toBeNull();
-    expect(screen.getByRole("navigation", { name: "Primary" }).querySelector('[data-nav-id="issues"]')).toBeNull();
   });
 
   it("keeps Settings child navigation out of the sidebar", () => {
@@ -634,7 +619,7 @@ describe("DashboardShell primary navigation", () => {
     const topbar = container.querySelector(".topbar");
     const accountButton = screen.getByRole("button", { name: "Open account menu" });
     expect(topbar?.contains(accountButton)).toBe(true);
-    expect(topbar?.contains(screen.getByRole("button", { name: "Notifications" }))).toBe(true);
+    expect(screen.queryByRole("button", { name: "Notifications" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Settings" })).toHaveLength(1);
     expect(topbar?.contains(screen.getByRole("link", { name: "Settings" }))).toBe(false);
