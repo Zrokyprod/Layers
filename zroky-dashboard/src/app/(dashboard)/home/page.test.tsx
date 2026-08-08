@@ -467,7 +467,7 @@ describe("Home dashboard", () => {
     expect(await screen.findByText("3 of 3 outcome graphs have current source proof")).toBeInTheDocument();
     expect(screen.getByText("Ed25519 attestation key configured")).toBeInTheDocument();
     expect(screen.getByText("Protected action runner")).toBeInTheDocument();
-    expect(screen.getByText("0 action runners online")).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 production runners online")).toBeInTheDocument();
     expect(screen.getByText("No current blocker")).toBeInTheDocument();
     expect(screen.queryByText(/source pollers successful/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no signed receipt generated/i)).not.toBeInTheDocument();

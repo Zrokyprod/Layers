@@ -314,9 +314,12 @@ def test_agent_profile_enforce_writes_runtime_policy_and_gate_uses_it(client: Te
         assert runner is not None
         assert runner.name == "payments-agent-runner"
         assert runner.runner_type == "managed_sandbox"
-        assert runner.status == "online"
+        assert runner.status == "registered"
         assert runner.supported_operation_kinds_json == '["TRANSFER"]'
-        assert json.loads(runner.credential_scope_json) == {"credential_ref": "cred_payments_runner"}
+        assert json.loads(runner.credential_scope_json) == {
+            "allowed_prefixes": ["cred_payments_runner"],
+            "default_credential_ref": "cred_payments_runner",
+        }
 
     assert policy["runtime_enabled"] is True
     assert policy["runtime_allowed_tools"] == ["refund", "stripe.refunds.create"]
@@ -552,7 +555,10 @@ def test_agent_profile_enforce_registers_customer_hosted_runner_idempotently(cli
         assert runner.status == "registered"
         assert runner.runner_type == "customer_hosted"
         assert json.loads(runner.supported_operation_kinds_json) == ["UPDATE", "SEND"]
-        assert json.loads(runner.credential_scope_json) == {"credential_ref": "cred_ops_runner_alias"}
+        assert json.loads(runner.credential_scope_json) == {
+            "allowed_prefixes": ["cred_ops_runner_alias"],
+            "default_credential_ref": "cred_ops_runner_alias",
+        }
 
 
 def test_agent_profile_action_type_operation_map_stays_aligned_with_setup_catalog() -> None:

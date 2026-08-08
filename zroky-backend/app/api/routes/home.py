@@ -56,6 +56,7 @@ from app.services.outcome_reconciliation import get_reconciliation_summary, list
 from app.services.source_mutations import list_source_mutations, source_mutation_summary
 
 router = APIRouter(prefix="/v1/home", tags=["home"])
+RUNNER_HEARTBEAT_FRESHNESS = timedelta(minutes=2)
 
 
 def _count(db: Session, statement) -> int:
@@ -174,7 +175,15 @@ def get_home_summary(
         if str((agent.get("metadata") or {}).get("setup_action_pack_id") or "").strip()
     })
     runner_rows = list_action_runners(db, project_id=tenant_id)
-    online_runners = sum(1 for row in runner_rows if row.status == "online")
+    runner_heartbeat_cutoff = datetime.now(timezone.utc) - RUNNER_HEARTBEAT_FRESHNESS
+    online_runners = sum(
+        1
+        for row in runner_rows
+        if row.environment == "production"
+        and row.status == "online"
+        and row.last_heartbeat_at is not None
+        and row.last_heartbeat_at >= runner_heartbeat_cutoff
+    )
     active_sor_connectors = _count(
         db,
         select(func.count(SystemOfRecordConnectorConfig.id)).where(

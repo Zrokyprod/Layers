@@ -456,24 +456,16 @@ def apply_agent_setup_mandate(
             runner_type=runner_type,
             environment=runner_environment,
             supported_operation_kinds=supported_operation_kinds,
-            credential_scope={"credential_ref": credential_ref},
+            credential_scope={
+                "allowed_prefixes": [credential_ref],
+                "default_credential_ref": credential_ref,
+            },
             capability_version="agent-setup.v1",
             registered_by_subject=actor_subject,
         )
     except ActionRunnerError as exc:
         raise AgentProfileMandateError(str(exc)) from exc
     runner = registered_runner.row
-    if runner_type == "managed_sandbox":
-        runner.status = "online"
-        runner.last_heartbeat_at = datetime.now(timezone.utc)
-        runner.heartbeat_payload_json = json_dumps(
-            {
-                "source": "agent_setup_mandate",
-                "managed_by": "zroky",
-            }
-        )
-        db.add(runner)
-
     enforced_at = datetime.now(timezone.utc).isoformat()
     metadata = dict(profile["metadata"])
     metadata["protection_state"] = "enforced"
