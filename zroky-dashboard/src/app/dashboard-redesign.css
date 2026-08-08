@@ -28481,6 +28481,341 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   margin-top: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .projects-page {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: var(--dash-text-soft);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-back-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-console {
+  overflow: hidden;
+  border: 1px solid var(--dash-border);
+  border-radius: 8px;
+  background: var(--dash-surface);
+  box-shadow: var(--dash-shadow);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-command,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-list-panel {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-list-panel {
+  border-top: 1px solid var(--dash-border);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar h1,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar h2,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel h3 {
+  margin: 0;
+  color: var(--dash-text);
+  letter-spacing: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar h1 {
+  font-size: 24px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar h2 {
+  font-size: 22px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar p,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head small,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete p,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete small {
+  margin: 4px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--dash-border);
+  border-radius: 7px;
+  background: var(--dash-surface-subtle);
+  color: var(--dash-text-soft);
+  font-size: 12px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-limit-strip strong {
+  color: var(--dash-text);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel > div {
+  display: flex;
+  gap: 10px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel label,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete label {
+  color: var(--dash-text-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-create-panel input,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 6px;
+  background: var(--dash-surface);
+  color: var(--dash-text);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head span {
+  color: var(--dash-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-section-head strong {
+  color: var(--dash-text);
+  font-size: 15px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table {
+  overflow: hidden;
+  border: 1px solid var(--dash-border);
+  border-radius: 7px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-head,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.8fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(130px, 0.8fr);
+  align-items: center;
+  gap: 16px;
+  padding: 11px 14px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-head {
+  border-bottom: 1px solid var(--dash-border);
+  background: var(--dash-surface-subtle);
+  color: var(--dash-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+  color: var(--dash-text-soft);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row + .settings-project-table-row {
+  border-top: 1px solid var(--dash-border);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-table-row.is-selected {
+  background: var(--dash-blue-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-name-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-name-cell strong {
+  color: var(--dash-text);
+  font-size: 13px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-state svg {
+  width: 15px;
+  height: 15px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-state.is-active {
+  color: var(--dash-green-strong);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .projects-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
+  border-top: 1px solid var(--dash-border);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel {
+  min-width: 0;
+  padding: 24px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel + .settings-project-details-panel {
+  border-left: 1px solid var(--dash-border);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel h3 {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel header span:first-child {
+  color: var(--dash-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+  padding: 13px 0;
+  border-block: 1px solid var(--dash-border);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context > div,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete {
+  display: grid;
+  gap: 5px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context span,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list dt {
+  color: var(--dash-text-muted);
+  font-size: 11px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-context strong,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list dd {
+  color: var(--dash-text);
+  font-size: 13px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list > div {
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-details-list dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-delete .btn-danger,
+.app-shell[data-dashboard-system="control-v1"] .settings-project-active-button {
+  width: fit-content;
+  margin-top: 8px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .settings-project-empty {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 30px;
+  color: var(--dash-text-soft);
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  .app-shell[data-dashboard-system="control-v1"] .projects-page {
+    padding: 16px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .projects-limit-strip,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-head,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-row,
+  .app-shell[data-dashboard-system="control-v1"] .projects-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-head {
+    display: none;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-table-row {
+    gap: 8px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel + .settings-project-details-panel {
+    border-top: 1px solid var(--dash-border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-command,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-list-panel,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel {
+    padding: 18px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-toolbar,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-section-head,
+  .app-shell[data-dashboard-system="control-v1"] .projects-create-panel > div,
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-panel > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .settings-project-details-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 .app-shell[data-dashboard-system="control-v1"] .project-runner-section {
   display: grid;
   gap: 18px;
