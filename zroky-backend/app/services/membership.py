@@ -76,10 +76,12 @@ def projects_where_user_is_last_active_owner(db: Session, *, user_id: str) -> li
         active_owner_count = db.execute(
             select(func.count())
             .select_from(ProjectMembership)
+            .join(User, User.id == ProjectMembership.user_id)
             .where(
                 ProjectMembership.project_id == project.id,
                 ProjectMembership.role == "owner",
                 ProjectMembership.is_active.is_(True),
+                User.is_active.is_(True),
             )
         ).scalar_one()
         if active_owner_count <= 1:

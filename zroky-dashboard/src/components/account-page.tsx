@@ -31,6 +31,7 @@ import {
 import { clearAccessToken } from "@/lib/auth";
 import { useChangePassword, useMe, useUpdateMe } from "@/lib/hooks";
 import { passwordChangeSchema, type PasswordChangeFormData } from "@/lib/schemas";
+import { useDashboardStore } from "@/lib/store";
 import type { BillingMeResponse, BillingUsageMeter, BillingUsageResponse, SecurityStatusResponse } from "@/lib/types";
 import { formatPlanLabel } from "./feature-gate";
 import { DashboardButton, DashboardButtonLink } from "./dashboard-button";
@@ -52,14 +53,15 @@ function sessionExpiryLabel(value: string | null | undefined): string {
 function accountPostureLabel(me: ReturnType<typeof useMe>["data"] | null, security: SecurityStatusResponse | null): string {
   if (!me || !security) return "Checking";
   const hasLoginMethod = security.password_login_enabled || security.github_connected || security.google_connected;
-  if (me.email_verified && hasLoginMethod && security.global_logout_available) return "Controlled";
   if (!me.email_verified) return "Review email";
+  if (!hasLoginMethod) return "Limited login";
   if (!security.global_logout_available) return "Session review";
-  return "Limited login";
+  if (security.password_login_enabled && !security.two_factor_enabled) return "Add MFA";
+  return "Controlled";
 }
 
-function formatBillingMeter(meter: BillingUsageMeter | null | undefined): string {
-  if (!meter) return "Loading";
+function formatBillingMeter(meter: BillingUsageMeter | null | undefined, loading: boolean): string {
+  if (!meter) return loading ? "Loading" : "Unavailable";
   const used = meter.used.toLocaleString();
   if (meter.unlimited || meter.limit == null) return `${used} used`;
   return `${used} / ${meter.limit.toLocaleString()}`;
@@ -67,6 +69,7 @@ function formatBillingMeter(meter: BillingUsageMeter | null | undefined): string
 
 export default function AccountPage() {
   const router = useRouter();
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const meQuery = useMe();
   const updateMeMutation = useUpdateMe();
   const changePasswordMutation = useChangePassword();
@@ -113,6 +116,7 @@ export default function AccountPage() {
     : securityMessage && !security
       ? "Needs review"
       : accountPostureLabel(me, security);
+  const accountPostureNeedsReview = accountPosture !== "Controlled" && accountPosture !== "Checking";
   const accountInitial = displayName.charAt(0).toUpperCase();
   const profileIsDirty = displayNameInput.trim() !== (me?.display_name ?? "").trim();
   const connectedLogin = securityLoading ? "Loading" : security ? connectedLoginLabel(security) : "Unavailable";
@@ -145,6 +149,8 @@ export default function AccountPage() {
   const planStatus = billingLoading ? "Loading" : billingMe?.status ?? "Unavailable";
   const planPayment = billingLoading
     ? "Loading payment"
+    : !billingMe
+      ? "Unavailable"
     : billingMe?.payment_subscription_ref
       ? "Payment confirmed"
       : billingMe?.payment_request_ref
@@ -156,17 +162,17 @@ export default function AccountPage() {
     {
       icon: <ShieldCheck aria-hidden="true" />,
       label: "Protected actions",
-      value: formatBillingMeter(billingUsage?.protected_actions),
+      value: formatBillingMeter(billingUsage?.protected_actions, billingLoading),
     },
     {
       icon: <ReceiptText aria-hidden="true" />,
       label: "Receipts",
-      value: formatBillingMeter(billingUsage?.action_receipts),
+      value: formatBillingMeter(billingUsage?.action_receipts, billingLoading),
     },
     {
       icon: <Gauge aria-hidden="true" />,
       label: "Connectors",
-      value: formatBillingMeter(billingUsage?.active_connectors),
+      value: formatBillingMeter(billingUsage?.active_connectors, billingLoading),
     },
   ];
   const accountStatusItems = [
@@ -194,7 +200,7 @@ export default function AccountPage() {
     {
       icon: <Fingerprint aria-hidden="true" />,
       label: "Authenticator",
-      value: securityLoading ? "Loading" : security?.two_factor_enabled ? "Enabled" : "Not enabled",
+      value: securityLoading ? "Loading" : !security ? "Unavailable" : security.two_factor_enabled ? "Enabled" : "Not enabled",
       detail: "Required after password sign-in.",
       tone: security?.two_factor_enabled ? "ready" : "warn",
     },
@@ -226,26 +232,40 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => {
-    void loadSecurity();
-  }, [loadSecurity]);
+    if (me && !loadError) void loadSecurity();
+  }, [loadError, loadSecurity, me]);
 
-  const loadBilling = useCallback(async () => {
+  const loadBilling = useCallback(async (signal?: AbortSignal) => {
     setBillingLoading(true);
     setBillingMessage("");
+    setBillingMe(null);
+    setBillingUsage(null);
+    if (!selectedProject) {
+      setBillingMessage("Select a workspace to load plan and usage data.");
+      setBillingLoading(false);
+      return;
+    }
     try {
-      const [meBilling, usage] = await Promise.all([getBillingMe(), getBillingUsage()]);
+      const [meBilling, usage] = await Promise.all([
+        getBillingMe(signal, selectedProject),
+        getBillingUsage(signal, selectedProject),
+      ]);
       setBillingMe(meBilling);
       setBillingUsage(usage);
     } catch (err) {
+      if (signal?.aborted) return;
       setBillingMessage(err instanceof Error ? err.message : "Failed to load billing status.");
     } finally {
-      setBillingLoading(false);
+      if (!signal?.aborted) setBillingLoading(false);
     }
-  }, []);
+  }, [selectedProject]);
 
   useEffect(() => {
-    void loadBilling();
-  }, [loadBilling]);
+    if (!me || loadError) return;
+    const controller = new AbortController();
+    void loadBilling(controller.signal);
+    return () => controller.abort();
+  }, [loadBilling, loadError, me]);
 
   async function onUpdateProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -359,6 +379,28 @@ export default function AccountPage() {
     }
   }
 
+  if (meQuery.isLoading || (!me && !loadError)) {
+    return (
+      <div className="page-content account-page settings-profile-page">
+        <section className="panel" aria-label="Account status">
+          <h1>Loading account</h1>
+          <div className="loading" />
+        </section>
+      </div>
+    );
+  }
+
+  if (loadError || !me) {
+    return (
+      <div className="page-content account-page settings-profile-page">
+        <section className="panel" aria-label="Account status">
+          <h1>Account unavailable</h1>
+          <p className="account-message is-error">{loadError || "Account data is unavailable."}</p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page-content account-page settings-profile-page">
       <section className="account-overview-panel" aria-label="Account overview">
@@ -374,7 +416,7 @@ export default function AccountPage() {
           </div>
         </div>
         <div className="account-overview-side">
-          <span className={`account-posture-badge is-${accountPosture.toLowerCase().replaceAll(" ", "-")}`}>
+          <span className={`account-posture-badge${accountPostureNeedsReview ? " is-needs-review" : ""}`}>
             {accountPosture}
           </span>
           <span>Member since {memberSince}</span>
@@ -448,7 +490,7 @@ export default function AccountPage() {
           {mfaError ? <p className="account-message is-error">{mfaError}</p> : null}
           {mfaMessage ? <p className="account-message is-success">{mfaMessage}</p> : null}
 
-          {!security?.two_factor_enabled && !mfaSetup ? (
+          {security && !security.two_factor_enabled && !mfaSetup ? (
             <DashboardButton
               type="button"
               variant="primary"
@@ -479,6 +521,7 @@ export default function AccountPage() {
                   value={mfaPassword}
                   onChange={(event) => setMfaPassword(event.target.value)}
                   autoComplete="current-password"
+                  required
                 />
               </div>
               <div className="field profile-field-gap-md">
@@ -488,11 +531,14 @@ export default function AccountPage() {
                   className="input"
                   inputMode="numeric"
                   value={mfaCode}
-                  onChange={(event) => setMfaCode(event.target.value)}
+                  onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                   autoComplete="one-time-code"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  required
                 />
               </div>
-              <DashboardButton type="submit" variant="primary" loading={mfaLoading}>
+              <DashboardButton type="submit" variant="primary" loading={mfaLoading} disabled={mfaLoading || !mfaPassword || mfaCode.length !== 6}>
                 Enable authenticator
               </DashboardButton>
             </form>
@@ -509,6 +555,7 @@ export default function AccountPage() {
                   value={mfaPassword}
                   onChange={(event) => setMfaPassword(event.target.value)}
                   autoComplete="current-password"
+                  required
                 />
               </div>
               <div className="field profile-field-gap-md">
@@ -518,11 +565,14 @@ export default function AccountPage() {
                   className="input"
                   inputMode="numeric"
                   value={mfaCode}
-                  onChange={(event) => setMfaCode(event.target.value)}
+                  onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                   autoComplete="one-time-code"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  required
                 />
               </div>
-              <DashboardButton type="submit" variant="danger" loading={mfaLoading}>
+              <DashboardButton type="submit" variant="danger" loading={mfaLoading} disabled={mfaLoading || !mfaPassword || mfaCode.length !== 6}>
                 Disable authenticator
               </DashboardButton>
             </form>
@@ -533,7 +583,7 @@ export default function AccountPage() {
           <DashboardButton
             type="button"
             variant="danger"
-            disabled={logoutAllLoading || security?.global_logout_available === false}
+            disabled={logoutAllLoading || security?.global_logout_available !== true}
             loading={logoutAllLoading}
             icon={<LogOut />}
             onClick={() => setShowLogoutAllConfirm(true)}
@@ -694,7 +744,9 @@ export default function AccountPage() {
             {deleteError && <div className="auth-banner auth-banner-error">{deleteError}</div>}
             <p className="profile-danger-hint">Type your email address to confirm deletion.</p>
             <div className="field profile-field-gap-md">
+              <label htmlFor="delete-account-email" className="field-label">Confirmation email</label>
               <input
+                id="delete-account-email"
                 type="email"
                 className="input"
                 placeholder={me?.email ?? "your@email.com"}
@@ -707,7 +759,7 @@ export default function AccountPage() {
                 type="button"
                 variant="danger"
                 icon={<CheckCircle2 />}
-                disabled={!me?.email || deleteInput !== me.email || deleteLoading}
+                disabled={!me.email || deleteInput.trim().toLowerCase() !== me.email.trim().toLowerCase() || deleteLoading}
                 loading={deleteLoading}
                 onClick={() => void onDeleteAccount()}
               >
@@ -719,6 +771,7 @@ export default function AccountPage() {
                 onClick={() => {
                   setShowDeleteConfirm(false);
                   setDeleteInput("");
+                  setDeleteError("");
                 }}
               >
                 Cancel

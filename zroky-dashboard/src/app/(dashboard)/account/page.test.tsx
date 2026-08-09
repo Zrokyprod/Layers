@@ -27,7 +27,13 @@ const hooks = vi.hoisted(() => ({
     email_verified: true,
     created_at: "2026-05-29T10:00:00.000Z",
   },
+  meError: null as Error | null,
+  meLoading: false,
   updateMeMutateAsync: vi.fn(),
+}));
+
+const store = vi.hoisted(() => ({
+  selectedProject: "proj_1" as string | null,
 }));
 
 const navigation = vi.hoisted(() => ({
@@ -44,6 +50,10 @@ vi.mock("@/lib/auth", () => ({
   clearAccessToken: vi.fn(),
 }));
 
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: typeof store) => T) => selector(store),
+}));
+
 vi.mock("@/lib/hooks", () => ({
   useChangePassword: () => ({
     mutateAsync: hooks.changePasswordMutateAsync,
@@ -51,7 +61,8 @@ vi.mock("@/lib/hooks", () => ({
   }),
   useMe: () => ({
     data: hooks.me,
-    error: null,
+    error: hooks.meError,
+    isLoading: hooks.meLoading,
   }),
   useUpdateMe: () => ({
     mutateAsync: hooks.updateMeMutateAsync,
@@ -73,6 +84,9 @@ describe("AccountPage", () => {
     hooks.me.has_password = true;
     hooks.me.github_login = "sanket";
     hooks.me.google_id = null;
+    hooks.meError = null;
+    hooks.meLoading = false;
+    store.selectedProject = "proj_1";
     hooks.updateMeMutateAsync.mockResolvedValue(hooks.me);
     hooks.changePasswordMutateAsync.mockResolvedValue({ detail: "Password changed successfully." });
     api.getSecurityStatus.mockResolvedValue({
@@ -133,7 +147,7 @@ describe("AccountPage", () => {
 
     expect(screen.getByRole("heading", { name: "Sanket K." })).toBeInTheDocument();
     expect(screen.getByLabelText("Account overview")).toBeInTheDocument();
-    expect(await screen.findByText("Controlled")).toBeInTheDocument();
+    expect(await screen.findByText("Add MFA")).toBeInTheDocument();
     expect(screen.getByLabelText("Account security")).toBeInTheDocument();
     expect(await screen.findByLabelText("Account plan")).toBeInTheDocument();
     expect(screen.getByText("Team Plan")).toBeInTheDocument();
@@ -203,6 +217,56 @@ describe("AccountPage", () => {
 
     expect(await screen.findAllByText("Unavailable")).not.toHaveLength(0);
     expect((screen.getByRole("button", { name: /Log out all sessions/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("does not infer security or billing states when their APIs fail", async () => {
+    api.getSecurityStatus.mockRejectedValue(new Error("Security unavailable."));
+    api.getBillingMe.mockRejectedValue(new Error("Billing unavailable."));
+    api.getBillingUsage.mockRejectedValue(new Error("Billing unavailable."));
+
+    render(<AccountPage />);
+
+    expect(await screen.findByText("Security unavailable.")).toBeInTheDocument();
+    expect(await screen.findByText("Billing unavailable.")).toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No paid checkout")).not.toBeInTheDocument();
+    expect((screen.getByRole("button", { name: /Log out all sessions/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("reloads billing for the selected workspace", async () => {
+    const view = render(<AccountPage />);
+    await waitFor(() => expect(api.getBillingMe).toHaveBeenCalledWith(expect.any(AbortSignal), "proj_1"));
+
+    store.selectedProject = "proj_2";
+    view.rerender(<AccountPage />);
+
+    await waitFor(() => expect(api.getBillingMe).toHaveBeenCalledWith(expect.any(AbortSignal), "proj_2"));
+    expect(api.getBillingUsage).toHaveBeenCalledWith(expect.any(AbortSignal), "proj_2");
+  });
+
+  it("does not render placeholder identity when account loading fails", () => {
+    hooks.meError = new Error("Account service unavailable.");
+    render(<AccountPage />);
+
+    expect(screen.getByRole("heading", { name: "Account unavailable" })).toBeInTheDocument();
+    expect(screen.getByText("Account service unavailable.")).toBeInTheDocument();
+    expect(screen.queryByText("No email set")).not.toBeInTheDocument();
+  });
+
+  it("accepts case-insensitive email confirmation for account deletion", async () => {
+    api.deleteAccount.mockResolvedValue({ detail: "Account deleted successfully." });
+    render(<AccountPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
+    fireEvent.change(screen.getByLabelText("Confirmation email"), {
+      target: { value: " OWNER@EXAMPLE.COM " },
+    });
+    const deleteButton = screen.getByRole("button", { name: "Permanently delete account" });
+    expect((deleteButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => expect(api.deleteAccount).toHaveBeenCalledWith("OWNER@EXAMPLE.COM"));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/login"));
   });
 
   it("requires confirmation before revoking every session", async () => {
