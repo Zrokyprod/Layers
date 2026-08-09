@@ -23,6 +23,7 @@ import {
   containFinalIncident,
   denyFinalApprovalRequirement,
   executeFinalIncidentRecovery,
+  fetchOutcomeGraphs,
   listFinalApprovalRequirements,
   listFinalIncidents,
   listFinalRuns,
@@ -32,6 +33,7 @@ import {
   type FinalApprovalRequirementResponse,
   type FinalIncidentResponse,
   type FinalRunResponse,
+  type OutcomeGraphRow,
 } from "@/lib/api";
 import { useDashboardStore } from "@/lib/store";
 
@@ -76,6 +78,8 @@ type OpsRow = {
   createdAt: string;
   timeline: string[];
   reasonCode?: UnverifiableReason;
+  evidenceHref?: string;
+  proofState?: string;
 };
 
 type AgentStat = {
@@ -106,6 +110,7 @@ const TABS: Array<{ id: OpsTab; label: string }> = [
 const EMPTY_RUNS: FinalRunResponse[] = [];
 const EMPTY_INCIDENTS: FinalIncidentResponse[] = [];
 const EMPTY_APPROVALS: FinalApprovalRequirementResponse[] = [];
+const EMPTY_GRAPHS: OutcomeGraphRow[] = [];
 const SAVED_VIEWS: SavedView[] = [
   "All",
   "Critical",
@@ -379,13 +384,25 @@ function approvalRow(approval: FinalApprovalRequirementResponse): OpsRow {
   };
 }
 
-function runRow(run: FinalRunResponse): OpsRow {
+function runRow(run: FinalRunResponse, graph?: OutcomeGraphRow): OpsRow {
   const status = run.status.toLowerCase();
   const isFailed = /fail|dead|error|recovery/.test(status);
-  const isUnverifiable = /unver|unknown|missing|not_verified/.test(status);
-  const reasonCode = isUnverifiable ? runUnverifiableReason(run) : undefined;
+  const proofState = graph?.classification ?? graph?.verification_status;
+  const isUnverifiable = proofState
+    ? ["stale", "conflicted", "unknown"].includes(proofState)
+    : /unver|unknown|missing|not_verified/.test(status);
+  const reasonCode = isUnverifiable
+    ? graph?.reason_code
+      ? unverifiableReason(graph.reason_code)
+      : graph
+        ? undefined
+        : runUnverifiableReason(run)
+    : undefined;
   const reasonAction = reasonCode ? actionForReason(reasonCode) : null;
   const reasonDetail = reasonCode ? detailForReason(reasonCode) : null;
+  const proofDetail = proofState
+    ? `Agent run is ${run.status}; source-of-record proof is ${proofState}.`
+    : `Run state is ${run.status}; no linked outcome proof is available.`;
   return {
     id: run.id,
     runId: run.id,
@@ -394,32 +411,49 @@ function runRow(run: FinalRunResponse): OpsRow {
     item: run.workflow_key ?? run.external_run_id ?? run.id,
     source: run.environment,
     agent: runAgent(run),
-    state: run.status,
+    state: proofState ? `${run.status} / proof ${proofState}` : run.status,
     age: formatAge(run.created_at),
     owner: "Ops",
-    action: isFailed ? "Retry" : reasonAction ?? "Open",
+    action: isFailed ? "Retry" : reasonAction ?? (graph ? "Open evidence" : "Open"),
     href: `/operations?run_id=${encodeURIComponent(run.id)}`,
     expected: "Run should produce an independently verifiable source-of-truth outcome.",
-    actual: reasonDetail ?? `Run state is ${run.status}.`,
+    actual: reasonDetail ?? proofDetail,
     impact: isUnverifiable
       ? "Blind spot: this outcome must stay amber until the proof gap is fixed or explicitly accepted with expiry."
       : isFailed
         ? "Recovery rail needs operator attention."
-        : "Operational audit trail available.",
-    digest: run.run_digest,
+        : proofState === "verified"
+          ? "Source-of-record proof is verified."
+          : "Operational audit trail available.",
+    digest: graph?.graph_digest ?? run.run_digest,
     createdAt: run.created_at,
     timeline: reasonCode
       ? ["Run registered", `Unverifiable reason: ${reasonCode}`, `Next action: ${reasonAction}`]
-      : ["Run registered", "Policy and proof rail linked", "Awaiting final evidence state"],
+      : proofState
+        ? ["Run registered", "Outcome graph linked", `Proof classified as ${proofState}`]
+        : ["Run registered", "No linked outcome proof"],
     reasonCode,
+    evidenceHref: graph ? `/evidence?graph_id=${encodeURIComponent(graph.id)}` : undefined,
+    proofState,
   };
 }
 
-function buildRows(runs: FinalRunResponse[], incidents: FinalIncidentResponse[], approvals: FinalApprovalRequirementResponse[]): OpsRow[] {
+function buildRows(
+  runs: FinalRunResponse[],
+  incidents: FinalIncidentResponse[],
+  approvals: FinalApprovalRequirementResponse[],
+  graphs: OutcomeGraphRow[],
+): OpsRow[] {
+  const graphsByRunId = new Map(
+    graphs.flatMap((graph) => {
+      const runId = recordOptionalText(graph.graph, "run_id");
+      return runId ? [[runId, graph] as const] : [];
+    }),
+  );
   return [
     ...incidents.filter((item) => item.status !== "resolved").map(incidentRow),
     ...approvals.filter((item) => item.status === "pending").map(approvalRow),
-    ...runs.map(runRow),
+    ...runs.map((run) => runRow(run, graphsByRunId.get(run.id))),
   ];
 }
 
@@ -736,6 +770,7 @@ function DetailDrawer({
         <Field label="State" value={row.state} />
         <Field label="Owner" value={row.owner} />
         <Field label="Digest" value={text(row.digest).slice(0, 18)} />
+        {row.proofState ? <Field label="Proof" value={row.proofState} /> : null}
       </div>
       {row.type === "Mismatch" ? (
         <section className={styles.drawerSection}>
@@ -947,7 +982,12 @@ function DetailDrawer({
       ) : null}
       <section className={styles.drawerSection}>
         <h3>Evidence bundle</h3>
-        <p>View, generate, verify, copy link, or export audit bundle from the linked evidence record.</p>
+        <p>{row.proofState ? `Outcome proof is ${row.proofState}.` : "No linked outcome proof is available for this operation."}</p>
+        {row.evidenceHref ? (
+          <Link href={row.evidenceHref}>
+            Open evidence record <ExternalLink size={12} aria-hidden="true" />
+          </Link>
+        ) : null}
       </section>
       <section className={styles.drawerSection}>
         <h3>Audit timeline</h3>
@@ -995,6 +1035,12 @@ export default function OperationsPage() {
     enabled: !localPreview,
     ...liveQueryOptions,
   });
+  const outcomeGraphs = useQuery({
+    queryKey: ["outcome-graphs", "operations"],
+    queryFn: ({ signal }) => fetchOutcomeGraphs({ limit: 100 }, signal),
+    enabled: !localPreview,
+    ...liveQueryOptions,
+  });
   const projects = useQuery({ queryKey: ["my-projects"], queryFn: ({ signal }) => listMyProjects(signal), enabled: !localPreview });
 
   const [activeTab, setActiveTab] = useState<OpsTab>("attention");
@@ -1002,16 +1048,17 @@ export default function OperationsPage() {
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [incidentLocalStates, setIncidentLocalStates] = useState<Record<string, IncidentLocalState>>({});
   const [searchTerm, setSearchTerm] = useState("");
-  const hasError = runs.isError || incidents.isError || approvals.isError;
-  const hasPermissionError = isPermissionError(runs.error) || isPermissionError(incidents.error) || isPermissionError(approvals.error);
+  const hasError = runs.isError || incidents.isError || approvals.isError || outcomeGraphs.isError;
+  const hasPermissionError = isPermissionError(runs.error) || isPermissionError(incidents.error) || isPermissionError(approvals.error) || isPermissionError(outcomeGraphs.error);
   const useDemoData = localPreview || (process.env.NODE_ENV === "development" && hasPermissionError);
   const runItems = useDemoData ? demoOperationRuns() : runs.data?.items ?? EMPTY_RUNS;
   const incidentItems = useDemoData ? demoOperationIncidents() : incidents.data ?? EMPTY_INCIDENTS;
   const approvalItems = useDemoData ? demoOperationApprovals() : approvals.data?.items ?? EMPTY_APPROVALS;
-  const isLoading = !useDemoData && (runs.isLoading || incidents.isLoading || approvals.isLoading);
+  const graphItems = useDemoData ? EMPTY_GRAPHS : outcomeGraphs.data?.items ?? EMPTY_GRAPHS;
+  const isLoading = !useDemoData && (runs.isLoading || incidents.isLoading || approvals.isLoading || outcomeGraphs.isLoading);
   const rows = useMemo(
-    () => applyIncidentLocalState(buildRows(runItems, incidentItems, approvalItems), incidentLocalStates),
-    [runItems, incidentItems, approvalItems, incidentLocalStates],
+    () => applyIncidentLocalState(buildRows(runItems, incidentItems, approvalItems, graphItems), incidentLocalStates),
+    [runItems, incidentItems, approvalItems, graphItems, incidentLocalStates],
   );
   const runLedgerRows = useMemo(() => tabRows(rows, "runs"), [rows]);
   const agentStats = useMemo(() => buildAgentStats(runLedgerRows), [runLedgerRows]);
@@ -1131,6 +1178,7 @@ export default function OperationsPage() {
     void queryClient.invalidateQueries({ queryKey: ["final-runs"] });
     void queryClient.invalidateQueries({ queryKey: ["final-incidents"] });
     void queryClient.invalidateQueries({ queryKey: ["final-approval-requirements"] });
+    void queryClient.invalidateQueries({ queryKey: ["outcome-graphs", "operations"] });
   }
 
   function selectSavedView(view: SavedView) {
