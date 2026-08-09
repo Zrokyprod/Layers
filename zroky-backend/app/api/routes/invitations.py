@@ -115,6 +115,11 @@ def create_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
     normalized_role = normalize_project_role(body.role)
+    if normalized_role == "owner" and getattr(request.state, "project_role", None) != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a project owner can grant owner access.",
+        )
     normalized_email = body.email.strip().lower()
 
     existing_member = db.execute(
@@ -218,6 +223,12 @@ def revoke_invitation(
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
+    if invitation.role == "owner" and getattr(request.state, "project_role", None) != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a project owner can revoke an owner invitation.",
+        )
+
     if invitation.accepted_at is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invitation already accepted")
 
@@ -250,6 +261,11 @@ def resend_invitation(
     ).scalar_one_or_none()
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    if invitation.role == "owner" and getattr(request.state, "project_role", None) != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a project owner can resend an owner invitation.",
+        )
     if invitation.accepted_at is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invitation already accepted")
     if invitation.revoked_at is not None:

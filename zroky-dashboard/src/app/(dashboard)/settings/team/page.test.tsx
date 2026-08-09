@@ -15,12 +15,13 @@ const api = vi.hoisted(() => ({
 }));
 
 const membershipState = vi.hoisted(() => ({
+  projectId: "proj_1",
   role: "owner",
 }));
 
 vi.mock("@/lib/store", () => ({
   useDashboardStore: () => ({
-    selectedProject: "proj_1",
+    selectedProject: membershipState.projectId,
   }),
 }));
 
@@ -32,7 +33,7 @@ vi.mock("@/lib/hooks", async () => {
       data: [
         {
           membership_id: "mem_current",
-          project_id: "proj_1",
+          project_id: membershipState.projectId,
           project_name: "My Project",
           role: membershipState.role,
           is_active: true,
@@ -40,11 +41,6 @@ vi.mock("@/lib/hooks", async () => {
           updated_at: "2026-05-29T10:00:00.000Z",
         },
       ],
-      isLoading: false,
-      error: null,
-    }),
-    useProjectSettings: () => ({
-      data: { project_id: "proj_1" },
       isLoading: false,
       error: null,
     }),
@@ -79,6 +75,7 @@ function renderTeamPage() {
 describe("TeamPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    membershipState.projectId = "proj_1";
     membershipState.role = "owner";
     api.listProjectMembers.mockResolvedValue([
       {
@@ -204,8 +201,20 @@ describe("TeamPage", () => {
     );
   });
 
-  it("renders member management read-only for non-admin roles", async () => {
+  it("does not request or expose membership data to non-admin roles", async () => {
     membershipState.role = "viewer";
+
+    renderTeamPage();
+
+    expect(await screen.findByText("Member access restricted")).toBeInTheDocument();
+    expect(screen.getByText("Admin access required")).toBeInTheDocument();
+    expect(screen.queryByText("owner@example.com")).not.toBeInTheDocument();
+    expect(api.listProjectMembers).not.toHaveBeenCalled();
+    expect(api.listProjectInvitations).not.toHaveBeenCalled();
+  });
+
+  it("does not let admins grant or change owner access", async () => {
+    membershipState.role = "admin";
     api.listProjectMembers.mockResolvedValue([
       {
         membership_id: "m_1",
@@ -234,12 +243,45 @@ describe("TeamPage", () => {
     renderTeamPage();
 
     expect(await screen.findByText("member@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Your role is Viewer. Member access is read-only for this account.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Email")).toHaveProperty("disabled", true);
-    expect(screen.getByRole("button", { name: "Send invite" })).toHaveProperty("disabled", true);
-    expect(screen.getByRole("combobox", { name: "Change role for member@example.com" })).toHaveProperty("disabled", true);
-    expect(screen.getAllByRole("button", { name: "Remove" })[0]).toHaveProperty("disabled", true);
-    expect(api.upsertProjectMember).not.toHaveBeenCalled();
+    const inviteRole = screen.getByRole("combobox", { name: "Role" }) as HTMLSelectElement;
+    const ownerRole = screen.getByRole("combobox", { name: "Change role for owner@example.com" }) as HTMLSelectElement;
+    const memberRole = screen.getByRole("combobox", { name: "Change role for member@example.com" }) as HTMLSelectElement;
+    expect(Array.from(inviteRole.options).map((option) => option.value)).not.toContain("owner");
+    expect(ownerRole.disabled).toBe(true);
+    expect(Array.from(memberRole.options).map((option) => option.value)).not.toContain("owner");
+    expect((screen.getAllByRole("button", { name: "Remove" })[0] as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("clears project-bound form state when the workspace changes", async () => {
+    const view = renderTeamPage();
+
+    await screen.findByText("owner@example.com");
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "pending@example.com" } });
+    expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("pending@example.com");
+
+    membershipState.projectId = "proj_2";
+    api.listProjectMembers.mockResolvedValue([
+      {
+        membership_id: "m_2",
+        project_id: "proj_2",
+        user_id: "u_2",
+        subject: "user:owner-two@example.com",
+        email: "owner-two@example.com",
+        role: "owner",
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      },
+    ]);
+    view.rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TeamPage />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("owner-two@example.com")).toBeInTheDocument();
+    expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("");
+    expect(api.listProjectMembers).toHaveBeenCalledWith("proj_2");
   });
 
   it("confirms email delivery after creating an invitation", async () => {

@@ -14,7 +14,7 @@ import { SettingsConfirmationDialog } from "@/components/settings-confirmation-d
 import { SettingsHero, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import { useDashboardStore } from "@/lib/store";
-import { useMyProjects, useProjectSettings, useTeamMembers } from "@/lib/hooks";
+import { useMyProjects, useTeamMembers } from "@/lib/hooks";
 import {
   createProjectInvitation,
   listProjectInvitations,
@@ -26,6 +26,7 @@ import { formatDateTime } from "@/lib/format";
 import type { ProjectInvitationItem, ProjectMembershipResponse } from "@/lib/types";
 
 const ROLE_OPTIONS = ["viewer", "member", "admin", "owner"] as const;
+const ADMIN_ROLE_OPTIONS = ["viewer", "member", "admin"] as const;
 
 function roleLabel(role: string | null | undefined): string {
   const normalized = role?.trim().toLowerCase();
@@ -58,23 +59,22 @@ function invitationStatus(invitation: ProjectInvitationItem): "accepted" | "revo
   return "pending";
 }
 
-export default function TeamPage() {
-  const { selectedProject } = useDashboardStore();
-  const projectQuery = useProjectSettings();
+function TeamPageContent({ projectId }: { projectId: string | null }) {
   const myProjectsQuery = useMyProjects();
-  const projectId = projectQuery.data?.project_id ?? selectedProject;
   const currentMembership = projectId
     ? myProjectsQuery.data?.find((project) => project.project_id === projectId) ?? null
     : null;
   const canManageAccess = canManageTeamAccess(currentMembership?.role);
+  const canManageOwners = currentMembership?.role?.trim().toLowerCase() === "owner";
+  const assignableRoles = canManageOwners ? ROLE_OPTIONS : ADMIN_ROLE_OPTIONS;
   const readOnlyAccessCopy = "Only owners and admins can manage workspace access.";
   const queryClient = useQueryClient();
 
-  const membersQuery = useTeamMembers(projectId ?? "");
+  const membersQuery = useTeamMembers(canManageAccess ? projectId ?? "" : "");
   const invitationsQuery = useQuery<ProjectInvitationItem[], Error>({
     queryKey: ["project-invitations", projectId],
     queryFn: () => listProjectInvitations(projectId as string),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId && canManageAccess),
   });
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
@@ -143,6 +143,31 @@ export default function TeamPage() {
     },
   });
 
+  if (projectId && (myProjectsQuery.isLoading || myProjectsQuery.error || !canManageAccess)) {
+    const accessUnavailable = Boolean(myProjectsQuery.error);
+    const accessLoading = myProjectsQuery.isLoading;
+    return (
+      <SettingsScaffold className="team-settings-page">
+        <SettingsHero
+          ariaLabel="Members access"
+          eyebrow="Members"
+          icon={<Users aria-hidden="true" />}
+          title={accessLoading ? "Checking member access" : accessUnavailable ? "Member access unavailable" : "Member access restricted"}
+          copy={
+            accessLoading
+              ? "Confirming your role for this workspace."
+              : accessUnavailable
+                ? "Zroky could not confirm your workspace role. No membership data was requested or shown."
+                : "Only workspace owners and admins can view or manage members and invitations."
+          }
+          tone={accessUnavailable ? "danger" : "neutral"}
+          pill={accessLoading ? "Loading" : accessUnavailable ? "Unavailable" : "Admin access required"}
+          updatedLabel={accessLoading ? "Checking access" : accessUnavailable ? "Access check failed" : "Member data hidden"}
+        />
+      </SettingsScaffold>
+    );
+  }
+
   const members = membersQuery.data ?? [];
   const invitations = invitationsQuery.data ?? [];
   const loading = membersQuery.isLoading || invitationsQuery.isLoading;
@@ -200,6 +225,10 @@ export default function TeamPage() {
       setLocalError(readOnlyAccessCopy);
       return;
     }
+    if (!canManageOwners && invitation.role === "owner") {
+      setLocalError("Only a project owner can manage owner invitations.");
+      return;
+    }
     setBusyInvitationId(invitation.invitation_id);
     setLocalError(null);
     setLocalNotice(null);
@@ -226,6 +255,10 @@ export default function TeamPage() {
     if (member.role === newRole) return;
     if (!canManageAccess) {
       setLocalError(readOnlyAccessCopy);
+      return;
+    }
+    if (!canManageOwners && (member.role === "owner" || newRole === "owner")) {
+      setLocalError("Only a project owner can grant or change owner access.");
       return;
     }
     if (isLastActiveOwner(member) && newRole !== "owner") {
@@ -262,6 +295,10 @@ export default function TeamPage() {
   function requestMemberActive(member: ProjectMembershipResponse, active: boolean) {
     if (!canManageAccess) {
       setLocalError(readOnlyAccessCopy);
+      return;
+    }
+    if (!canManageOwners && member.role === "owner") {
+      setLocalError("Only a project owner can change owner access.");
       return;
     }
     if (!active && isLastActiveOwner(member)) {
@@ -335,11 +372,6 @@ export default function TeamPage() {
       >
 
         {!projectId ? <p className="notif-error team-error">Project context is missing. Reload the dashboard before changing members.</p> : null}
-        {projectId && !canManageAccess ? (
-          <p className="notice team-error">
-            Your role is {roleLabel(currentMembership?.role)}. Member access is read-only for this account.
-          </p>
-        ) : null}
         {error && <p className="notif-error team-error">{error}</p>}
         {localNotice && <p className="notice team-error">{localNotice}</p>}
 
@@ -367,7 +399,7 @@ export default function TeamPage() {
                 onChange={(e) => setInviteRole(e.target.value)}
                 disabled={!canManageAccess}
               >
-                {ROLE_OPTIONS.map((role) => (
+                {assignableRoles.map((role) => (
                   <option key={role} value={role}>{roleLabel(role)}</option>
                 ))}
               </select>
@@ -428,10 +460,16 @@ export default function TeamPage() {
                     aria-label={`Change role for ${m.email ?? m.subject}`}
                     value={m.role}
                     onChange={(e) => requestRoleChange(m, e.target.value)}
-                    disabled={!canManageAccess || busyMemberId === m.membership_id || isLastActiveOwner(m)}
-                    title={isLastActiveOwner(m) ? "Add another owner before changing this role." : undefined}
+                    disabled={!canManageAccess || busyMemberId === m.membership_id || isLastActiveOwner(m) || (!canManageOwners && m.role === "owner")}
+                    title={
+                      isLastActiveOwner(m)
+                        ? "Add another owner before changing this role."
+                        : !canManageOwners && m.role === "owner"
+                          ? "Only a project owner can change owner access."
+                          : undefined
+                    }
                   >
-                    {ROLE_OPTIONS.map((role) => (
+                    {(canManageOwners || m.role !== "owner" ? assignableRoles : ROLE_OPTIONS).map((role) => (
                       <option key={role} value={role}>{roleLabel(role)}</option>
                     ))}
                   </select>
@@ -441,8 +479,14 @@ export default function TeamPage() {
                       type="button"
                       variant="soft"
                       onClick={() => requestMemberActive(m, false)}
-                      disabled={!canManageAccess || busyMemberId === m.membership_id || isLastActiveOwner(m)}
-                      title={isLastActiveOwner(m) ? "Add another owner before removing this member." : "Remove member"}
+                      disabled={!canManageAccess || busyMemberId === m.membership_id || isLastActiveOwner(m) || (!canManageOwners && m.role === "owner")}
+                      title={
+                        isLastActiveOwner(m)
+                          ? "Add another owner before removing this member."
+                          : !canManageOwners && m.role === "owner"
+                            ? "Only a project owner can change owner access."
+                            : "Remove member"
+                      }
                     >
                       Remove
                     </DashboardButton>
@@ -504,10 +548,10 @@ export default function TeamPage() {
                     size="sm"
                     variant="soft"
                     icon={<Send />}
-                    title="Resend invitation email"
+                    title={!canManageOwners && inv.role === "owner" ? "Only a project owner can manage this invitation." : "Resend invitation email"}
                     onClick={() => void onResend(inv)}
                     loading={busyInvitationId === inv.invitation_id}
-                    disabled={!canManageAccess || busyInvitationId === inv.invitation_id}
+                    disabled={!canManageAccess || busyInvitationId === inv.invitation_id || (!canManageOwners && inv.role === "owner")}
                   >
                     Resend
                   </DashboardButton>
@@ -515,9 +559,9 @@ export default function TeamPage() {
                     type="button"
                     size="sm"
                     variant="danger"
-                    title="Revoke invitation"
+                    title={!canManageOwners && inv.role === "owner" ? "Only a project owner can manage this invitation." : "Revoke invitation"}
                     onClick={() => void onRevoke(inv.invitation_id)}
-                    disabled={!canManageAccess || busyInvitationId === inv.invitation_id}
+                    disabled={!canManageAccess || busyInvitationId === inv.invitation_id || (!canManageOwners && inv.role === "owner")}
                   >
                     Revoke
                   </DashboardButton>
@@ -610,4 +654,9 @@ export default function TeamPage() {
       ) : null}
     </SettingsScaffold>
   );
+}
+
+export default function TeamPage() {
+  const { selectedProject } = useDashboardStore();
+  return <TeamPageContent key={selectedProject ?? "none"} projectId={selectedProject} />;
 }

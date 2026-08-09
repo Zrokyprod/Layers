@@ -196,3 +196,74 @@ def test_project_invitation_create_list_duplicate_and_revoke(
         assert revoked["revoked_at"] is not None
     finally:
         get_settings.cache_clear()
+
+
+def test_admin_cannot_manage_owner_invitations(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing_key = "jwt-secret-for-tests-minimum-32-bytes-2026"
+    owner_subject = "owner-invitation-authority"
+    admin_subject = "admin-invitation-authority"
+
+    monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "true")
+    monkeypatch.setenv("PROVISIONING_TOKEN", "top-secret")
+    monkeypatch.setenv("JWT_SIGNING_KEY", signing_key)
+    monkeypatch.setenv("JWT_ALGORITHMS", "HS256")
+    monkeypatch.setattr("app.api.routes.invitations.send_email", lambda *_args, **_kwargs: True)
+    get_settings.cache_clear()
+
+    try:
+        project_id = client.post(
+            "/v1/projects",
+            headers={"X-Zroky-Admin-Token": "top-secret"},
+            json={"name": "Invitation Authority Project", "owner_ref": owner_subject},
+        ).json()["project_id"]
+        owner_headers = {
+            "Authorization": f"Bearer {jwt.encode({'sub': owner_subject, 'project_id': project_id}, signing_key, algorithm='HS256')}"
+        }
+        admin_headers = {
+            "Authorization": f"Bearer {jwt.encode({'sub': admin_subject, 'project_id': project_id}, signing_key, algorithm='HS256')}"
+        }
+
+        admin_membership = client.post(
+            f"/v1/projects/{project_id}/memberships",
+            headers=owner_headers,
+            json={"subject": admin_subject, "email": "admin@example.com", "role": "admin"},
+        )
+        assert admin_membership.status_code == 200
+
+        denied_create = client.post(
+            f"/v1/invitations/projects/{project_id}/invitations",
+            headers=admin_headers,
+            json={"email": "owner-candidate@example.com", "role": "owner"},
+        )
+        assert denied_create.status_code == 403
+
+        owner_create = client.post(
+            f"/v1/invitations/projects/{project_id}/invitations",
+            headers=owner_headers,
+            json={"email": "owner-candidate@example.com", "role": "owner"},
+        )
+        assert owner_create.status_code == 201
+        invitation_id = owner_create.json()["invitation_id"]
+
+        denied_resend = client.post(
+            f"/v1/invitations/projects/{project_id}/invitations/{invitation_id}/resend",
+            headers=admin_headers,
+        )
+        assert denied_resend.status_code == 403
+
+        denied_revoke = client.delete(
+            f"/v1/invitations/projects/{project_id}/invitations/{invitation_id}",
+            headers=admin_headers,
+        )
+        assert denied_revoke.status_code == 403
+
+        owner_revoke = client.delete(
+            f"/v1/invitations/projects/{project_id}/invitations/{invitation_id}",
+            headers=owner_headers,
+        )
+        assert owner_revoke.status_code == 200
+    finally:
+        get_settings.cache_clear()
