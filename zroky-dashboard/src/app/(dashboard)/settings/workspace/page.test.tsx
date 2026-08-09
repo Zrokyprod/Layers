@@ -135,7 +135,7 @@ describe("WorkspaceSettingsPage", () => {
     expect(screen.queryByLabelText("Workspace authority")).not.toBeInTheDocument();
     expect(screen.getAllByText("Owner").length).toBeGreaterThan(0);
     expect(screen.getByText("Project ID")).toBeInTheDocument();
-    expect(screen.getByText("Dashboard environment")).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard environment")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open projects" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Manage members" })).not.toBeInTheDocument();
 
@@ -174,7 +174,7 @@ describe("WorkspaceSettingsPage", () => {
     hookState.projects[0].role = "viewer";
     render(<WorkspaceSettingsPage />);
 
-    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).readOnly).toBe(true);
     expect((screen.getByRole("button", { name: "Save name" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Read only")).toBeInTheDocument();
   });

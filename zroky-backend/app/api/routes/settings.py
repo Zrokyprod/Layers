@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, load_only
 from app.api.dependencies.tenant import require_tenant_role
 from app.core.config import Settings, get_settings
 from app.core.limiter import limiter
-from app.db.models import DiagnosisJob, User
+from app.db.models import DiagnosisJob, Project, User
 from app.db.session import db_healthcheck, get_db_session, get_db_session_read
 from app.schemas.dashboard import (
     GithubConnectionStatusResponse,
@@ -64,6 +64,11 @@ from app.services.dashboard_config import (
     set_rollback_drill,
 )
 from app.services.dashboard_data import safe_load_json
+from app.services.audit_logs import (
+    AUDIT_ACTION_PROJECT_RENAMED,
+    add_audit_log,
+    safe_actor_subject_from_request,
+)
 from app.services.privacy import mask_error_message, mask_text
 from app.services.provider_status import verify_provider_connection
 from app.services.redis_client import redis_healthcheck
@@ -94,41 +99,50 @@ from app.api.routes._internal.settings_helpers import (
     _run_rollback_verification_checks,
 )
 
+
+def _project_response(project: Project) -> ProjectResponse:
+    return ProjectResponse(
+        project_id=project.id,
+        name=project.name,
+        owner_ref=project.owner_ref,
+        is_active=project.is_active,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+    )
+
 @router.get("/project", response_model=ProjectResponse)
 def get_project_settings(
     tenant_id: str = Depends(require_tenant_role("viewer")),
     db: Session = Depends(get_db_session_read),
 ) -> ProjectResponse:
     project = _require_project(db, tenant_id)
-    return ProjectResponse(
-        project_id=project.id,
-        name=project.name,
-        owner_ref=project.owner_ref,
-        is_active=project.is_active,
-        created_at=project.created_at,
-        updated_at=project.updated_at,
-    )
+    return _project_response(project)
 
 
 @router.patch("/project", response_model=ProjectResponse)
 def update_project_settings(
     body: ProjectUpdateRequest,
+    request: Request,
     tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
 ) -> ProjectResponse:
     project = _require_project(db, tenant_id)
+    if project.name == body.name:
+        return _project_response(project)
+
     project.name = body.name
     db.add(project)
+    add_audit_log(
+        db,
+        tenant_id=tenant_id,
+        diagnosis_id=project.id,
+        action=AUDIT_ACTION_PROJECT_RENAMED,
+        actor_subject=safe_actor_subject_from_request(request),
+        metadata={"changed_fields": ["name"]},
+    )
     db.commit()
     db.refresh(project)
-    return ProjectResponse(
-        project_id=project.id,
-        name=project.name,
-        owner_ref=project.owner_ref,
-        is_active=project.is_active,
-        created_at=project.created_at,
-        updated_at=project.updated_at,
-    )
+    return _project_response(project)
 
 
 @router.get("/pii-policy", response_model=PiiPolicyResponse)

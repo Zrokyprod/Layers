@@ -70,7 +70,6 @@ function WorkspaceSettingsPageContent({ projectId }: { projectId: string | null 
   const role = membership ? roleLabel(membership.role) : "Unavailable";
   const renameAllowed = active && canRenameWorkspace(membership?.role);
   const renameDisabled = !renameAllowed || !projectId || updateProject.isPending || draftName.trim().length < 2;
-  const dashboardEnvironment = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
   const projectTimestamp = formatDateTime(project?.updated_at ?? membership?.updated_at);
   const createdTimestamp = formatDateTime(project?.created_at ?? membership?.created_at);
 
@@ -95,7 +94,8 @@ function WorkspaceSettingsPageContent({ projectId }: { projectId: string | null 
     if (renameDisabled || name === workspaceName) return;
     setActionStatus(null);
     try {
-      await updateProject.mutateAsync({ name });
+      const updatedProject = await updateProject.mutateAsync({ name });
+      setDraftName(updatedProject.name);
       setActionStatus({ tone: "success", text: "Workspace name updated." });
     } catch (error) {
       setActionStatus({
@@ -173,7 +173,8 @@ function WorkspaceSettingsPageContent({ projectId }: { projectId: string | null 
                   className="input"
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
-                  disabled={!renameAllowed}
+                  readOnly={!renameAllowed}
+                  aria-readonly={!renameAllowed}
                   minLength={2}
                   maxLength={120}
                 />
@@ -223,10 +224,6 @@ function WorkspaceSettingsPageContent({ projectId }: { projectId: string | null 
               <div>
                 <span>Your role</span>
                 <strong>{role}</strong>
-              </div>
-              <div>
-                <span>Dashboard environment</span>
-                <strong>{roleLabel(dashboardEnvironment)}</strong>
               </div>
               <div>
                 <span>Created</span>
