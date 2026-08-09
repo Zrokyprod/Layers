@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import WorkflowsPage from "./page";
@@ -62,9 +62,7 @@ describe("WorkflowsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Validate/ }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Workflow API result").textContent).toMatch(
-        /JSON|Expected property name|Unexpected end/,
-      );
+      expect(screen.getByText(/Expected property name|Unexpected end/)).toBeInTheDocument();
     });
     expect(api.validateAssurancePack).not.toHaveBeenCalled();
   });
@@ -97,7 +95,44 @@ describe("WorkflowsPage", () => {
 
     expect(screen.getByRole("heading", { name: "vendor_payment" })).toBeInTheDocument();
     expect(screen.getAllByText("stripe_payment.read").length).toBeGreaterThan(0);
-    expect((screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement).value).toContain('"workflow_key":"vendor_payment"');
+    const editor = screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement;
+    expect(editor.value).toContain('"workflow_key": "vendor_payment"');
+    expect(editor.value).toContain("\n");
+    expect(editor.rows).toBe(12);
+  });
+
+  it("marks edits to a published pack as unvalidated draft changes", async () => {
+    api.listAssurancePacks.mockResolvedValue([
+      {
+        id: "pack_vendor",
+        project_id: "proj_1",
+        environment: "production",
+        workflow_key: "vendor_payment",
+        version: "1.2.0",
+        pack_digest: "digest_vendor",
+        status: "active",
+        pack: {
+          schema_version: "zroky.workflow_assurance_pack.v1",
+          workflow_key: "vendor_payment",
+          version: "1.2.0",
+          intent_schema: { required: ["vendor_id"] },
+          object_types: [{ key: "payment", schema: {} }],
+          effects: [{ key: "payment_settled", object_type: "payment", predicate: "payment.status == 'posted'" }],
+          source_bindings: [{ key: "payment_read", connector_capability: "stripe_payment.read", object_type: "payment", freshness_seconds: 300 }],
+          recovery_playbooks: [],
+        },
+      },
+    ]);
+    render(<WorkflowsPage />);
+    const editor = await screen.findByLabelText("Assurance Pack JSON") as HTMLTextAreaElement;
+
+    fireEvent.change(editor, { target: { value: `${editor.value}\n` } });
+
+    expect(within(screen.getByLabelText("Workflow posture")).getByText("Unpublished changes")).toBeInTheDocument();
+    const metrics = screen.getByLabelText("Workflow contract metrics");
+    expect(within(metrics).getByText("draft")).toBeInTheDocument();
+    expect(screen.getByText("Draft changed; validation required.")).toBeInTheDocument();
+    expect(screen.getByText("Unvalidated")).toBeInTheDocument();
   });
 
   it("does not invent workflow rows when no packs are published", async () => {

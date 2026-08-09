@@ -78,7 +78,7 @@ type PackSummary = {
 };
 
 function prettyJson(value: unknown): string {
-  return JSON.stringify(value);
+  return JSON.stringify(value, null, 2);
 }
 
 function parseDraft(value: string): AssurancePackJson {
@@ -144,6 +144,7 @@ export default function WorkflowsPage() {
   const [packsLoading, setPacksLoading] = useState(true);
   const [packsError, setPacksError] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => prettyJson(STARTER_PACK));
+  const [draftDirty, setDraftDirty] = useState(false);
   const [environment, setEnvironment] = useState("production");
   const [result, setResult] = useState<ResultState>({
     type: "idle",
@@ -158,12 +159,16 @@ export default function WorkflowsPage() {
     setPacksError(null);
     setPacks([]);
     setSelectedPackId(null);
+    setDraft(prettyJson(STARTER_PACK));
+    setDraftDirty(false);
+    setResult({ type: "idle", message: "No validation has run yet." });
     void listAssurancePacks(environment, controller.signal)
       .then((items) => {
         setPacks(items);
         const first = items[0] ?? null;
         setSelectedPackId(first?.id ?? null);
         setDraft(prettyJson(first?.pack ?? STARTER_PACK));
+        setDraftDirty(false);
       })
       .catch((error) => {
         if (!controller.signal.aborted) setPacksError(errorMessage(error));
@@ -177,6 +182,7 @@ export default function WorkflowsPage() {
   function selectWorkflow(pack: AssurancePackResponse) {
     setSelectedPackId(pack.id);
     setDraft(prettyJson(pack.pack));
+    setDraftDirty(false);
     setResult({ type: "idle", message: "No validation has run yet." });
   }
 
@@ -189,7 +195,8 @@ export default function WorkflowsPage() {
     }
   }, [draft]);
 
-  const tone = selectedPack && result.type === "idle" ? "ready" : statusTone(result, parsedDraft.error);
+  const persistedPackLoaded = Boolean(selectedPack && !draftDirty);
+  const tone = persistedPackLoaded && result.type === "idle" ? "ready" : statusTone(result, parsedDraft.error);
   const summary = parsedDraft.summary;
   const validationLabel = parsedDraft.error
     ? "Invalid draft"
@@ -197,7 +204,9 @@ export default function WorkflowsPage() {
       ? "Published"
       : result.type === "validated"
         ? "Validated"
-        : selectedPack?.status ?? "Unpublished draft";
+        : draftDirty
+          ? "Unpublished changes"
+          : selectedPack?.status ?? "Unpublished draft";
   const activePacks = packs.filter((pack) => pack.status === "active").length;
   const needsBinding = packs.filter((pack) => {
     const item = packSummary(pack.pack);
@@ -207,6 +216,16 @@ export default function WorkflowsPage() {
   const expectedEffects = summary?.effects ?? [];
   const recoveryPlaybooks = summary?.recoveryPlaybooks ?? [];
   const selectedVersions = packs.filter((pack) => pack.workflow_key === summary?.workflowKey).map((pack) => pack.version);
+  const backendReady = persistedPackLoaded || result.type === "validated" || result.type === "published";
+  const backendDetail = packsError ?? parsedDraft.error ?? (
+    result.type !== "idle"
+      ? result.message
+      : persistedPackLoaded
+        ? "Published pack loaded."
+        : draftDirty
+          ? "Draft changed; validation required."
+          : "No validation run for this draft."
+  );
   const workflowRows = [
     {
       label: "Expected outcome",
@@ -240,16 +259,16 @@ export default function WorkflowsPage() {
       tone: sourceBindings.length > 0 && expectedEffects.length > 0 ? "ready" as WorkflowTone : "critical" as WorkflowTone,
     },
     {
-      detail: packsError ?? parsedDraft.error ?? (result.type === "idle" ? "No validation run for this draft." : result.message),
-      status: packsError || parsedDraft.error || result.type === "error" ? "Blocked" : "OK",
+      detail: backendDetail,
+      status: packsError || parsedDraft.error || result.type === "error" ? "Blocked" : backendReady ? "OK" : "Check",
       title: "Backend response",
-      tone: packsError || parsedDraft.error || result.type === "error" ? "critical" as WorkflowTone : "ready" as WorkflowTone,
+      tone: packsError || parsedDraft.error || result.type === "error" ? "critical" as WorkflowTone : backendReady ? "ready" as WorkflowTone : "warning" as WorkflowTone,
     },
     {
-      detail: sourceBindings.length > 0 && expectedEffects.length > 0 ? "Contract schema and bindings valid." : "Binding or effect missing.",
-      status: sourceBindings.length > 0 && expectedEffects.length > 0 ? "Valid" : "Missing",
+      detail: backendReady ? "Contract schema and bindings valid." : "Validate this draft before publishing.",
+      status: backendReady ? "Valid" : "Unvalidated",
       title: "Runtime contract",
-      tone: sourceBindings.length > 0 && expectedEffects.length > 0 ? "ready" as WorkflowTone : "warning" as WorkflowTone,
+      tone: backendReady ? "ready" as WorkflowTone : "warning" as WorkflowTone,
     },
   ] as const;
 
@@ -278,6 +297,8 @@ export default function WorkflowsPage() {
       const response = await publishAssurancePack(pack, environment);
       setPacks((items) => [response, ...items.filter((item) => item.id !== response.id)]);
       setSelectedPackId(response.id);
+      setDraft(prettyJson(response.pack));
+      setDraftDirty(false);
       setResult({
         type: "published",
         message: `${response.workflow_key}@${response.version} published to ${response.environment}.`,
@@ -342,7 +363,7 @@ export default function WorkflowsPage() {
           { label: "Needs binding", value: String(needsBinding), tone: needsBinding > 0 ? "warning" as WorkflowTone : "ready" as WorkflowTone, icon: Database },
           { label: "Intent fields", value: String(summary?.intentFields.length ?? 0), tone: "neutral" as WorkflowTone, icon: FileJson },
           { label: "Versions", value: String(selectedVersions.length), tone: "neutral" as WorkflowTone, icon: GitBranch },
-          { label: "Publish state", value: selectedPack?.status ?? (result.type === "published" ? "active" : "draft"), tone, icon: Rocket },
+          { label: "Publish state", value: persistedPackLoaded || result.type === "published" ? selectedPack?.status ?? "active" : "draft", tone, icon: Rocket },
         ].map(({ label, value, tone: itemTone, icon: Icon }) => (
           <article className={styles.metricCell} data-tone={itemTone} key={label}>
             <span>
@@ -412,9 +433,9 @@ export default function WorkflowsPage() {
             {[
               ["Source", fieldValue(sourceBindings[0], "connector_capability", "No source binding")],
               ["Environment", selectedPack?.environment ?? environment],
-              ["Digest", selectedPack?.pack_digest ?? "Unpublished draft"],
+              ["Digest", persistedPackLoaded ? selectedPack?.pack_digest ?? "Unpublished draft" : "Unpublished changes"],
               ["Versions", selectedVersions.join(" -> ") || "Unpublished"],
-              ["Status", selectedPack?.status ?? "draft"],
+              ["Status", persistedPackLoaded ? selectedPack?.status ?? "draft" : "draft"],
             ].map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>
@@ -465,9 +486,6 @@ export default function WorkflowsPage() {
               <ChevronRight size={16} aria-hidden="true" />
             </section>
           ))}
-          <pre className={styles.resultPre} aria-label="Workflow API result">
-            {result.type === "idle" || result.type === "error" ? result.message : prettyJson(result.data)}
-          </pre>
         </aside>
       </div>
 
@@ -482,11 +500,15 @@ export default function WorkflowsPage() {
         <textarea
           aria-label="Assurance Pack JSON"
           className={styles.editor}
-          rows={1}
+          rows={12}
           spellCheck={false}
           value={draft}
           wrap="off"
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setDraftDirty(true);
+            setResult({ type: "idle", message: "Draft changed; validation required." });
+          }}
         />
       </section>
     </div>

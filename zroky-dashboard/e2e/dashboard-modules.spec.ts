@@ -66,4 +66,18 @@ test.describe("dashboard modules", () => {
     await expect(page.getByRole("button", { name: "Run database preflight" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
+
+  test("workflow library and JSON editor stay usable at the viewport width", async ({ page }) => {
+    await page.goto("/workflows");
+    await expectDashboardShell(page);
+    await expectNoHorizontalOverflow(page);
+
+    const library = page.getByLabel("Workflow library");
+    await expect(library).toBeVisible();
+    await expect.poll(() => library.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
+
+    const editor = page.getByLabel("Assurance Pack JSON");
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveAttribute("rows", "12");
+  });
 });
