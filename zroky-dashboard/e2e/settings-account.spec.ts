@@ -150,7 +150,7 @@ test.describe("settings and account", () => {
       await page.getByRole("button", { name: "Change password" }).click();
       const response = await responsePromise;
       expect(response.ok(), await response.text()).toBeTruthy();
-      await expect(page.getByText("Password changed successfully.")).toBeVisible({ timeout: 15_000 });
+      await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
     };
 
     await page.goto("/account");
@@ -170,6 +170,7 @@ test.describe("settings and account", () => {
     await page.getByRole("textbox", { name: "New password", exact: true }).fill(seed.password);
     await page.getByRole("textbox", { name: "Confirm new password" }).fill(seed.password);
     await submitPasswordChange();
+    await restoreSession(seed.password);
 
     await expect(page.getByRole("button", { name: "Log out all sessions" })).toBeEnabled();
     await page.getByRole("button", { name: "Delete my account" }).click();

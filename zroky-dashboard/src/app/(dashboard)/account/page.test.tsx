@@ -40,6 +40,10 @@ const navigation = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
+const auth = vi.hoisted(() => ({
+  clearAccessToken: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: navigation.push,
@@ -47,7 +51,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
-  clearAccessToken: vi.fn(),
+  clearAccessToken: auth.clearAccessToken,
 }));
 
 vi.mock("@/lib/store", () => ({
@@ -88,7 +92,8 @@ describe("AccountPage", () => {
     hooks.meLoading = false;
     store.selectedProject = "proj_1";
     hooks.updateMeMutateAsync.mockResolvedValue(hooks.me);
-    hooks.changePasswordMutateAsync.mockResolvedValue({ detail: "Password changed successfully." });
+    hooks.changePasswordMutateAsync.mockResolvedValue({ detail: "Password changed. Sign in again to continue." });
+    auth.clearAccessToken.mockResolvedValue(undefined);
     api.getSecurityStatus.mockResolvedValue({
       two_factor_enabled: false,
       password_login_enabled: true,
@@ -233,6 +238,18 @@ describe("AccountPage", () => {
     expect((screen.getByRole("button", { name: /Log out all sessions/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("clears stale security posture when a refresh fails", async () => {
+    render(<AccountPage />);
+    expect(await screen.findByText("Add MFA")).toBeInTheDocument();
+
+    api.getSecurityStatus.mockRejectedValueOnce(new Error("Security refresh failed."));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(await screen.findByText("Security refresh failed.")).toBeInTheDocument();
+    expect(screen.getByText("Needs review")).toBeInTheDocument();
+    expect(screen.queryByText("Add MFA")).not.toBeInTheDocument();
+  });
+
   it("reloads billing for the selected workspace", async () => {
     const view = render(<AccountPage />);
     await waitFor(() => expect(api.getBillingMe).toHaveBeenCalledWith(expect.any(AbortSignal), "proj_1"));
@@ -269,6 +286,22 @@ describe("AccountPage", () => {
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/login"));
   });
 
+  it("returns to sign-in after a password change revokes every session", async () => {
+    render(<AccountPage />);
+
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "old-password" } });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "new-password" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "new-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() => expect(hooks.changePasswordMutateAsync).toHaveBeenCalledWith({
+      currentPassword: "old-password",
+      newPassword: "new-password",
+    }));
+    expect(auth.clearAccessToken).toHaveBeenCalledTimes(1);
+    expect(navigation.push).toHaveBeenCalledWith("/login");
+  });
+
   it("requires confirmation before revoking every session", async () => {
     api.logoutAllSessions.mockResolvedValue({ detail: "Sessions revoked." });
     render(<AccountPage />);
@@ -279,7 +312,7 @@ describe("AccountPage", () => {
     expect(screen.getByRole("dialog", { name: "Log out all sessions" })).toBeInTheDocument();
     expect(screen.getByText(/including this browser/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Log out all sessions" }), { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Log out all sessions" })).not.toBeInTheDocument();
     expect(api.logoutAllSessions).not.toHaveBeenCalled();
 

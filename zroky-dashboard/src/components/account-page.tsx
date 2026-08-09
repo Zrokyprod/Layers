@@ -35,6 +35,7 @@ import { useDashboardStore } from "@/lib/store";
 import type { BillingMeResponse, BillingUsageMeter, BillingUsageResponse, SecurityStatusResponse } from "@/lib/types";
 import { formatPlanLabel } from "./feature-gate";
 import { DashboardButton, DashboardButtonLink } from "./dashboard-button";
+import { SettingsConfirmationDialog } from "./settings-confirmation-dialog";
 
 function connectedLoginLabel(security: SecurityStatusResponse | null): string {
   if (!security) return "Loading";
@@ -77,7 +78,6 @@ export default function AccountPage() {
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
   const [profileError, setProfileError] = useState("");
-  const [pwSuccess, setPwSuccess] = useState("");
   const [pwError, setPwError] = useState("");
   const [security, setSecurity] = useState<SecurityStatusResponse | null>(null);
   const [securityMessage, setSecurityMessage] = useState("");
@@ -222,6 +222,7 @@ export default function AccountPage() {
   const loadSecurity = useCallback(async () => {
     setSecurityLoading(true);
     setSecurityMessage("");
+    setSecurity(null);
     try {
       setSecurity(await getSecurityStatus());
     } catch (err) {
@@ -281,16 +282,15 @@ export default function AccountPage() {
   }
 
   async function onChangePassword(data: PasswordChangeFormData) {
-    setPwSuccess("");
     setPwError("");
     try {
-      const res = await changePasswordMutation.mutateAsync({
+      await changePasswordMutation.mutateAsync({
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
       });
-      setPwSuccess(res.detail ?? "Password changed successfully.");
       reset();
-      await loadSecurity();
+      await clearAccessToken();
+      router.push("/login");
     } catch (err) {
       setPwError(err instanceof Error ? err.message : "Password change failed.");
     }
@@ -426,7 +426,7 @@ export default function AccountPage() {
       <section className="panel account-plan-panel" aria-label="Account plan">
         <header className="account-panel-header">
           <div>
-            <h3>Plan and workspace access</h3>
+            <h2>Plan and workspace access</h2>
             <p>Subscription state used by project quotas and protected-action limits.</p>
           </div>
           <DashboardButtonLink href="/settings/billing" variant="soft" icon={<CreditCard />}>
@@ -459,7 +459,7 @@ export default function AccountPage() {
       <section className="panel account-security-panel" aria-label="Account security">
         <header className="account-panel-header">
           <div>
-            <h3>Account security</h3>
+            <h2>Account security</h2>
             <p>Email, login, and session status.</p>
           </div>
           <DashboardButton type="button" variant="soft" onClick={() => void loadSecurity()} loading={securityLoading}>
@@ -483,7 +483,7 @@ export default function AccountPage() {
         </div>
 
         <div className="profile-form-narrow profile-edit-form">
-          <h4 className="account-security-subtitle">Authenticator app</h4>
+          <h3 className="account-security-subtitle">Authenticator app</h3>
           <p className="panel-sub">
             Protect approvals with a 6-digit code after password sign-in.
           </p>
@@ -595,7 +595,7 @@ export default function AccountPage() {
 
       <section className="panel profile-section-gap" id="identity">
         <header className="account-panel-header">
-          <h3>Your identity</h3>
+          <h2>Your identity</h2>
         </header>
 
         {loadError && <p className="field-error profile-msg-gap-lg">{loadError}</p>}
@@ -667,7 +667,7 @@ export default function AccountPage() {
 
       <section className="panel profile-section-gap" id="login-method">
         <header className="account-panel-header">
-          <h3>Change password</h3>
+          <h2>Change password</h2>
           <p className="panel-sub">
             {me && !me.has_password
               ? "Your account uses OAuth login. Use Forgot Password to set a password."
@@ -714,7 +714,6 @@ export default function AccountPage() {
               {errors.confirmPassword && <span className="field-error">{errors.confirmPassword.message}</span>}
             </div>
             {pwError && <p className="account-message is-error">{pwError}</p>}
-            {pwSuccess && <p className="account-message is-success">{pwSuccess}</p>}
             <div className="actions">
               <DashboardButton type="submit" variant="primary" loading={changePasswordMutation.isPending}>
                 {changePasswordMutation.isPending ? "Saving..." : "Change password"}
@@ -727,10 +726,10 @@ export default function AccountPage() {
       <section className="panel profile-danger-zone" id="danger-zone">
         <header className="account-panel-header">
           <div>
-            <h3 className="profile-danger-title">Danger zone</h3>
+            <h2 className="profile-danger-title">Danger zone</h2>
             <p>
-              Permanently delete your account and all associated data. Transfer ownership of any workspace you own
-              before deleting.
+              Permanently remove your identity and login credentials. Workspace evidence and audit records remain
+              with their workspace. Transfer ownership of any workspace you own before deleting.
             </p>
           </div>
         </header>
@@ -782,47 +781,39 @@ export default function AccountPage() {
       </section>
 
       {showLogoutAllConfirm && (
-        <div
-          className="fix-modal-backdrop"
-          role="presentation"
-          onClick={() => !logoutAllLoading && setShowLogoutAllConfirm(false)}
+        <SettingsConfirmationDialog
+          ariaLabel="Log out all sessions"
+          busy={logoutAllLoading}
+          onClose={() => setShowLogoutAllConfirm(false)}
         >
-          <section
-            className="panel keys-revoke-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Log out all sessions"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="panel-header">
-              <div>
-                <h2>Log out every session?</h2>
-                <p>
-                  This immediately revokes all active sessions, including this browser. You will need to sign in again
-                  on every device.
-                </p>
-              </div>
-            </header>
-            <div className="actions">
-              <DashboardButton
-                type="button"
-                variant="danger"
-                loading={logoutAllLoading}
-                onClick={() => void onLogoutAllSessions()}
-              >
-                {logoutAllLoading ? "Revoking..." : "Yes, log out everywhere"}
-              </DashboardButton>
-              <DashboardButton
-                type="button"
-                variant="soft"
-                disabled={logoutAllLoading}
-                onClick={() => setShowLogoutAllConfirm(false)}
-              >
-                Cancel
-              </DashboardButton>
+          <header className="panel-header">
+            <div>
+              <h2>Log out every session?</h2>
+              <p>
+                This immediately revokes all active sessions, including this browser. You will need to sign in again
+                on every device.
+              </p>
             </div>
-          </section>
-        </div>
+          </header>
+          <div className="actions">
+            <DashboardButton
+              type="button"
+              variant="danger"
+              loading={logoutAllLoading}
+              onClick={() => void onLogoutAllSessions()}
+            >
+              {logoutAllLoading ? "Revoking..." : "Yes, log out everywhere"}
+            </DashboardButton>
+            <DashboardButton
+              type="button"
+              variant="soft"
+              disabled={logoutAllLoading}
+              onClick={() => setShowLogoutAllConfirm(false)}
+            >
+              Cancel
+            </DashboardButton>
+          </div>
+        </SettingsConfirmationDialog>
       )}
     </div>
   );

@@ -33,6 +33,7 @@ async function expectAccessiblePageStructure(page: Page): Promise<void> {
     }).map((control) => control.outerHTML.slice(0, 180)),
   );
   expect(unnamedControls).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 }
 
 test.describe("dashboard release structure", () => {
