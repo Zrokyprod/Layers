@@ -452,16 +452,16 @@ export function useProjectSettings(projectId?: string | null) {
 
   return useQuery<ProjectResponse>({
     queryKey: ["project-settings", hasExplicitProject ? projectId : "current"],
-    queryFn: () => getProjectSettings(),
+    queryFn: ({ signal }) => getProjectSettings(hasExplicitProject ? projectId : undefined, signal),
     enabled: hasExplicitProject ? Boolean(projectId) : true,
     retry: false,
   });
 }
 
-export function useUpdateProjectSettings() {
+export function useUpdateProjectSettings(projectId?: string | null) {
   const qc = useQueryClient();
   return useMutation<ProjectResponse, Error, { name: string }>({
-    mutationFn: (body) => updateProjectSettings(body),
+    mutationFn: (body) => updateProjectSettings(body, projectId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["project-settings"] });
       qc.invalidateQueries({ queryKey: ["me", "projects"] });
