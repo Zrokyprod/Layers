@@ -38,12 +38,14 @@ function heroState({
   error,
   loading,
   pending,
+  pendingAtLimit,
   total,
 }: {
   damageStopped: number;
   error: boolean;
   loading: boolean;
   pending: number;
+  pendingAtLimit: boolean;
   total: number;
 }): HeroState {
   if (error) {
@@ -63,11 +65,15 @@ function heroState({
     };
   }
   if (pending > 0) {
-    const actionCopy = pending === 1 ? "1 action requires" : `${pending} actions require`;
+    const actionCopy = pendingAtLimit
+      ? `At least ${pending} actions require`
+      : pending === 1
+        ? "1 action requires"
+        : `${pending} actions require`;
     return {
       title: "Approval control",
       copy: `${actionCopy} a human decision before Zroky releases execution.`,
-      pill: `${pending} held`,
+      pill: `${pending}${pendingAtLimit ? "+" : ""} held`,
       tone: "warning",
     };
   }
@@ -134,12 +140,17 @@ export default function RuntimeApprovalsPage() {
   );
 
   const approvalsQuery = useRuntimePolicyApprovals("all", { refetchInterval: 15_000 });
+  const pendingApprovalsQuery = useRuntimePolicyApprovals("pending_approval", { refetchInterval: 15_000 });
   const actionIntentsQuery = useActionIntents({ status: "all", limit: 100 }, { refetchInterval: 15_000 });
   const projectsQuery = useMyProjects();
   const approveMutation = useApproveRuntimePolicyDecision();
   const rejectMutation = useRejectRuntimePolicyDecision();
 
-  const decisions = useMemo(() => approvalsQuery.data?.items ?? [], [approvalsQuery.data?.items]);
+  const decisions = useMemo(() => {
+    const pending = pendingApprovalsQuery.data?.items ?? [];
+    const pendingIds = new Set(pending.map((decision) => decision.id));
+    return [...pending, ...(approvalsQuery.data?.items ?? []).filter((decision) => !pendingIds.has(decision.id))];
+  }, [approvalsQuery.data?.items, pendingApprovalsQuery.data?.items]);
   const actionIntents = useMemo(() => actionIntentsQuery.data?.items ?? [], [actionIntentsQuery.data?.items]);
   const rows = useMemo(
     () => buildApprovalQueue({ decisions, intents: actionIntents }),
@@ -157,9 +168,9 @@ export default function RuntimeApprovalsPage() {
     filteredRows[0] ??
     null;
   const evidencePackQuery = useRuntimePolicyEvidencePack(selectedRow?.decisionId ?? null);
-  const loading = approvalsQuery.isLoading || actionIntentsQuery.isLoading;
+  const loading = approvalsQuery.isLoading || pendingApprovalsQuery.isLoading || actionIntentsQuery.isLoading;
   const degradedFeeds = [
-    approvalsQuery.isError ? "approval gate" : null,
+    approvalsQuery.isError || pendingApprovalsQuery.isError ? "approval gate" : null,
     actionIntentsQuery.isError ? "action intent context" : null,
   ].filter((feed): feed is string => Boolean(feed));
   const error = degradedFeeds.length > 0;
@@ -168,6 +179,7 @@ export default function RuntimeApprovalsPage() {
     error,
     loading,
     pending: counts.pending,
+    pendingAtLimit: pendingApprovalsQuery.data?.total_in_page === 100,
     total: counts.total,
   });
   const busy = approveMutation.isPending || rejectMutation.isPending;
@@ -216,6 +228,7 @@ export default function RuntimeApprovalsPage() {
   async function refreshAll() {
     await Promise.all([
       approvalsQuery.refetch(),
+      pendingApprovalsQuery.refetch(),
       actionIntentsQuery.refetch(),
       evidencePackQuery.refetch(),
     ]);
@@ -236,7 +249,7 @@ export default function RuntimeApprovalsPage() {
         setMessage("Action rejected and kept from execution.");
       }
       setDecisionReason("");
-      await Promise.all([approvalsQuery.refetch(), actionIntentsQuery.refetch()]);
+      await Promise.all([approvalsQuery.refetch(), pendingApprovalsQuery.refetch(), actionIntentsQuery.refetch()]);
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Decision failed.");
     }
@@ -249,7 +262,7 @@ export default function RuntimeApprovalsPage() {
         copy={hero.copy}
         pill={hero.pill}
         tone={hero.tone}
-        refreshing={approvalsQuery.isFetching || actionIntentsQuery.isFetching}
+        refreshing={approvalsQuery.isFetching || pendingApprovalsQuery.isFetching || actionIntentsQuery.isFetching}
         onRefresh={() => {
           void refreshAll();
         }}
@@ -257,6 +270,7 @@ export default function RuntimeApprovalsPage() {
 
       <ApprovalsMetricStrip
         pending={counts.pending}
+        pendingAtLimit={pendingApprovalsQuery.data?.total_in_page === 100}
         approved={counts.approved}
         expiringSoon={counts.expiringSoon}
         stopped={counts.stopped}
@@ -308,6 +322,7 @@ export default function RuntimeApprovalsPage() {
                 setReason={setDecisionReason}
                 busy={busy}
                 canDecide={canDecide}
+                projectId={selectedProject}
                 onApprove={(decisionId, reason) => {
                   void resolve("approve", decisionId, reason);
                 }}

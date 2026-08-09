@@ -15,6 +15,7 @@ import { formatCount } from "@/lib/format";
 type Metric = {
   label: string;
   value: number;
+  atLimit?: boolean;
   helper: string;
   tone: StatusTone;
   Icon: ComponentType<{ size?: number; className?: string }>;
@@ -23,6 +24,7 @@ type Metric = {
 
 type ApprovalsMetricStripProps = {
   pending: number;
+  pendingAtLimit: boolean;
   approved: number;
   expiringSoon: number;
   stopped: number;
@@ -37,6 +39,7 @@ export function ApprovalsMetricStrip({
   expiringSoon,
   onFilterChange,
   pending,
+  pendingAtLimit,
   stopped,
   total,
 }: ApprovalsMetricStripProps) {
@@ -44,6 +47,7 @@ export function ApprovalsMetricStrip({
     {
       label: "Pending",
       value: pending,
+      atLimit: pendingAtLimit,
       helper: expiringSoon > 0
         ? `${formatCount(expiringSoon)} ${expiringSoon === 1 ? "hold expires" : "holds expire"} soon.`
         : "Actions waiting at the approval gate.",
@@ -70,7 +74,7 @@ export function ApprovalsMetricStrip({
     {
       label: "All decisions",
       value: total,
-      helper: "Complete approval and policy decision history.",
+      helper: "Active holds plus the latest resolved decisions returned by the runtime gate.",
       tone: "neutral",
       Icon: ListChecks,
       filter: "all",
@@ -79,7 +83,7 @@ export function ApprovalsMetricStrip({
 
   return (
     <section className="dashboard-metric-strip approval-v2-metric-filters" aria-label="Approval control filters">
-      {metrics.map(({ Icon, filter, helper, label, tone, value }) => (
+      {metrics.map(({ Icon, atLimit, filter, helper, label, tone, value }) => (
         <button
           key={filter}
           type="button"
@@ -93,7 +97,7 @@ export function ApprovalsMetricStrip({
             <span className="dashboard-metric-icon"><Icon aria-hidden="true" size={16} /></span>
             {label}
           </span>
-          <strong>{formatCount(value)}</strong>
+          <strong>{formatCount(value)}{atLimit ? "+" : ""}</strong>
           <p>{helper}</p>
         </button>
       ))}
