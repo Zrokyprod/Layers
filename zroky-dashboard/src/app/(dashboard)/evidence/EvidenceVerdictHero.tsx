@@ -51,7 +51,7 @@ export function EvidenceVerdictHero({
           <DashboardButtonLink
             href={ctaHref}
             onClick={(event) => {
-              if (onCtaClick && ctaHref.startsWith("/evidence?")) {
+              if (onCtaClick && ctaHref.startsWith("/evidence")) {
                 event.preventDefault();
                 onCtaClick(ctaHref);
               }

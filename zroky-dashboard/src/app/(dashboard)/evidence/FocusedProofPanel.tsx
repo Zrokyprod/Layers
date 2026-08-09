@@ -45,7 +45,7 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
     return (
       <div className="ev-empty-state">
         <strong>The private runner is offline</strong>
-        <DashboardButtonLink href="/operations" icon={<ExternalLink size={14} />} variant="primary">
+        <DashboardButtonLink href="/operations?view=unverifiable" icon={<ExternalLink size={14} />} variant="primary">
           Open runner status
         </DashboardButtonLink>
       </div>
