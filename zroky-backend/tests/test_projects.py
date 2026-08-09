@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.api.routes.projects import _rotated_api_key_expiry
-from app.db.models import ApiKey, Project, ProjectMembership, User
+from app.db.models import ApiKey, AuditLog, Project, ProjectMembership, User
 from app.services.membership import (
     InactiveProjectUserError,
     LastProjectOwnerError,
@@ -152,6 +152,27 @@ def test_project_and_api_key_flow(client: TestClient) -> None:
     )
     assert rename_response.status_code == 200
     assert rename_response.json()["name"] == "Acme Verified Actions"
+
+    duplicate_rename = client.patch(
+        "/v1/settings/project",
+        headers=_project_auth_headers(project_id, "owner-1"),
+        json={"name": "Acme Verified Actions"},
+    )
+    assert duplicate_rename.status_code == 200
+
+    session_dependency = app.dependency_overrides[get_db_session]()
+    session = next(session_dependency)
+    try:
+        audit = session.query(AuditLog).filter_by(
+            tenant_id=project_id,
+            diagnosis_id=project_id,
+            action="project_renamed",
+        ).one()
+        assert audit.actor_subject
+        assert audit.actor_subject != "owner-1"
+        assert audit.metadata_json == '{"changed_fields":["name"]}'
+    finally:
+        session_dependency.close()
 
     settings_response = client.get(
         "/v1/settings/project",
