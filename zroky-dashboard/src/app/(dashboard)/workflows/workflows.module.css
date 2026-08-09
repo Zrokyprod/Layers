@@ -170,8 +170,7 @@
 .denominator,
 .metricCell strong,
 .statusBadge,
-.editor,
-.resultPre {
+.editor {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
@@ -263,6 +262,9 @@
 
 .packTable {
   display: grid;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
 }
 
 .packEmpty {
@@ -520,8 +522,7 @@
 .editor {
   display: block;
   width: 100%;
-  height: 38px;
-  min-height: 38px;
+  min-height: 220px;
   padding: 10px 16px;
   color: var(--text);
   background: var(--surface-2);
@@ -530,8 +531,8 @@
   font-size: 11.5px;
   line-height: 1.35;
   outline: 0;
-  overflow: hidden;
-  resize: none;
+  overflow: auto;
+  resize: vertical;
   tab-size: 2;
   white-space: pre;
 }
@@ -635,16 +636,6 @@
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   line-height: 1.45;
-}
-
-.resultPre {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 .contractList {
