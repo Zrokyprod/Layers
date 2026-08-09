@@ -114,7 +114,8 @@ export type ConnectorInventoryState =
   | "not_tested"
   | "ready"
   | "failing"
-  | "mismatched";
+  | "mismatched"
+  | "unavailable";
 
 export type ConnectorCoverageStatus =
   | "healthy"
@@ -264,6 +265,7 @@ export type BuildConnectorInventoryInput = {
   registry?: ToolRegistryResponse | null;
   actionTypes?: string[];
   partialFailure?: boolean;
+  unavailableConnectorIds?: ReadonlySet<ConnectorInventoryId>;
   visibleConnectorIds?: ReadonlySet<ConnectorInventoryId>;
 };
 
@@ -1223,23 +1225,33 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
   const visibleProofDefinitions = visibleConnectorIds
     ? proofDefinitions.filter((definition) => visibleConnectorIds.has(definition.id))
     : proofDefinitions;
+  const markUnavailable = (row: ConnectorInventoryRow): ConnectorInventoryRow =>
+    input.unavailableConnectorIds?.has(row.id)
+      ? {
+          ...row,
+          state: "unavailable",
+          tone: "neutral",
+          statusLabel: "Status unavailable",
+          detail: "Connector status could not be loaded. Refresh before changing its configuration.",
+        }
+      : row;
   const proofRows = visibleProofDefinitions.map((definition) => {
     const row = proofRow(definition, checks);
-    return {
+    return markUnavailable({
       ...row,
       metadata: {
         ...row.metadata,
         manifestId: manifestIds.get(definition.id) ?? null,
       },
-    };
+    });
   });
   const supportRows = [
     supportRow("github", input.github),
     supportRow("slack", input.slack),
-  ].filter((row) => !visibleConnectorIds || visibleConnectorIds.has(row.id));
+  ].filter((row) => !visibleConnectorIds || visibleConnectorIds.has(row.id)).map(markUnavailable);
   const controlRows = [mcpRow(input.mcp)].filter(
     (row) => !visibleConnectorIds || visibleConnectorIds.has(row.id),
-  );
+  ).map(markUnavailable);
   const actionTypes = actionTypesForCoverage(input);
   const coverageRows = buildCoverageRows(actionTypes, proofRows, registryConnectorHints(input.registry));
   const counts: ConnectorInventoryCounts = {
@@ -1275,10 +1287,12 @@ export function connectorUpdatedLabel(row: Pick<ConnectorInventoryRow, "updatedA
 }
 
 export function connectorStateTone(state: ConnectorInventoryState): StatusTone {
+  if (state === "unavailable") return "neutral";
   return state === "ready" ? "success" : state === "missing" || state === "not_tested" ? "warning" : statusTone(state);
 }
 
 export function connectorStateLabel(state: ConnectorInventoryState): string {
+  if (state === "unavailable") return "Status unavailable";
   if (state === "not_tested") return "Needs preflight";
   if (state === "ready") return "Healthy";
   return statusLabel(state);

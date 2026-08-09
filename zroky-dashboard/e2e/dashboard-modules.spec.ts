@@ -67,6 +67,34 @@ test.describe("dashboard modules", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("connector inventory and detail panels stay accessible at the viewport width", async ({ page }) => {
+    await page.goto("/integrations");
+    await expectDashboardShell(page);
+    await expectNoHorizontalOverflow(page);
+
+    const inventory = page.getByLabel("Connector inventory");
+    const selected = inventory.locator(".connector-inventory-row[data-selected='true']");
+    await expect(selected).toHaveAttribute("aria-pressed", "true");
+
+    const inspector = page.getByLabel("Selected connector");
+    await expect.poll(() => inspector.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return [...element.children].flatMap((child) => {
+        const childBounds = child.getBoundingClientRect();
+        if (childBounds.width === 0 && childBounds.height === 0) return [];
+        if (childBounds.left >= bounds.left - 1 && childBounds.right <= bounds.right + 1) return [];
+        return [{
+          className: child.className,
+          inspector: { left: bounds.left, right: bounds.right },
+          child: { left: childBounds.left, right: childBounds.right },
+        }];
+      });
+    })).toEqual([]);
+
+    const auditTable = page.locator(".connectors-source-audit-table");
+    await expect.poll(() => auditTable.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
+  });
+
   test("workflow library and JSON editor stay usable at the viewport width", async ({ page }) => {
     await page.goto("/workflows");
     await expectDashboardShell(page);

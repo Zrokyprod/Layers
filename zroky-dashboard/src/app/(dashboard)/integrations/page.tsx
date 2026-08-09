@@ -806,6 +806,7 @@ function connectorPrimitiveLabel(row: ConnectorInventoryRow): string {
 }
 
 function connectorInspectorStatus(row: ConnectorInventoryRow) {
+  if (row.state === "unavailable") return { label: "Status unavailable", tone: "neutral" as const };
   if (row.state === "missing") return { label: "Missing / Not connected", tone: "danger" as const };
   return { label: connectorStateLabel(row.state), tone: row.tone };
 }
@@ -820,7 +821,6 @@ function ConnectorSetupMatrix({
   const manifestLoaded = row.metadata.manifestId != null && row.metadata.manifestId !== "";
   const canConfigure = row.kind === "proof" && row.connected;
   const canRunTestRead = canConfigure;
-  const canBindWorkflow = canConfigure && row.state === "ready";
   const cards = [
     {
       action: "Edit",
@@ -830,33 +830,37 @@ function ConnectorSetupMatrix({
       title: "Read-only scope",
       reason: "Connect source first",
       onClick: onConnect,
+      statusOnly: false,
     },
     {
-      action: "Run test-read",
+      action: "Open test-read",
       disabled: !canRunTestRead,
       detail: row.connected ? (row.lastVerdict ? humanize(row.lastVerdict) : "Ready to execute") : "Not executed",
       icon: <Search aria-hidden="true" />,
       title: "Test-read",
       reason: "Connect source first",
       onClick: onConnect,
+      statusOnly: false,
     },
     {
-      action: "Bind",
-      disabled: !canBindWorkflow,
+      action: "Open Workflows",
+      disabled: false,
       detail: row.readinessStatus ? humanize(row.readinessStatus) : "Not bound to any workflow",
       icon: <PlugZap aria-hidden="true" />,
       title: "Workflow binding",
-      reason: row.connected ? "Run a passing test-read first" : "Connect source first",
-      onClick: onConnect,
+      reason: "",
+      onClick: () => externalNavigator.assign("/workflows"),
+      statusOnly: false,
     },
     {
-      action: manifestLoaded ? "View manifest" : "Upload manifest",
-      disabled: !manifestLoaded,
+      action: manifestLoaded ? "Loaded" : "Missing",
+      disabled: true,
       detail: manifestLoaded ? String(row.metadata.manifestId) : "No manifest loaded",
       icon: <ClipboardCheck aria-hidden="true" />,
       title: "Manifest",
-      reason: "Manifest upload is not wired yet",
+      reason: "",
       onClick: onConnect,
+      statusOnly: true,
     },
   ];
 
@@ -869,15 +873,19 @@ function ConnectorSetupMatrix({
             <strong>{card.title}</strong>
             <small>{card.detail}</small>
           </div>
-          <DashboardButton
-            disabled={card.disabled}
-            onClick={card.onClick}
-            size="sm"
-            title={card.disabled ? card.reason : undefined}
-            variant="soft"
-          >
-            {card.action}
-          </DashboardButton>
+          {card.statusOnly ? (
+            <StatusPill label={card.action} tone={manifestLoaded ? "success" : "neutral"} value={manifestLoaded ? "ready" : "missing"} />
+          ) : (
+            <DashboardButton
+              disabled={card.disabled}
+              onClick={card.onClick}
+              size="sm"
+              title={card.disabled ? card.reason : undefined}
+              variant="soft"
+            >
+              {card.action}
+            </DashboardButton>
+          )}
         </article>
       ))}
     </div>
@@ -927,6 +935,7 @@ function SourceAudit({
 
 function ConnectorInventoryList({
   groups,
+  initialLoading,
   loading,
   searchQuery,
   selectedId,
@@ -935,6 +944,7 @@ function ConnectorInventoryList({
   onSelect,
 }: {
   groups: ConnectorCategoryGroup[];
+  initialLoading: boolean;
   loading: boolean;
   searchQuery: string;
   selectedId: ConnectorInventoryId | null;
@@ -966,54 +976,62 @@ function ConnectorInventoryList({
         <span className="sr-only">Search connectors</span>
         <input
           aria-label="Search connectors"
-          placeholder="Search systems, OAuth, API keys, or action types..."
+          placeholder="Search connectors..."
           type="search"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
         />
       </label>
 
-      <div className="connector-category-list">
-        {groups.map((group) => {
-          const cards = connectorDisplayCards(group.rows, selectedId, searchQuery);
-          return (
-            <section className="connector-category-group" key={group.category} aria-label={group.label}>
-              <div className="connector-category-head">
-                <strong>{group.label}</strong>
-                <span>{cards.length} connector{cards.length === 1 ? "" : "s"}</span>
-              </div>
-              <div className="connector-row-list">
-                {cards.map((card) => {
-                  const selected = selectedId != null && card.ids.includes(selectedId);
-                  return (
-                    <button
-                      type="button"
-                      className="connector-inventory-row"
-                      data-selected={selected}
-                      data-tone={card.row.tone}
-                      key={card.key}
-                      onClick={() => onSelect(card.row.id)}
-                    >
-                      <ConnectorLogo id={card.logoId} />
-                      <span className="connector-row-main">
-                        <strong>{card.title}</strong>
-                        <small>{connectorScopeLabel(card.row)}</small>
-                      </span>
-                      <span className="connector-row-status">
-                        <span className="connector-availability-pill" data-selected={selected}>
-                          {selected ? "Selected" : "Available"}
+      {initialLoading ? (
+        <div className="connectors-empty-state" role="status">
+          <strong>Loading connector status</strong>
+          <span>Checking configured systems and recent test-reads.</span>
+        </div>
+      ) : (
+        <div className="connector-category-list">
+          {groups.map((group) => {
+            const cards = connectorDisplayCards(group.rows, selectedId, searchQuery);
+            return (
+              <section className="connector-category-group" key={group.category} aria-label={group.label}>
+                <div className="connector-category-head">
+                  <strong>{group.label}</strong>
+                  <span>{cards.length} connector{cards.length === 1 ? "" : "s"}</span>
+                </div>
+                <div className="connector-row-list">
+                  {cards.map((card) => {
+                    const selected = selectedId != null && card.ids.includes(selectedId);
+                    return (
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        className="connector-inventory-row"
+                        data-selected={selected}
+                        data-tone={card.row.tone}
+                        key={card.key}
+                        onClick={() => onSelect(card.row.id)}
+                      >
+                        <ConnectorLogo id={card.logoId} />
+                        <span className="connector-row-main">
+                          <strong>{card.title}</strong>
+                          <small>{connectorScopeLabel(card.row)}</small>
                         </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+                        <span className="connector-row-status">
+                          <span className="connector-availability-pill" data-selected={selected}>
+                            {selected ? "Selected" : "Available"}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
-      {groups.length === 0 ? (
+      {!initialLoading && groups.length === 0 ? (
         <div className="connectors-empty-state">
           <strong>No connectors match this search</strong>
           <span>Try a system name, connector type, or action type such as refund, CRM, Jira, or SQL.</span>
@@ -1246,8 +1264,8 @@ function GenericRestSetupPanel({
         </details>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -1420,8 +1438,8 @@ function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
         </form>
       </div>
 
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
       <div className="connector-fact-grid">
         <Fact label="Connected" value={status?.connected ? "yes" : "no"} />
         <Fact label="Secret" value={status?.has_bearer_token ? `saved${status.bearer_token_last4 ? ` (...${status.bearer_token_last4})` : ""}` : "missing"} />
@@ -1591,8 +1609,8 @@ function StripeRefundPullSetupPanel({
           </DashboardButton>
         ) : null}
       </form>
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
     </section>
   );
 }
@@ -1776,8 +1794,8 @@ function RazorpayRefundSetupPanel({
         </form>
       </div>
 
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
       <div className="connector-fact-grid">
         <Fact label="Connected" value={status?.connected ? "yes" : "no"} />
         <Fact label="Key id" value={typeof status?.query?.key_id === "string" ? status.query.key_id : null} />
@@ -1954,8 +1972,8 @@ function HubSpotSetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -2138,8 +2156,8 @@ function SalesforceSetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -2353,8 +2371,8 @@ function ZohoSetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -2526,8 +2544,8 @@ function ZendeskSetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -2730,8 +2748,8 @@ function JiraSetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -2903,8 +2921,8 @@ function NetSuiteSetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -3064,8 +3082,8 @@ function ShopifySetupPanel({
         </form>
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
@@ -3224,8 +3242,8 @@ function PostgresReadSetupPanel({
         </form>
       </div>
 
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
     </section>
   );
 }
@@ -3405,13 +3423,14 @@ function McpUpstreamSetupPanel({
         ) : null}
       </div>
 
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert" role="alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip" role="status">{message}</div> : null}
     </section>
   );
 }
 
 function ConnectorInspector({
+  loading,
   mcpStatus,
   genericStatus,
   hubspotStatus,
@@ -3441,6 +3460,7 @@ function ConnectorInspector({
   onMcpStatusChange,
   row,
 }: {
+  loading: boolean;
   mcpStatus: McpUpstreamBindingResponse | null;
   genericStatus: GenericRestConnectorStatusResponse | null;
   hubspotStatus: HubSpotCrmConnectorStatusResponse | null;
@@ -3473,9 +3493,16 @@ function ConnectorInspector({
   const [setupOpen, setSetupOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
-  useEffect(() => {
-    setSetupOpen(false);
-  }, [row?.id]);
+  if (loading) {
+    return (
+      <section className="panel connector-inspector-panel" aria-label="Selected connector">
+        <div className="connectors-empty-state" role="status">
+          <strong>Loading connector details</strong>
+          <span>Waiting for configured access and readiness status.</span>
+        </div>
+      </section>
+    );
+  }
 
   if (!row) {
     return (
@@ -3624,7 +3651,7 @@ function ConnectorInspector({
           onToggle={(event) => setSetupOpen(event.currentTarget.open)}
         >
           <summary>
-            <span>One-click setup</span>
+            <span>{setupProfile.oneClick ? "One-click setup" : "Connector setup"}</span>
             <small>Read-only access · test-read · workflow binding</small>
           </summary>
           {setupOpen ? (
@@ -3735,7 +3762,9 @@ function ConnectorInspector({
 export default function IntegrationsPage() {
   const [overview, setOverview] = useState<ConnectorsOverviewState>(initialOverview);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [partialFailure, setPartialFailure] = useState(false);
+  const [unavailableConnectorIds, setUnavailableConnectorIds] = useState<ReadonlySet<ConnectorInventoryId>>(new Set());
   const [selectedId, setSelectedId] = useState<ConnectorInventoryId | null>(initialConnectorFromUrl);
   const [connectorSearch, setConnectorSearch] = useState("");
 
@@ -3826,6 +3855,19 @@ export default function IntegrationsPage() {
       registryResult,
       sourceConnectorsResult,
     ].some((result) => result.status === "rejected"));
+    const unavailable = new Set<ConnectorInventoryId>();
+    if (githubResult.status === "rejected") unavailable.add("github");
+    if (genericResult.status === "rejected") unavailable.add("generic_rest");
+    if (sourceConnectorsResult.status === "rejected") unavailable.add("stripe_refund");
+    if (stripePaymentResult.status === "rejected") unavailable.add("stripe_payment");
+    if (hubspotResult.status === "rejected") unavailable.add("hubspot_crm");
+    if (salesforceResult.status === "rejected") unavailable.add("salesforce_crm");
+    if (zendeskResult.status === "rejected") unavailable.add("zendesk_ticket");
+    if (jiraResult.status === "rejected") unavailable.add("jira_issue");
+    if (shopifyResult.status === "rejected") unavailable.add("shopify_admin");
+    if (postgresResult.status === "rejected") unavailable.add("postgres_read");
+    setUnavailableConnectorIds(unavailable);
+    setHasLoaded(true);
     setLoading(false);
   }, []);
 
@@ -3841,9 +3883,10 @@ export default function IntegrationsPage() {
         ledger: null,
         partialFailure,
         stripe: stripeStatusFromSourceConnector(overview.stripePull ?? undefined),
+        unavailableConnectorIds,
         visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS,
       }),
-    [overview, partialFailure],
+    [overview, partialFailure, unavailableConnectorIds],
   );
   const visibleInventory = inventory;
 
@@ -3852,7 +3895,7 @@ export default function IntegrationsPage() {
     setSelectedId(firstSelectedId(visibleInventory));
   }, [inventory, selectedId, visibleInventory]);
 
-  const selectedRow = inventory.rows.find((row) => row.id === selectedId) ?? null;
+  const selectedRow = hasLoaded ? inventory.rows.find((row) => row.id === selectedId) ?? null : null;
   const filteredCategoryGroups = useMemo(
     () => filterCategoryGroups(visibleInventory.categoryGroups, connectorSearch),
     [connectorSearch, visibleInventory.categoryGroups],
@@ -3863,7 +3906,8 @@ export default function IntegrationsPage() {
         className="connectors-workspace"
         left={
           <ConnectorInventoryList
-            groups={filteredCategoryGroups}
+            groups={hasLoaded ? filteredCategoryGroups : []}
+            initialLoading={!hasLoaded}
             loading={loading}
             onRefresh={() => void loadOverview(selectedId === "mcp_upstream")}
             onSearchQueryChange={setConnectorSearch}
@@ -3877,6 +3921,8 @@ export default function IntegrationsPage() {
         }
         right={
           <ConnectorInspector
+            key={selectedRow?.id ?? "loading"}
+            loading={!hasLoaded}
             mcpStatus={overview.mcp}
             genericStatus={overview.generic}
             hubspotStatus={overview.hubspot}
@@ -3914,7 +3960,7 @@ export default function IntegrationsPage() {
       <SourceAudit rows={visibleInventory.proofRows} />
 
       {partialFailure ? (
-        <div className="alert-strip connectors-alert">
+        <div className="alert-strip connectors-alert" role="alert">
           <AlertTriangle aria-hidden="true" />
           Some connector status checks could not load. Coverage is shown from the sources that responded.
         </div>
