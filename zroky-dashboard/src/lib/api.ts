@@ -52,13 +52,9 @@
   PiiPolicyResponse,
   PricingInterviewNote,
   PricingValidationResponse,
-  ProviderKeyListResponse,
-  ProviderKeyResponse,
   ProjectResponse,
   ProjectInviteResponse,
   ProjectMembershipResponse,
-  ProviderVerificationListResponse,
-  ProviderVerificationTestResponse,
   ReasoningShareResponse,
   RollbackDrillResponse,
   RollbackDrillVerificationResponse,
@@ -70,7 +66,6 @@
   SlackInstallStartResponse,
   SlackInstallStatusResponse,
   SlackTestMessageResponse,
-  EvaluationSettingsResponse,
   ChangePasswordResponse,
   SecurityStatusResponse,
   MfaTotpStartResponse,
@@ -3357,19 +3352,6 @@ export function verifyRollbackDrill(body: {
   });
 }
 
-export function listProviderVerifications(signal?: AbortSignal): Promise<ProviderVerificationListResponse> {
-  return request<ProviderVerificationListResponse>("/v1/settings/provider-verifications", { signal });
-}
-
-export function testProviderConnection(provider: string): Promise<ProviderVerificationTestResponse> {
-  return request<ProviderVerificationTestResponse>(
-    `/v1/settings/provider-verifications/${encodeURIComponent(provider)}/test`,
-    {
-      method: "POST",
-    },
-  );
-}
-
 export function exportProjectData(query?: {
   limit?: number;
   status?: string;
@@ -3430,36 +3412,6 @@ export function rotateProjectApiKey(projectId: string, keyId: string): Promise<A
       method: "POST",
     },
   );
-}
-
-export function listProviderKeys(query?: {
-  provider?: string;
-  include_revoked?: boolean;
-}, signal?: AbortSignal): Promise<ProviderKeyListResponse> {
-  return request<ProviderKeyListResponse>("/v1/providers/keys", {
-    signal,
-    query: {
-      provider: query?.provider,
-      include_revoked: query?.include_revoked == null ? undefined : query.include_revoked ? "true" : "false",
-    },
-  });
-}
-
-export function createProviderKey(body: {
-  provider: string;
-  plaintext_key: string;
-  label?: string | null;
-}): Promise<ProviderKeyResponse> {
-  return request<ProviderKeyResponse>("/v1/providers/keys", {
-    method: "POST",
-    body,
-  });
-}
-
-export function revokeProviderKey(keyId: string): Promise<ProviderKeyResponse> {
-  return request<ProviderKeyResponse>(`/v1/providers/keys/${encodeURIComponent(keyId)}`, {
-    method: "DELETE",
-  });
 }
 
 export function getMe(signal?: AbortSignal): Promise<MeResponse> {
@@ -3791,23 +3743,6 @@ export function runIssueCiGate(
 ): Promise<IssueCiGateResponse> {
   return request<IssueCiGateResponse>(`/v1/issues/${encodeURIComponent(issueId)}/ci-gate`, {
     method: "POST",
-    body,
-  });
-}
-
-export function getEvaluationSettings(signal?: AbortSignal): Promise<EvaluationSettingsResponse> {
-  return request<EvaluationSettingsResponse>("/v1/settings/evaluation", { signal });
-}
-
-export function updateEvaluationSettings(body: {
-  judge_mode: "fast" | "standard" | "strict";
-  default_judge_model: string;
-  minimum_confidence: number;
-  auto_calibration_enabled: boolean;
-  record_replay_calibration: boolean;
-}): Promise<EvaluationSettingsResponse> {
-  return request<EvaluationSettingsResponse>("/v1/settings/evaluation", {
-    method: "PUT",
     body,
   });
 }

@@ -93,7 +93,6 @@ export interface SavingsSummaryResponse {
 
 export type AlertStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 
-export type ProviderVerificationStatus = "verified" | "unverified" | "failed";
 
 export interface CallListItem {
   call_id: string;
@@ -783,25 +782,6 @@ export interface RollbackDrillVerificationResponse {
   rollback_drill: RollbackDrillResponse;
 }
 
-export interface ProviderVerificationItem {
-  provider: string;
-  status: ProviderVerificationStatus;
-  tracked_call_count: number;
-  last_checked_at: string | null;
-  last_error: string | null;
-}
-
-export interface ProviderVerificationListResponse {
-  items: ProviderVerificationItem[];
-}
-
-export interface ProviderVerificationTestResponse {
-  provider: string;
-  status: "verified" | "failed";
-  message: string;
-  checked_at: string;
-}
-
 export interface ProjectResponse {
   project_id: string;
   name: string;
@@ -845,27 +825,6 @@ export interface ApiKeyCreateResponse {
   expires_at: string | null;
   rotated_from_key_id: string | null;
   created_at: string;
-}
-
-export interface ProviderKeyResponse {
-  id: string;
-  project_id: string;
-  provider: string;
-  key_fingerprint: string;
-  key_last4: string | null;
-  kms_key_id: string | null;
-  label: string | null;
-  is_active: boolean;
-  created_by_user_id: string | null;
-  last_used_at: string | null;
-  revoked_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface ProviderKeyListResponse {
-  items: ProviderKeyResponse[];
-  total_in_page: number;
 }
 
 export interface DiagnosisFeedbackResponse {
@@ -1244,15 +1203,6 @@ export interface RazorpayVerifyResponse {
   payment_id: string;
   org_id: string;
   plan_code: string | null;
-}
-
-export interface EvaluationSettingsResponse {
-  judge_mode: "fast" | "standard" | "strict";
-  default_judge_model: string;
-  minimum_confidence: number;
-  auto_calibration_enabled: boolean;
-  record_replay_calibration: boolean;
-  updated_at: string;
 }
 
 // ── Support Tickets ──────────────────────────────────────────────────────────

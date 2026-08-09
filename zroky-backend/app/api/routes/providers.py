@@ -52,9 +52,17 @@ from app.services.provider_key_vault import (
     serialize_vault_row,
     store_provider_key,
 )
+from app.services.user_identity import require_authenticated_user, resolve_request_identity
 
 router = APIRouter(prefix="/v1/providers")
 logger = logging.getLogger(__name__)
+
+
+def _provider_key_actor(request: Request, db: Session) -> tuple[str | None, str | None]:
+    if resolve_request_identity(request) is None:
+        return None, None
+    user = require_authenticated_user(request, db, auto_create=True)
+    return user.id, user.subject
 
 
 # ── existing endpoints (unchanged) ───────────────────────────────────────────
@@ -151,6 +159,7 @@ def create_provider_key(
       - On success the previously-active row for (project_id, provider)
         is automatically revoked so only the new row is active.
     """
+    user_id, actor_subject = _provider_key_actor(request, db)
     try:
         row = store_provider_key(
             db,
@@ -158,6 +167,8 @@ def create_provider_key(
             provider=body.provider,
             plaintext_key=body.plaintext_key,
             label=body.label,
+            created_by_user_id=user_id,
+            actor_subject=actor_subject,
         )
     except (InvalidProviderError, InvalidKeyPlaintextError) as exc:
         raise HTTPException(
@@ -241,7 +252,13 @@ def delete_provider_key(
 ) -> ProviderKeyResponse:
     """Revoke a key. Idempotent — calling on an already-revoked row
     returns the same row unchanged. 404 if missing or cross-tenant."""
-    row = revoke_provider_key(db, project_id=tenant_id, key_id=key_id)
+    _, actor_subject = _provider_key_actor(request, db)
+    row = revoke_provider_key(
+        db,
+        project_id=tenant_id,
+        key_id=key_id,
+        actor_subject=actor_subject,
+    )
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

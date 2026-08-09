@@ -59,9 +59,6 @@ import {
 } from "./api";
 import {
   getActivityFeed,
-  listProviderKeys,
-  listProviderVerifications,
-  testProviderConnection,
   changePassword,
   updateMe,
   listCalls,
@@ -197,10 +194,8 @@ import type {
   ProjectInviteResponse,
   GithubConnectionStatusResponse,
   ProjectMembershipResponse,
-  ProviderKeyListResponse,
 } from "./types";
 import type { AdjacentCallsResponse } from "./types";
-import { PROVIDER_KEY_QUERY_KEY } from "./provider-key-gate";
 import {
   legacyProductSurfaceDisabledError,
   legacyProductSurfaceQueryEnabled,
@@ -694,29 +689,6 @@ export function useChangePassword() {
   return useMutation({
     mutationFn: ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) =>
       changePassword(currentPassword, newPassword),
-  });
-}
-
-// ─── Provider Verifications ────────────────────────────────────────────────
-
-export function useProviderVerifications() {
-  return useQuery({
-    queryKey: ["provider-verifications"],
-    queryFn: () => listProviderVerifications(),
-  });
-}
-
-export function useActiveProviderKeys() {
-  return useQuery<ProviderKeyListResponse>({
-    queryKey: PROVIDER_KEY_QUERY_KEY,
-    queryFn: ({ signal }) => listProviderKeys({ include_revoked: false }, signal),
-    staleTime: 60_000,
-  });
-}
-
-export function useTestProviderConnection() {
-  return useMutation({
-    mutationFn: (provider: string) => testProviderConnection(provider),
   });
 }
 

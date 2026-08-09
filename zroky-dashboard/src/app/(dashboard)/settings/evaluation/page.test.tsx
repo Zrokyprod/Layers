@@ -9,9 +9,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("SettingsEvaluationRedirectPage", () => {
-  it("redirects legacy evaluation settings to the planned Settings surface", () => {
+  it("redirects legacy evaluation settings directly to API keys", () => {
     SettingsEvaluationRedirectPage();
 
-    expect(redirect).toHaveBeenCalledWith("/settings");
+    expect(redirect).toHaveBeenCalledWith("/settings/keys");
   });
 });
