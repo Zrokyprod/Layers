@@ -75,6 +75,13 @@ test.describe("dashboard modules", () => {
     const library = page.getByLabel("Workflow library");
     await expect(library).toBeVisible();
     await expect.poll(() => library.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
+    const packRows = library.getByRole("button");
+    if (await packRows.count()) {
+      await expect(packRows.first()).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled();
+    } else {
+      await expect(library.getByText(/No Assurance Packs published/)).toBeVisible();
+    }
 
     const editor = page.getByLabel("Assurance Pack JSON");
     await expect(editor).toBeVisible();

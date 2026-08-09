@@ -64,6 +64,9 @@ describe("WorkflowsPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/Expected property name|Unexpected end/)).toBeInTheDocument();
     });
+    expect(screen.getByLabelText("Assurance Pack JSON").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByLabelText("Assurance Pack JSON").getAttribute("aria-describedby")).toBe("workflow-backend-response");
+    expect(screen.getByRole("button", { name: /Publish/ }).hasAttribute("disabled")).toBe(true);
     expect(api.validateAssurancePack).not.toHaveBeenCalled();
   });
 
@@ -91,9 +94,12 @@ describe("WorkflowsPage", () => {
     ]);
     render(<WorkflowsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /vendor_payment/i }));
+    const persistedPack = await screen.findByRole("button", { name: /vendor_payment/i });
+    fireEvent.click(persistedPack);
 
     expect(screen.getByRole("heading", { name: "vendor_payment" })).toBeInTheDocument();
+    expect(persistedPack.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /Publish/ }).hasAttribute("disabled")).toBe(true);
     expect(screen.getAllByText("stripe_payment.read").length).toBeGreaterThan(0);
     const editor = screen.getByLabelText("Assurance Pack JSON") as HTMLTextAreaElement;
     expect(editor.value).toContain('"workflow_key": "vendor_payment"');
@@ -133,6 +139,7 @@ describe("WorkflowsPage", () => {
     expect(within(metrics).getByText("draft")).toBeInTheDocument();
     expect(screen.getByText("Draft changed; validation required.")).toBeInTheDocument();
     expect(screen.getByText("Unvalidated")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Publish/ }).hasAttribute("disabled")).toBe(false);
   });
 
   it("does not invent workflow rows when no packs are published", async () => {

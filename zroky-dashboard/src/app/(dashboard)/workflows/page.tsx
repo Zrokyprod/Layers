@@ -345,7 +345,7 @@ export default function WorkflowsPage() {
             Validate
           </DashboardButton>
           <DashboardButton
-            disabled={Boolean(parsedDraft.error)}
+            disabled={Boolean(parsedDraft.error) || result.type === "error" || persistedPackLoaded}
             icon={<Rocket size={15} />}
             loading={busy === "publish"}
             onClick={runPublish}
@@ -382,7 +382,7 @@ export default function WorkflowsPage() {
               <h2>Workflow library</h2>
             </div>
           </div>
-          <div className={styles.packTable} aria-label="Workflow library">
+          <div className={styles.packTable} aria-label="Workflow library" role="group">
             <div className={styles.packTableHead}>
               <span>Pack</span>
               <span>Status</span>
@@ -401,6 +401,7 @@ export default function WorkflowsPage() {
               return (
                 <button
                   className={styles.packRow}
+                  aria-pressed={selected}
                   data-selected={selected ? "true" : undefined}
                   key={pack.id}
                   onClick={() => selectWorkflow(pack)}
@@ -416,7 +417,7 @@ export default function WorkflowsPage() {
                   <code>{source}</code>
                   <span>{pack.environment}</span>
                   <code>{pack.version}</code>
-                  <span className={styles.packAction} aria-hidden="true">...</span>
+                  <span className={styles.packAction} aria-hidden="true"><ChevronRight size={14} /></span>
                 </button>
               );
             })}
@@ -477,13 +478,16 @@ export default function WorkflowsPage() {
 
         <aside className={styles.sideStack} aria-label="Workflow readiness">
           {statusCards.map((card) => (
-            <section className={cn(styles.card, styles.statusCard)} key={card.title}>
+            <section
+              aria-live={card.title === "Backend response" ? "polite" : undefined}
+              className={cn(styles.card, styles.statusCard)}
+              key={card.title}
+            >
               <div>
                 <h2>{card.title}</h2>
-                <p>{card.detail}</p>
+                <p id={card.title === "Backend response" ? "workflow-backend-response" : undefined}>{card.detail}</p>
               </div>
               <StatusBadge tone={card.tone}>{card.status}</StatusBadge>
-              <ChevronRight size={16} aria-hidden="true" />
             </section>
           ))}
         </aside>
@@ -498,6 +502,8 @@ export default function WorkflowsPage() {
           </div>
         </div>
         <textarea
+          aria-describedby="workflow-backend-response"
+          aria-invalid={parsedDraft.error || result.type === "error" ? "true" : undefined}
           aria-label="Assurance Pack JSON"
           className={styles.editor}
           rows={12}
