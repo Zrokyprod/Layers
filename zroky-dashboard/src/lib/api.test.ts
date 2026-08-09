@@ -29,6 +29,7 @@ import {
   listActionIntents,
   listProjectActionExecutionAttempts,
   listActionRunners,
+  registerActionRunner,
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   listOutcomeMismatchResponses,
@@ -89,6 +90,32 @@ describe("workspace settings API", () => {
 
     for (const call of fetchMock.mock.calls) {
       expect((call[1]?.headers as Record<string, string>)["x-project-id"]).toBe("proj_billing");
+    }
+  });
+
+  it("pins runner reads and writes to the requested project", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listActionRunners(undefined, "proj_runner");
+    await registerActionRunner(
+      {
+        name: "Runner",
+        runner_type: "customer_hosted",
+        environment: "production",
+        supported_operation_kinds: ["TRANSFER"],
+        credential_scope: {
+          allowed_prefixes: ["customer-runner-secret://payments"],
+          default_credential_ref: "customer-runner-secret://payments/stripe",
+        },
+      },
+      "proj_runner",
+    );
+
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1]?.headers as Record<string, string>)["x-project-id"]).toBe("proj_runner");
     }
   });
 });

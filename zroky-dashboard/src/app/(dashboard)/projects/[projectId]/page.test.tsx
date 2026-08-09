@@ -18,6 +18,7 @@ const navigation = vi.hoisted(() => ({
 }));
 
 const store = vi.hoisted(() => ({
+  selectedProject: "proj_1" as string | null,
   setSelectedProject: vi.fn(),
 }));
 
@@ -88,6 +89,7 @@ describe("ProjectDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigation.params = { projectId: "proj_2" };
+    store.selectedProject = "proj_1";
     api.getProjectSettings.mockResolvedValue(activeProject);
     api.listActionRunners.mockResolvedValue({ items: [] });
     api.listMyProjects.mockResolvedValue(projectRows);
@@ -122,6 +124,8 @@ describe("ProjectDetailPage", () => {
     render(<ProjectDetailPage />);
 
     expect(await screen.findByRole("heading", { level: 1, name: "Checkout Agent" })).toBeInTheDocument();
+    expect(api.getProjectSettings).toHaveBeenCalledWith("proj_2");
+    expect(api.listActionRunners).toHaveBeenCalledWith(undefined, "proj_2");
     expect(screen.getByText("Project ID")).toBeInTheDocument();
     expect(screen.getByText("proj_2")).toBeInTheDocument();
     expect(screen.getByText("available", { selector: ".status-pill" })).toBeInTheDocument();
@@ -181,16 +185,19 @@ describe("ProjectDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Register runner" }));
 
     await waitFor(() => {
-      expect(api.registerActionRunner).toHaveBeenCalledWith({
-        name: "Protected action runner",
-        runner_type: "customer_hosted",
-        environment: "production",
-        supported_operation_kinds: ["TRANSFER"],
-        credential_scope: {
-          allowed_prefixes: ["customer-runner-secret://payments/stripe"],
-          default_credential_ref: "customer-runner-secret://payments/stripe",
+      expect(api.registerActionRunner).toHaveBeenCalledWith(
+        {
+          name: "Protected action runner",
+          runner_type: "customer_hosted",
+          environment: "production",
+          supported_operation_kinds: ["TRANSFER"],
+          credential_scope: {
+            allowed_prefixes: ["customer-runner-secret://payments/stripe"],
+            default_credential_ref: "customer-runner-secret://payments/stripe",
+          },
         },
-      });
+        "proj_1",
+      );
     });
 
     fireEvent.click(await screen.findByText("Launch this runner"));

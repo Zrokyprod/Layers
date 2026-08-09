@@ -125,6 +125,20 @@ def _ensure_default_project_membership(db: Session, user: User) -> bool:
     if active_membership is not None:
         return False
 
+    _lock_user_project_creation(db, user.id)
+    active_membership = db.execute(
+        select(ProjectMembership)
+        .join(Project, Project.id == ProjectMembership.project_id)
+        .where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.is_active.is_(True),
+            Project.is_active.is_(True),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if active_membership is not None:
+        return False
+
     project = Project(
         id=generate_project_id(),
         name="My Project",
@@ -173,6 +187,12 @@ def _current_project_response(
         created_at=membership.created_at,
         updated_at=membership.updated_at,
     )
+
+
+def _lock_user_project_creation(db: Session, user_id: str) -> None:
+    db.execute(
+        select(User.id).where(User.id == user_id).with_for_update()
+    ).scalar_one()
 
 
 def _resolve_project_limit(db: Session, *, org_project_id: str) -> int:
@@ -857,8 +877,8 @@ def create_current_user_project(
     db: Annotated[Session, Depends(get_db)] = None,
 ) -> CurrentUserProjectResponse:
     user = _get_current_user(authorization=authorization, db=db)
-    if _ensure_default_project_membership(db, user):
-        db.commit()
+    _lock_user_project_creation(db, user.id)
+    _ensure_default_project_membership(db, user)
 
     rows = _current_user_project_rows(db, user)
     selected_context_project_id = (x_project_id or "").strip()

@@ -58,21 +58,6 @@ function compactIdentifier(value: string | null | undefined, lead = 10, tail = 6
   return `${normalized.slice(0, lead)}...${normalized.slice(-tail)}`;
 }
 
-function formatOwnerRef(ownerRef: string | null): string {
-  const raw = ownerRef?.trim();
-  if (!raw) return "Current account";
-
-  const separatorIndex = raw.indexOf(":");
-  if (separatorIndex === -1) return compactIdentifier(raw, 8, 5);
-
-  const provider = raw.slice(0, separatorIndex).toLowerCase();
-  const subject = raw.slice(separatorIndex + 1);
-  if (provider === "email") return subject || "Email account";
-  if (provider === "google") return "Google account";
-  if (provider === "github") return "GitHub account";
-  return compactIdentifier(subject || raw, 8, 5);
-}
-
 function formatRoleLabel(role: string | null | undefined): string {
   const normalized = role?.trim();
   if (!normalized) return "Member";
@@ -140,6 +125,7 @@ export default function ProjectDetailPage() {
   const [runnerEnvironment, setRunnerEnvironment] = useState("production");
   const [credentialRef, setCredentialRef] = useState("");
   const [operationKinds, setOperationKinds] = useState<string[]>(["TRANSFER"]);
+  const activeProjectId = useDashboardStore((store) => store.selectedProject);
   const setActiveProject = useDashboardStore((store) => store.setSelectedProject);
 
   const load = useCallback(async () => {
@@ -151,11 +137,11 @@ export default function ProjectDetailPage() {
     try {
       const [activeResult, projectsResult, runnersResult] = await Promise.allSettled([
         withProjectTimeout(
-          getProjectSettings(),
+          getProjectSettings(routeProjectId),
           `Backend API timed out after ${projectDetailLoadTimeoutMs}ms. Start the Zroky backend and retry.`,
         ),
         withProjectTimeout(listMyProjects(), "Project list load timed out."),
-        withProjectTimeout(listActionRunners(), "Runner status load timed out."),
+        withProjectTimeout(listActionRunners(undefined, routeProjectId), "Runner status load timed out."),
       ]);
 
       if (activeResult.status === "rejected") {
@@ -178,7 +164,7 @@ export default function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [routeProjectId]);
 
   useEffect(() => {
     void load();
@@ -187,7 +173,6 @@ export default function ProjectDetailPage() {
   const rows = state.projects;
 
   const selectedProject = rows.find((project) => project.project_id === routeProjectId) ?? null;
-  const activeProjectId = state.activeProject?.project_id ?? null;
   const selectedIsActive = Boolean(selectedProject && selectedProject.project_id === activeProjectId);
   const selectedRole = selectedProject?.role?.trim().toLowerCase() ?? "";
   const canManageRunners = selectedIsActive && ["owner", "admin"].includes(selectedRole);
@@ -267,16 +252,19 @@ export default function ProjectDetailPage() {
     setRegisteringRunner(true);
     try {
       const normalizedCredentialRef = credentialRef.trim();
-      const runner = await registerActionRunner({
-        name: runnerName.trim(),
-        runner_type: "customer_hosted",
-        environment: runnerEnvironment,
-        supported_operation_kinds: operationKinds,
-        credential_scope: {
-          allowed_prefixes: [normalizedCredentialRef],
-          default_credential_ref: normalizedCredentialRef,
+      const runner = await registerActionRunner(
+        {
+          name: runnerName.trim(),
+          runner_type: "customer_hosted",
+          environment: runnerEnvironment,
+          supported_operation_kinds: operationKinds,
+          credential_scope: {
+            allowed_prefixes: [normalizedCredentialRef],
+            default_credential_ref: normalizedCredentialRef,
+          },
         },
-      });
+        selectedProject.project_id,
+      );
       setState((current) => ({
         ...current,
         runners: [runner, ...current.runners.filter((item) => item.runner_id !== runner.runner_id)],
@@ -390,10 +378,6 @@ export default function ProjectDetailPage() {
                     <div>
                       <dt>Project ID</dt>
                       <dd className="mono">{selectedProject.project_id}</dd>
-                    </div>
-                    <div>
-                      <dt>Owner</dt>
-                      <dd>{selectedProject.project_id === activeProjectId ? formatOwnerRef(state.activeProject?.owner_ref ?? null) : "Project member"}</dd>
                     </div>
                     <div>
                       <dt>Created</dt>

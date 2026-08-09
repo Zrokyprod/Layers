@@ -286,7 +286,6 @@ export default function ProjectsPage() {
                       href={`/projects/${encodeURIComponent(project.project_id)}`}
                       className={`settings-project-table-row projects-table-row${isActive ? " is-selected" : ""}`}
                       aria-label={`Open ${project.project_name}`}
-                      onClick={() => setActiveProject(project.project_id)}
                     >
                       <span className="settings-project-name-cell">
                         <strong>{safeString(project.project_name, "Untitled project")}</strong>
