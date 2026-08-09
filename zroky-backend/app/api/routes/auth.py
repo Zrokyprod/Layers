@@ -1098,19 +1098,52 @@ def delete_account(
     except LastUserProjectOwnerError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    # Soft-delete: deactivate the user and scrub PII
+    memberships = db.execute(
+        select(ProjectMembership).where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.is_active.is_(True),
+        )
+    ).scalars().all()
+    previous_subject = user.subject
+    for membership in memberships:
+        project = db.get(Project, membership.project_id)
+        if project is not None and project.owner_ref == previous_subject:
+            project.owner_ref = db.execute(
+                select(User.subject)
+                .join(ProjectMembership, ProjectMembership.user_id == User.id)
+                .where(
+                    ProjectMembership.project_id == membership.project_id,
+                    ProjectMembership.user_id != user.id,
+                    ProjectMembership.role == "owner",
+                    ProjectMembership.is_active.is_(True),
+                    User.is_active.is_(True),
+                )
+                .order_by(ProjectMembership.created_at.asc())
+                .limit(1)
+            ).scalar_one_or_none()
+        membership.is_active = False
+
+    # Soft-delete the row while removing identity, credential, and verification data.
     user.is_active = False
-    user.email = f"deleted_{user.id}@redacted.local"
+    user.subject = f"deleted:{user.id}"
+    user.email = None
     user.email_hash = None
     user.password_hash = None
     user.github_login = None
     user.github_id = None
+    user.github_token_encrypted = None
+    user.github_token_scopes = None
+    user.github_token_connected_at = None
+    user.github_token_updated_at = None
     user.google_id = None
     user.totp_secret = None
     user.totp_enabled_at = None
     user.display_name = None
+    user.email_verified_at = None
+    user.email_verification_token = None
 
     # Revoke all active tokens for this user
+    token_store.delete(f"{_MFA_PENDING_TOTP_PREFIX}{user.id}")
     token_store.revoke_all_user_tokens(user.id)
 
     db.commit()

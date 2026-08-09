@@ -3651,12 +3651,18 @@ export function deleteNotification(notificationId: string): Promise<void> {
 
 // ── Billing / Subscriptions ──────────────────────────────────────────────────
 
-export function getBillingMe(signal?: AbortSignal): Promise<BillingMeResponse> {
-  return request<BillingMeResponse>("/v1/billing/me", { signal });
+export function getBillingMe(
+  signal?: AbortSignal,
+  projectIdOverride?: string | null,
+): Promise<BillingMeResponse> {
+  return request<BillingMeResponse>("/v1/billing/me", { projectIdOverride, signal });
 }
 
-export function getBillingUsage(signal?: AbortSignal): Promise<BillingUsageResponse> {
-  return request<BillingUsageResponse>("/v1/billing/usage", { signal });
+export function getBillingUsage(
+  signal?: AbortSignal,
+  projectIdOverride?: string | null,
+): Promise<BillingUsageResponse> {
+  return request<BillingUsageResponse>("/v1/billing/usage", { projectIdOverride, signal });
 }
 
 export function createBillingCheckout(body: {

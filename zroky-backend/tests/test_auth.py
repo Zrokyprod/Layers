@@ -760,6 +760,29 @@ def test_delete_account_rejects_last_workspace_owner(client):
     access_token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {access_token}"}
 
+    with SessionLocal() as session:
+        user = session.execute(
+            select(User).where(User.email_hash == compute_email_hash("delete-owner@example.com"))
+        ).scalar_one()
+        membership = session.execute(
+            select(ProjectMembership).where(ProjectMembership.user_id == user.id)
+        ).scalar_one()
+        inactive_owner = User(
+            subject="email:inactive-delete-owner@example.com",
+            email="inactive-delete-owner@example.com",
+            email_hash=compute_email_hash("inactive-delete-owner@example.com"),
+            is_active=False,
+        )
+        session.add(inactive_owner)
+        session.flush()
+        session.add(ProjectMembership(
+            project_id=membership.project_id,
+            user_id=inactive_owner.id,
+            role="owner",
+            is_active=True,
+        ))
+        session.commit()
+
     delete_response = client.request(
         "DELETE",
         "/v1/auth/me",
@@ -773,6 +796,88 @@ def test_delete_account_rejects_last_workspace_owner(client):
     me = client.get("/v1/auth/me", headers=headers)
     assert me.status_code == 200
     assert me.json()["email"] == "delete-owner@example.com"
+
+
+def test_delete_account_scrubs_identity_credentials_and_memberships(client):
+    reg = client.post("/v1/auth/register", json={
+        "email": "delete-complete@example.com",
+        "password": "deletecomplete123",
+        "confirm_password": "deletecomplete123",
+    })
+    assert reg.status_code == 201
+    access_token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    with SessionLocal() as session:
+        user = session.execute(
+            select(User).where(User.email_hash == compute_email_hash("delete-complete@example.com"))
+        ).scalar_one()
+        deleted_user_id = user.id
+        membership = session.execute(
+            select(ProjectMembership).where(ProjectMembership.user_id == user.id)
+        ).scalar_one()
+        surviving_owner = User(
+            subject="email:surviving-owner@example.com",
+            email="surviving-owner@example.com",
+            email_hash=compute_email_hash("surviving-owner@example.com"),
+            is_active=True,
+        )
+        session.add(surviving_owner)
+        session.flush()
+        session.add(ProjectMembership(
+            project_id=membership.project_id,
+            user_id=surviving_owner.id,
+            role="owner",
+            is_active=True,
+        ))
+        user.display_name = "Delete Complete"
+        user.email_verified_at = datetime.now(UTC)
+        user.email_verification_token = "verification-token"
+        user.github_id = "github-delete-complete"
+        user.github_login = "delete-complete"
+        user.github_token_encrypted = "encrypted-github-token"
+        user.github_token_scopes = "repo user:email"
+        user.github_token_connected_at = datetime.now(UTC)
+        user.github_token_updated_at = datetime.now(UTC)
+        user.google_id = "google-delete-complete"
+        user.totp_secret = "totp-secret"
+        user.totp_enabled_at = datetime.now(UTC)
+        session.commit()
+
+    delete_response = client.request(
+        "DELETE",
+        "/v1/auth/me",
+        headers=headers,
+        json={"confirm_email": " DELETE-COMPLETE@example.com "},
+    )
+    assert delete_response.status_code == 200
+
+    with SessionLocal() as session:
+        deleted_user = session.get(User, deleted_user_id)
+        assert deleted_user is not None
+        assert deleted_user.is_active is False
+        assert deleted_user.subject == f"deleted:{deleted_user_id}"
+        assert deleted_user.email is None
+        assert deleted_user.email_hash is None
+        assert deleted_user.password_hash is None
+        assert deleted_user.display_name is None
+        assert deleted_user.email_verified_at is None
+        assert deleted_user.email_verification_token is None
+        assert deleted_user.github_id is None
+        assert deleted_user.github_login is None
+        assert deleted_user.github_token_encrypted is None
+        assert deleted_user.github_token_scopes is None
+        assert deleted_user.github_token_connected_at is None
+        assert deleted_user.github_token_updated_at is None
+        assert deleted_user.google_id is None
+        assert deleted_user.totp_secret is None
+        assert deleted_user.totp_enabled_at is None
+        assert all(not row.is_active for row in deleted_user.memberships)
+        project = session.get(Project, deleted_user.memberships[0].project_id)
+        assert project is not None
+        assert project.owner_ref == "email:surviving-owner@example.com"
+
+    assert client.get("/v1/auth/me", headers=headers).status_code == 401
 
 
 def test_github_start_returns_503_when_not_configured(client):

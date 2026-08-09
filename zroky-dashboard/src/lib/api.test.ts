@@ -11,6 +11,7 @@ import {
   enforceAgentProfile,
   getActionsLifecycleSummary,
   getBillingMe,
+  getBillingUsage,
   getActionIntentReceipt,
   getActionIntentTimeline,
   getCustomerRecordConnectorStatus,
@@ -74,6 +75,20 @@ describe("workspace settings API", () => {
 
     for (const call of fetchMock.mock.calls) {
       expect((call[1]?.headers as Record<string, string>)["x-project-id"]).toBe("proj_explicit");
+    }
+  });
+
+  it("pins billing reads to the requested project", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getBillingMe(undefined, "proj_billing");
+    await getBillingUsage(undefined, "proj_billing");
+
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1]?.headers as Record<string, string>)["x-project-id"]).toBe("proj_billing");
     }
   });
 });
