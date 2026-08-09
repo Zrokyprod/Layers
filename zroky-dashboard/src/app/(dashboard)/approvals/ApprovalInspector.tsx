@@ -33,6 +33,7 @@ type ApprovalInspectorProps = {
   setReason: (value: string) => void;
   busy: boolean;
   canDecide: boolean;
+  projectId: string | null;
   onApprove: (id: string, reason: string) => void;
   onReject: (id: string, reason: string) => void;
 };
@@ -325,9 +326,10 @@ function executionWaitingForRunner(row: ApprovalQueueRow): boolean {
   return !terminalStatuses.includes(execution.status.toLowerCase());
 }
 
-function OperationalHandoff({ row }: { row: ApprovalQueueRow }) {
+function OperationalHandoff({ projectId, row }: { projectId: string | null; row: ApprovalQueueRow }) {
   const isPending = row.status === "pending_approval";
   const waitingForRunner = executionWaitingForRunner(row);
+  const runnerHref = projectId ? `/projects/${encodeURIComponent(projectId)}` : "/projects";
   if (!isPending && !waitingForRunner && row.agentIdentityKnown) return null;
 
   return (
@@ -358,7 +360,7 @@ function OperationalHandoff({ row }: { row: ApprovalQueueRow }) {
             <strong>Approved, waiting for a runner</strong>
             <p>Approval authorized this action, but no protected execution has started yet.</p>
           </div>
-          <DashboardButtonLink href="/agents" icon={<PlugZap />} variant="primary">
+          <DashboardButtonLink href={runnerHref} icon={<PlugZap />} variant="primary">
             Check runner
           </DashboardButtonLink>
         </div>
@@ -372,8 +374,8 @@ function OperationalHandoff({ row }: { row: ApprovalQueueRow }) {
             <strong>Agent identity was not reported</strong>
             <p>The decision remains digest-bound, but this runtime should be registered before release is trusted.</p>
           </div>
-          <DashboardButtonLink href="/agents" icon={<Users />} variant="soft">
-            Review agents
+          <DashboardButtonLink href="/operations?view=runs" icon={<Users />} variant="soft">
+            Review runs
           </DashboardButtonLink>
         </div>
       ) : null}
@@ -389,6 +391,7 @@ export function ApprovalInspector({
   pack,
   packError,
   packLoading,
+  projectId,
   reason,
   row,
   setReason,
@@ -539,7 +542,7 @@ export function ApprovalInspector({
         ) : null}
       </section> : null}
 
-      <OperationalHandoff row={row} />
+      <OperationalHandoff projectId={projectId} row={row} />
 
       <section className="approval-v2-tabs" aria-label="Approval detail tabs">
         <div className="approval-v2-tab-list" role="tablist" aria-label="Approval details">

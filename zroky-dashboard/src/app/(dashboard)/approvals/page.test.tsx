@@ -161,6 +161,7 @@ const hookState = vi.hoisted(() => ({
   evidenceMode: "matched" as "matched" | "missing",
   evidenceDecisionId: null as string | null,
   decisions: null as RuntimePolicyDecisionResponse[] | null,
+  pendingDecisions: null as RuntimePolicyDecisionResponse[] | null,
   intents: null as ActionIntentResponse[] | null,
   actionIntentOptions: null as Record<string, unknown> | null,
   approvalsOptions: null as Record<string, unknown> | null,
@@ -203,12 +204,18 @@ vi.mock("@/lib/hooks", () => ({
     data: [{ project_id: "proj_1", role: hookState.projectRole }],
   }),
   useRuntimePolicyApprovals: (status: string, options?: Record<string, unknown>) => {
-    hookState.approvalsStatus = status;
-    hookState.approvalsOptions = options ?? null;
+    const decisions = hookState.decisions ?? [fixtures.decision];
+    const items = status === "pending_approval"
+      ? hookState.pendingDecisions ?? decisions.filter((decision) => decision.status === "pending_approval")
+      : decisions;
+    if (status === "all") {
+      hookState.approvalsStatus = status;
+      hookState.approvalsOptions = options ?? null;
+    }
     return {
       data: {
-        items: hookState.decisions ?? [fixtures.decision],
-        total_in_page: hookState.decisions?.length ?? 1,
+        items,
+        total_in_page: items.length,
       },
       isLoading: false,
       isError: false,
@@ -257,6 +264,7 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     hookState.evidenceMode = "matched";
     hookState.evidenceDecisionId = null;
     hookState.decisions = null;
+    hookState.pendingDecisions = null;
     hookState.intents = null;
     hookState.actionIntentOptions = null;
     hookState.approvalsOptions = null;
@@ -378,10 +386,36 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(screen.getByText("Approved by reviewer")).toBeInTheDocument();
     expect(screen.queryByText("Approval completed")).not.toBeInTheDocument();
     expect(screen.getByText("Approved, waiting for a runner")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Check runner" }).getAttribute("href")).toBe("/agents");
+    expect(screen.getByRole("link", { name: "Check runner" }).getAttribute("href")).toBe("/projects/proj_1");
     expect(screen.getByText("Google account ...571267")).toBeInTheDocument();
     expect(screen.queryByText("Why policy stopped it")).not.toBeInTheDocument();
     expect(screen.queryByText("Expired")).not.toBeInTheDocument();
+  });
+
+  it("routes unidentified runtimes to the handled operations run view", async () => {
+    hookState.intents = [];
+    hookState.decisions = [{ ...fixtures.decision, agent_name: null }];
+
+    render(<RuntimeApprovalsPage />);
+
+    expect((await screen.findByRole("link", { name: "Review runs" })).getAttribute("href")).toBe(
+      "/operations?view=runs",
+    );
+  });
+
+  it("does not under-report the pending queue when the API page limit is reached", async () => {
+    hookState.decisions = [];
+    hookState.pendingDecisions = Array.from({ length: 100 }, (_, index) => ({
+      ...fixtures.decision,
+      id: `decision_${index}`,
+      call_id: `call_${index}`,
+      trace_id: `trace_${index}`,
+    }));
+
+    render(<RuntimeApprovalsPage />);
+
+    expect(await screen.findByText("100+ held")).toBeInTheDocument();
+    expect(screen.getByText("At least 100 actions require a human decision before Zroky releases execution.")).toBeInTheDocument();
   });
 
   it("keeps the inspector empty when the selected filter has no rows", async () => {
