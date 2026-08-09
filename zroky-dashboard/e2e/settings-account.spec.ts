@@ -25,6 +25,20 @@ test.describe("settings and account", () => {
       await page.goto(item.path, { waitUntil: "networkidle" });
       await expectDashboardShell(page);
       await expectVisibleTexts(page, item.labels);
+
+      const activeSettingsTab = page.locator(".settings-tab-link-active");
+      if (await activeSettingsTab.count()) {
+        await expect(activeSettingsTab.locator("strong")).toHaveCSS("color", "rgb(255, 255, 255)");
+        const brokenLabelReferences = await page.locator("main [aria-labelledby]").evaluateAll((elements) =>
+          elements.flatMap((element) => {
+            const missing = (element.getAttribute("aria-labelledby") ?? "")
+              .split(/\s+/)
+              .filter((id) => id && !document.getElementById(id));
+            return missing.length ? [{ html: element.outerHTML.slice(0, 160), missing }] : [];
+          }),
+        );
+        expect(brokenLabelReferences).toEqual([]);
+      }
     }
   });
 
@@ -34,6 +48,22 @@ test.describe("settings and account", () => {
     await expectDashboardShell(page);
     await expect(page.getByText("Personal account", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+
+  test("API key confirmation keeps focus inside the native dialog and closes with Escape", async ({ page }) => {
+    await page.goto("/settings/keys");
+    await expectDashboardShell(page);
+
+    const revokeTrigger = page.getByRole("button", { name: "Revoke" }).first();
+    await revokeTrigger.focus();
+    await revokeTrigger.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Revoke API key" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(revokeTrigger).toBeFocused();
   });
 
   test("API key create, rotate, and revoke flow works", async ({ page }, testInfo) => {

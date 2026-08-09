@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
+import { SettingsConfirmationDialog } from "@/components/settings-confirmation-dialog";
 import {
   SettingsHero,
   SettingsScaffold,
@@ -177,7 +178,20 @@ function ApiKeysContent() {
   const error = keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
-  const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
+  const heroTone: "success" | "danger" | "neutral" | "setup" = error
+    ? "danger"
+    : loading
+      ? "neutral"
+      : hasActiveKey
+        ? "success"
+        : "setup";
+  const heroPill = error
+    ? "Unavailable"
+    : loading
+      ? "Loading"
+      : hasActiveKey
+        ? `${activeKeys.length || 1} active`
+        : "No active key";
 
   const keyTableSection = (
     <section className="panel keys-table-panel">
@@ -268,8 +282,8 @@ function ApiKeysContent() {
             : "Create one key for your agent runtime. Copy it once, then rotate or revoke when needed."
         }
         tone={heroTone}
-        pill={hasActiveKey ? `${activeKeys.length || 1} active` : "No active key"}
-        updatedLabel={loading ? "Loading" : "Settings live"}
+        pill={heroPill}
+        updatedLabel={loading ? "Loading" : error ? "Unavailable" : "Settings live"}
       />
 
       <section className="keys-simple-stack">
@@ -358,88 +372,72 @@ function ApiKeysContent() {
       </section>
 
       {revokeTarget && (
-        <div
-          className="fix-modal-backdrop"
-          role="presentation"
-          onClick={() => !revokeMutation.isPending && setRevokeTarget(null)}
+        <SettingsConfirmationDialog
+          ariaLabel="Revoke API key"
+          busy={revokeMutation.isPending}
+          onClose={() => setRevokeTarget(null)}
         >
-          <section
-            className="panel keys-revoke-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Revoke API key"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="panel-header">
-              <div>
-                <h2>Revoke project key</h2>
-                <p>
-                  This action is irreversible. Requests using <strong>{revokeTarget.name}</strong> will stop working.
-                </p>
-              </div>
-            </header>
-            <div className="actions">
-              <DashboardButton type="button" variant="danger" loading={revokeMutation.isPending} onClick={onRevoke}>
-                {revokeMutation.isPending ? "Revoking..." : "Yes, revoke key"}
-              </DashboardButton>
-              <DashboardButton
-                type="button"
-                variant="soft"
-                disabled={revokeMutation.isPending}
-                onClick={() => setRevokeTarget(null)}
-              >
-                Cancel
-              </DashboardButton>
+          <header className="panel-header">
+            <div>
+              <h2>Revoke project key</h2>
+              <p>
+                This action is irreversible. Requests using <strong>{revokeTarget.name}</strong> will stop working.
+              </p>
             </div>
-          </section>
-        </div>
+          </header>
+          <div className="actions">
+            <DashboardButton type="button" variant="danger" loading={revokeMutation.isPending} onClick={onRevoke}>
+              {revokeMutation.isPending ? "Revoking..." : "Yes, revoke key"}
+            </DashboardButton>
+            <DashboardButton
+              type="button"
+              variant="soft"
+              disabled={revokeMutation.isPending}
+              onClick={() => setRevokeTarget(null)}
+            >
+              Cancel
+            </DashboardButton>
+          </div>
+        </SettingsConfirmationDialog>
       )}
 
       {rotateTarget && (
-        <div
-          className="fix-modal-backdrop"
-          role="presentation"
-          onClick={() => !rotateMutation.isPending && setRotateTarget(null)}
+        <SettingsConfirmationDialog
+          ariaLabel="Rotate API key"
+          busy={rotateMutation.isPending}
+          onClose={() => setRotateTarget(null)}
         >
-          <section
-            className="panel keys-revoke-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Rotate API key"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="panel-header">
-              <div>
-                <h2>Rotate project key</h2>
-                <p>
-                  Zroky will revoke <strong>{rotateTarget.name}</strong> and create a replacement. Copy the
-                  replacement before closing the banner.
-                </p>
-              </div>
-            </header>
-            <div className="settings-modal-facts">
-              <span>
-                Current prefix <strong className="mono">{rotateTarget.key_prefix}...</strong>
-              </span>
-              <span>
-                Access <strong>{keyAccessLabel(rotateTarget.scopes)}</strong>
-              </span>
+          <header className="panel-header">
+            <div>
+              <h2>Rotate project key</h2>
+              <p>
+                Zroky will revoke <strong>{rotateTarget.name}</strong> and create a replacement. Copy the
+                replacement before closing the banner.
+              </p>
             </div>
-            <div className="actions">
-              <DashboardButton type="button" variant="primary" loading={rotateMutation.isPending} onClick={() => void onRotate()}>
-                {rotateMutation.isPending ? "Rotating..." : "Rotate and show replacement"}
-              </DashboardButton>
-              <DashboardButton
-                type="button"
-                variant="soft"
-                disabled={rotateMutation.isPending}
-                onClick={() => setRotateTarget(null)}
-              >
-                Cancel
-              </DashboardButton>
-            </div>
-          </section>
-        </div>
+          </header>
+          <div className="settings-modal-facts">
+            <span>
+              Current prefix <strong className="mono">{rotateTarget.key_prefix}...</strong>
+            </span>
+            <span>
+              Access <strong>{keyAccessLabel(rotateTarget.scopes)}</strong>
+            </span>
+          </div>
+          <div className="actions">
+            <DashboardButton type="button" variant="primary" loading={rotateMutation.isPending} onClick={() => void onRotate()}>
+              {rotateMutation.isPending ? "Rotating..." : "Rotate and show replacement"}
+            </DashboardButton>
+            <DashboardButton
+              type="button"
+              variant="soft"
+              disabled={rotateMutation.isPending}
+              onClick={() => setRotateTarget(null)}
+            >
+              Cancel
+            </DashboardButton>
+          </div>
+        </SettingsConfirmationDialog>
       )}
     </SettingsScaffold>
   );

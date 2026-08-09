@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { DashboardButton } from "@/components/dashboard-button";
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { SettingsHero, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import {
@@ -497,7 +497,7 @@ function BillingSettingsContent() {
   }, [load, pendingPaymentConfirmation]);
 
   return (
-    <SettingsScaffold className="billing-settings-page" aria-labelledby="billing-settings-title">
+    <SettingsScaffold className="billing-settings-page">
       <SettingsHero
         ariaLabel="Plan and billing settings"
         eyebrow="Plan & Billing"
@@ -638,20 +638,26 @@ function BillingSettingsContent() {
                   {isCurrent ? (
                     <span className="billing-plan-current-label">Current plan</span>
                   ) : canChangeToPlan ? (
-                    <DashboardButton
-                      type="button"
-                      className="billing-plan-btn"
-                      variant="primary"
-                      onClick={() => void changePlan(plan.code)}
-                      disabled={loading || checkoutBusy}
-                      loading={checkoutPlanCode === plan.code}
-                    >
-                      {plan.selfServe
-                        ? checkoutPlanCode === plan.code
-                          ? "Opening checkout"
-                          : `Upgrade to ${plan.name}`
-                        : "Contact sales"}
-                    </DashboardButton>
+                    plan.selfServe ? (
+                      <DashboardButton
+                        type="button"
+                        className="billing-plan-btn"
+                        variant="primary"
+                        onClick={() => void changePlan(plan.code)}
+                        disabled={loading || checkoutBusy}
+                        loading={checkoutPlanCode === plan.code}
+                      >
+                        {checkoutPlanCode === plan.code ? "Opening checkout" : `Upgrade to ${plan.name}`}
+                      </DashboardButton>
+                    ) : (
+                      <DashboardButtonLink
+                        className="billing-plan-btn"
+                        href="/contact?source=billing&intent=enterprise"
+                        variant="primary"
+                      >
+                        Contact sales
+                      </DashboardButtonLink>
+                    )
                   ) : null}
                 </div>
               );
