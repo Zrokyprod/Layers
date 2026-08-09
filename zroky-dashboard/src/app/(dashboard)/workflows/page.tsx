@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronRight, Database, FileJson, GitBranch, Rocket, ShieldCheck, Workflow } from "lucide-react";
 
-import { DashboardButton } from "@/components/dashboard-button";
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import {
   listAssurancePacks,
   publishAssurancePack,
@@ -318,6 +318,9 @@ export default function WorkflowsPage() {
           <h1>Workflows</h1>
           <p>Assurance Packs, policy binding, and trusted workflow contracts</p>
         </div>
+        <DashboardButtonLink href="/policies" size="sm" variant="soft">
+          Runtime policies
+        </DashboardButtonLink>
       </div>
 
       <section className={styles.hero} data-tone={tone} aria-label="Workflow posture">

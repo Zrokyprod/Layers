@@ -20,6 +20,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
+from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import Anomaly, PilotAction, PilotPolicy
@@ -878,6 +879,22 @@ class TestGetPolicyRoute:
 
 
 class TestPutPolicyRoute:
+    def test_put_requires_admin_role(self, client: TestClient) -> None:
+        app.dependency_overrides[require_tenant_context] = lambda: TenantContext(
+            tenant_id="proj-1",
+            role="viewer",
+            subject="viewer-1",
+        )
+
+        response = client.put(
+            "/v1/pilot/policy",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={"runtime_enabled": False},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Project role 'viewer' does not allow this action."
+
     def test_put_creates_when_absent(self, client: TestClient) -> None:
         payload = dict(DEFAULT_POLICY)
         payload["tier1_enabled"] = True

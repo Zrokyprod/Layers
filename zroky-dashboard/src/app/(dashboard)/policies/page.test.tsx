@@ -12,6 +12,7 @@ import type {
   RuntimePolicyResolvePreviewResponse,
   RuntimePolicyRuleResponse,
 } from "@/lib/api";
+import type { CurrentUserProjectResponse } from "@/lib/types";
 import PoliciesPage from "./page";
 
 const api = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ const api = vi.hoisted(() => ({
   disableRuntimePolicyRule: vi.fn(),
   dryRunRuntimePolicy: vi.fn(),
   listAgentProfiles: vi.fn(),
+  listMyProjects: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
   listRuntimePolicyRules: vi.fn(),
   resolveRuntimePolicyPreview: vi.fn(),
@@ -28,6 +30,8 @@ const api = vi.hoisted(() => ({
   updateRuntimePolicyRule: vi.fn(),
   updatePilotPolicy: vi.fn(),
 }));
+
+const dashboardStore = vi.hoisted(() => ({ selectedProject: "proj_1" as string | null }));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -46,6 +50,9 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/lib/api", () => api);
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: typeof dashboardStore) => T) => selector(dashboardStore),
+}));
 
 const now = "2026-06-20T09:00:00.000Z";
 let seededPolicyResponse: PilotPolicyResponse;
@@ -57,6 +64,7 @@ let seededBillingResponse: {
   plan_code: string;
   plan_template: Record<string, unknown>;
 };
+let seededProjectsResponse: CurrentUserProjectResponse[];
 
 function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload {
   return {
@@ -274,12 +282,22 @@ function mockPolicies({
     plan_code: "team",
     plan_template: { "pilot.autopilot_enabled": true },
   };
+  seededProjectsResponse = [{
+    membership_id: "membership_1",
+    project_id: "proj_1",
+    project_name: "Demo project",
+    role: "owner",
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+  }];
   api.getBillingMe.mockResolvedValue(seededBillingResponse);
   api.getPilotPolicy.mockResolvedValue(response);
   api.updatePilotPolicy.mockResolvedValue(response);
   api.setRuntimePolicyKillSwitch.mockResolvedValue({ project_id: "proj_1", enabled: true, policy: { kill_switch: true } });
   api.listRuntimePolicyApprovals.mockResolvedValue(seededApprovalsResponse);
   api.listAgentProfiles.mockResolvedValue(seededAgentsResponse);
+  api.listMyProjects.mockResolvedValue(seededProjectsResponse);
   api.listRuntimePolicyRules.mockResolvedValue(seededRulesResponse);
   api.resolveRuntimePolicyPreview.mockResolvedValue(seededPreviewResponse);
   api.createRuntimePolicyRule.mockResolvedValue(scopedRule({ id: "rule_new", name: "New scoped rule" }));
@@ -301,6 +319,7 @@ function renderPoliciesPage() {
   client.setQueryData(["runtime-policy", "rules"], seededRulesResponse);
   client.setQueryData(["runtime-policy", "resolve-preview", "", "refund", "production"], seededPreviewResponse);
   client.setQueryData(["billing", "me"], seededBillingResponse);
+  client.setQueryData(["me", "projects"], seededProjectsResponse);
 
   return render(
     <QueryClientProvider client={client}>
@@ -327,6 +346,7 @@ describe("PoliciesPage mandate control", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    dashboardStore.selectedProject = "proj_1";
     mockPolicies();
   });
 
@@ -340,8 +360,8 @@ describe("PoliciesPage mandate control", () => {
     const summary = screen.getByLabelText("Policy safety summary");
     expect(within(summary).getByText("Runtime action control")).toBeInTheDocument();
     expect(within(summary).getByText("Policy gate")).toBeInTheDocument();
-    expect(within(summary).getByText("Pending approvals")).toBeInTheDocument();
-    expect(within(summary).getByText("Blocked actions")).toBeInTheDocument();
+    expect(within(summary).getByText("Recent pending approvals")).toBeInTheDocument();
+    expect(within(summary).getByText("Recent blocked actions")).toBeInTheDocument();
 
     const boundary = screen.getByLabelText("Current mandate boundary");
     expect(within(boundary).getByText("Allowed surface")).toBeInTheDocument();
@@ -397,6 +417,17 @@ describe("PoliciesPage mandate control", () => {
     expect(screen.getByRole("button", { name: "Save advanced changes" }).hasAttribute("disabled")).toBe(true);
     expect(container.querySelector(".policies-configuration-scope")?.hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("Allowed surface")).toBeInTheDocument();
+  });
+
+  it("keeps policy read-only for a project viewer on a paid plan", async () => {
+    seededProjectsResponse[0] = { ...seededProjectsResponse[0], role: "viewer" };
+    api.listMyProjects.mockResolvedValue(seededProjectsResponse);
+
+    const { container } = renderPoliciesPage();
+
+    expect(await screen.findByText("Read-only policy view. A project admin or owner can change runtime controls.")).toBeInTheDocument();
+    expect(container.querySelector(".policies-configuration-scope")?.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Arm kill switch" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("saves comma-separated tool policy as structured arrays", async () => {
@@ -540,6 +571,7 @@ describe("PoliciesPage mandate control", () => {
     renderPoliciesPage();
 
     await screen.findByRole("heading", { name: "Human review waiting" });
+    expect(screen.queryByRole("checkbox", { name: "Kill switch" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Arm kill switch" }));
     expect(api.setRuntimePolicyKillSwitch).not.toHaveBeenCalled();
 
