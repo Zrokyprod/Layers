@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zroky"
-version = "0.2.0"
+version = "0.2.1"
 description = "ZROKY Python SDK — production AI diagnosis and observability"
 readme = { text = "Zroky Python SDK capture client for the Agent Reliability Control Plane.", content-type = "text/markdown" }
 requires-python = ">=3.10"
