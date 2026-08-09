@@ -52,3 +52,17 @@ def test_custom_pattern_can_explicitly_mask_uuid() -> None:
     masked = mask_text(identifier, custom_patterns=[re.escape(identifier)])
 
     assert masked == "[REDACTED]"
+
+
+def test_opaque_tokens_are_masked_without_hiding_usage_counts() -> None:
+    masked = mask_payload(
+        {
+            "access_token": "opaque-access-value",
+            "refresh_token": "opaque-refresh-value",
+            "prompt_tokens": 42,
+        }
+    )
+
+    assert masked["access_token"] == "[REDACTED_KEY]"
+    assert masked["refresh_token"] == "[REDACTED_KEY]"
+    assert masked["prompt_tokens"] == 42
