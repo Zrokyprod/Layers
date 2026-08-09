@@ -164,6 +164,33 @@ describe("EvidencePage", () => {
     ));
   });
 
+  it("applies the hero filter without leaving stale local state", async () => {
+    api.fetchOutcomeGraphCoverage.mockResolvedValue(coverage({
+      counts: {
+        conflicted: 0,
+        duplicate: 0,
+        forbidden: 0,
+        missing: 0,
+        pending: 0,
+        stale: 0,
+        unknown: 0,
+        verified: 2,
+        wrong: 0,
+      },
+      coverage_percent: 100,
+      total: 2,
+    }));
+    renderEvidencePage();
+
+    fireEvent.click(await screen.findByRole("link", { name: "Review proven" }));
+
+    await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ classification: ["verified"], limit: 100, offset: 0 }),
+      expect.any(AbortSignal),
+    ));
+    expect(screen.getByRole("button", { name: "Proven" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("honors a filter supplied by client-side route state", async () => {
     navigation.searchParams = new URLSearchParams("filter=caught");
     window.history.replaceState({}, "", "/home");
@@ -223,6 +250,28 @@ describe("EvidencePage", () => {
     expect(screen.getByText("2 shown")).toBeInTheDocument();
   });
 
+  it("loads additional pages to resolve a graph deep link", async () => {
+    navigation.searchParams = new URLSearchParams("graph_id=graph_older");
+    window.history.replaceState({}, "", "/evidence?graph_id=graph_older");
+    api.fetchOutcomeGraphs.mockImplementation(async ({ offset = 0 }) => graphPage(
+      [graph({
+        id: offset === 0 ? "graph_first" : "graph_older",
+        graph: { workflow_key: offset === 0 ? "first_workflow" : "older_workflow" },
+      })],
+      { total: 2, offset },
+    ));
+
+    renderEvidencePage();
+
+    await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 1 }),
+      expect.any(AbortSignal),
+    ));
+    const panel = screen.getByLabelText("Focused proof panel");
+    expect(await within(panel).findByRole("heading", { name: "older_workflow" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inspect older_workflow proof" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("renders integrations CTA for a no_connector drill-down", async () => {
     api.fetchOutcomeGraphs.mockResolvedValue(graphPage([
         graph({
@@ -239,6 +288,9 @@ describe("EvidencePage", () => {
     expect(within(panel).getByText("This system does not have a configured connector")).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "Open integrations" }).getAttribute("href")).toBe("/integrations");
     expect(within(panel).getByText("obs_digest_1")).toBeInTheDocument();
+    const effect = within(panel).getByLabelText("Effect refund_created");
+    expect(within(effect).getByText("Expected")).toBeInTheDocument();
+    expect(within(effect).getAllByText("Observed")).toHaveLength(2);
   });
 
   it("shows setup empty state when coverage total is zero", async () => {
@@ -262,5 +314,32 @@ describe("EvidencePage", () => {
 
     await waitFor(() => expect(api.fetchOutcomeGraphEvidenceExport).toHaveBeenCalledWith("graph_1"));
     expect(await screen.findByText("Evidence pack exported.")).toBeInTheDocument();
+  });
+
+  it("exports only rows in the searched view", async () => {
+    api.fetchOutcomeGraphs.mockResolvedValue(graphPage([
+      graph(),
+      graph({ id: "graph_2", graph: { workflow_key: "invoice_workflow" } }),
+    ]));
+    renderEvidencePage();
+
+    fireEvent.change(await screen.findByRole("searchbox", { name: "Search evidence" }), { target: { value: "invoice" } });
+    fireEvent.click(screen.getByRole("button", { name: "Export view" }));
+
+    expect(await screen.findByText("Exported 1 outcome graph.")).toBeInTheDocument();
+  });
+
+  it("reports signed evidence export failures", async () => {
+    api.fetchOutcomeGraphEvidenceExport.mockRejectedValue(new Error("signing unavailable"));
+    renderEvidencePage();
+
+    const button = await screen.findByRole("button", { name: "Export evidence pack" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Evidence pack could not be exported. Verify signing readiness and try again.",
+    );
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
   });
 });

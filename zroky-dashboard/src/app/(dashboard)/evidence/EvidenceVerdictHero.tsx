@@ -11,6 +11,7 @@ type EvidenceVerdictHeroProps = {
   ctaLabel: string;
   isRefreshing: boolean;
   metrics: EvidenceProofMetric[];
+  onCtaClick?: (href: string) => void;
   onMetricClick?: (href: string) => void;
   onRefresh: () => void;
   summaryDetail: string;
@@ -25,6 +26,7 @@ export function EvidenceVerdictHero({
   ctaLabel,
   isRefreshing,
   metrics,
+  onCtaClick,
   onMetricClick,
   onRefresh,
   summaryDetail,
@@ -46,7 +48,16 @@ export function EvidenceVerdictHero({
           </div>
         </div>
         <div className="ev-operator-actions">
-          <DashboardButtonLink href={ctaHref} variant="primary">
+          <DashboardButtonLink
+            href={ctaHref}
+            onClick={(event) => {
+              if (onCtaClick && ctaHref.startsWith("/evidence?")) {
+                event.preventDefault();
+                onCtaClick(ctaHref);
+              }
+            }}
+            variant="primary"
+          >
             {ctaLabel}
           </DashboardButtonLink>
           <DashboardButton

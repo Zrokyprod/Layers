@@ -23,7 +23,7 @@ type EvidenceLedgerProps = {
   isLoading: boolean;
   isLoadingMore: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
-  onExportManifest: () => void;
+  onExportManifest: (rows: EvidenceLedgerRow[]) => void;
   onLoadMore: () => void;
   onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
@@ -96,7 +96,7 @@ export function EvidenceLedger({
         <DashboardButton
           icon={<Download size={15} />}
           disabled={isExporting || filteredRows.length === 0}
-          onClick={onExportManifest}
+          onClick={() => onExportManifest(filteredRows)}
           variant="soft"
         >
           {isExporting ? "Exporting" : "Export view"}
@@ -121,7 +121,8 @@ export function EvidenceLedger({
       </div>
 
       {isLoading ? (
-        <div className="ev-skeleton-list" aria-label="Loading evidence rows">
+        <div className="ev-skeleton-list" role="status" aria-live="polite">
+          <span className="sr-only">Loading evidence records</span>
           <span />
           <span />
           <span />
@@ -181,6 +182,7 @@ export function EvidenceLedger({
                           type="button"
                           className="ev-proof-name"
                           aria-label={`Inspect ${row.title} proof`}
+                          aria-pressed={selected}
                           onClick={(event) => {
                             event.stopPropagation();
                             onSelectRow(row);
