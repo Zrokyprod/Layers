@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   containFinalIncident: vi.fn(),
   denyFinalApprovalRequirement: vi.fn(),
   executeFinalIncidentRecovery: vi.fn(),
+  fetchOutcomeGraphs: vi.fn(),
   listFinalApprovalRequirements: vi.fn(),
   listFinalIncidents: vi.fn(),
   listFinalRuns: vi.fn(),
@@ -107,6 +108,7 @@ describe("OperationsPage", () => {
     api.containFinalIncident.mockReset();
     api.denyFinalApprovalRequirement.mockReset();
     api.executeFinalIncidentRecovery.mockReset();
+    api.fetchOutcomeGraphs.mockReset();
     api.resolveFinalIncidentManually.mockReset();
     api.snoozeFinalIncident.mockReset();
     queryClient.invalidateQueries.mockReset();
@@ -123,6 +125,28 @@ describe("OperationsPage", () => {
     api.containFinalIncident.mockReturnValue({ id: "incident_1", status: "unresolved" });
     api.denyFinalApprovalRequirement.mockReturnValue({ id: "approval_1", status: "denied" });
     api.executeFinalIncidentRecovery.mockReturnValue({ incident: { id: "incident_1" }, execution_status: "dispatched" });
+    api.fetchOutcomeGraphs.mockReturnValue({
+      items: [
+        {
+          id: "graph_1",
+          project_id: "project_1",
+          environment: "production",
+          intent_id: "intent_1",
+          graph_digest: "graph_digest_abcdef1234567890",
+          graph: { run_id: "run_1", workflow_key: "refund-workflow" },
+          verification_status: "verified",
+          classification: "verified",
+          reason_code: null,
+          last_checked_at: "2026-07-21T10:03:00Z",
+          next_check_at: null,
+          verified_at: "2026-07-21T10:03:00Z",
+          created_at: "2026-07-21T10:00:30Z",
+        },
+      ],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    });
     api.resolveFinalIncidentManually.mockReturnValue({ id: "incident_1", status: "resolved" });
     api.snoozeFinalIncident.mockReturnValue({ id: "incident_1", status: "unresolved" });
     queryState.overrides = {};
@@ -148,7 +172,7 @@ describe("OperationsPage", () => {
           intent_id: "intent_1",
           workflow_key: "refund-workflow",
           agent_ref: "stripe-agent",
-          status: "verified",
+          status: "succeeded",
           run_digest: "run_digest_abcdef1234567890",
           run: { action_id: "action_1" },
           started_at: "2026-07-21T09:59:00Z",
@@ -227,6 +251,49 @@ describe("OperationsPage", () => {
     expect(within(table).getByText("refund-workflow")).toBeInTheDocument();
     expect(within(table).queryByText("Mismatch in payroll export")).not.toBeInTheDocument();
     expect(within(table).queryByText("Approval required: admin")).not.toBeInTheDocument();
+  });
+
+  it("shows the linked outcome proof instead of inferring evidence from run status", async () => {
+    const user = userEvent.setup();
+    render(<OperationsPage />);
+
+    await user.click(operationViewButton(/Runs/i));
+
+    expect(screen.getByText("Agent run is succeeded; source-of-record proof is verified.")).toBeInTheDocument();
+    expect(screen.queryByText("Awaiting final evidence state")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open evidence record/i }).getAttribute("href")).toBe("/evidence?graph_id=graph_1");
+  });
+
+  it("keeps unknown outcome proof in the unverifiable queue with its graph reason", async () => {
+    api.fetchOutcomeGraphs.mockReturnValue({
+      items: [
+        {
+          id: "graph_1",
+          project_id: "project_1",
+          environment: "production",
+          intent_id: "intent_1",
+          graph_digest: "graph_digest_abcdef1234567890",
+          graph: { run_id: "run_1" },
+          verification_status: "inconclusive",
+          classification: "unknown",
+          reason_code: "runner_offline",
+          last_checked_at: "2026-07-21T10:03:00Z",
+          next_check_at: null,
+          verified_at: null,
+          created_at: "2026-07-21T10:00:30Z",
+        },
+      ],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    });
+    const user = userEvent.setup();
+    render(<OperationsPage />);
+
+    await user.click(operationViewButton(/Unverifiable/i));
+
+    expect(screen.getByText("runner_offline")).toBeInTheDocument();
+    expect(screen.getByText("The customer runner is offline, so local proof or recovery cannot complete.")).toBeInTheDocument();
   });
 
   it("summarizes and filters runs by agent", async () => {

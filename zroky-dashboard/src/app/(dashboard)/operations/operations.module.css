@@ -133,7 +133,8 @@
 .headerActions button,
 .searchBox,
 .filterBar button,
-.drawerHead a {
+.drawerHead a,
+.drawerSection a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
