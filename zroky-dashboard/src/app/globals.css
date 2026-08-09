@@ -104,57 +104,6 @@
   --radius: 0.5rem;
 }
 
-.provider-key-replay-gate {
-  margin-top: 1rem;
-  border-color: rgba(167, 139, 250, 0.32);
-  background:
-    radial-gradient(circle at 18% 0%, rgba(167, 139, 250, 0.12), transparent 28%),
-    rgba(255, 255, 255, 0.035);
-}
-
-.provider-key-gate-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin-bottom: 0.6rem;
-  color: #c4b5fd;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.provider-key-gate-eyebrow svg {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-.provider-key-gate-form {
-  display: grid;
-  grid-template-columns: minmax(0, 0.82fr) minmax(0, 0.82fr) minmax(0, 1.36fr);
-  gap: 1rem;
-}
-
-.provider-key-gate-key-field,
-.provider-key-gate-actions,
-.provider-key-gate-error {
-  grid-column: 1 / -1;
-}
-
-.provider-key-gate-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-@media (max-width: 760px) {
-  .provider-key-gate-form {
-    grid-template-columns: 1fr;
-  }
-}
-
-
 * {
   box-sizing: border-box;
   margin: 0;

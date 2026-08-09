@@ -9,9 +9,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("SettingsProvidersRedirectPage", () => {
-  it("redirects legacy provider vault settings to the planned Settings surface", () => {
+  it("redirects legacy provider vault settings directly to API keys", () => {
     SettingsProvidersRedirectPage();
 
-    expect(redirect).toHaveBeenCalledWith("/settings");
+    expect(redirect).toHaveBeenCalledWith("/settings/keys");
   });
 });

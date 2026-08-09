@@ -20,7 +20,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import ApiKey, Project, ProviderKeyVault
+from app.db.models import ApiKey, AuditLog, Project, ProjectMembership, ProviderKeyVault, User
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.entitlements import set_override_entitlement
@@ -45,7 +45,7 @@ from app.services.provider_key_vault import (
     serialize_vault_row,
     store_provider_key,
 )
-from app.services.security import generate_api_key_material
+from app.services.security import generate_api_key_material, issue_access_token
 
 
 PROJECT_HEADER = "X-Project-Id"
@@ -79,6 +79,37 @@ def _create_member_api_key(client: TestClient, project_id: str = "proj-member") 
         )
         session.commit()
     return raw_key
+
+
+def _authenticated_admin_headers(client: TestClient, project_id: str) -> tuple[dict[str, str], str]:
+    subject = f"provider-admin:{project_id}"
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        user = User(subject=subject, email=f"{project_id}@example.com")
+        session.add(user)
+        session.flush()
+        session.add(
+            ProjectMembership(
+                project_id=project_id,
+                user_id=user.id,
+                role="admin",
+                is_active=True,
+            )
+        )
+        session.commit()
+        user_id = user.id
+
+    token = issue_access_token(
+        user_id=user_id,
+        email=f"{project_id}@example.com",
+        subject=subject,
+        expire_hours=1,
+        secret=get_settings().AUTH_JWT_SECRET,
+    )
+    return {
+        "Authorization": f"Bearer {token}",
+        PROJECT_HEADER: project_id,
+    }, user_id
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
@@ -578,9 +609,10 @@ class TestSerializer:
 
 class TestCreateRoute:
     def test_201_happy_path(self, client: TestClient) -> None:
+        headers, user_id = _authenticated_admin_headers(client, "proj-1")
         response = client.post(
             "/v1/providers/keys",
-            headers={PROJECT_HEADER: "proj-1"},
+            headers=headers,
             json={
                 "provider": "openai",
                 "plaintext_key": "sk-proj-1234567890",
@@ -593,11 +625,24 @@ class TestCreateRoute:
         assert body["key_last4"] == "7890"
         assert body["is_active"] is True
         assert body["label"] == "prod"
+        assert body["created_by_user_id"] == user_id
         # No plaintext or ciphertext in response
         assert "plaintext_key" not in body
         assert "ciphertext" not in body
         assert "1234567890" not in str(body.get("key_fingerprint", ""))
         assert "sk-proj" not in str(body)
+
+        session_factory = client._session_factory  # type: ignore[attr-defined]
+        with session_factory() as session:
+            audit = session.execute(
+                select(AuditLog).where(
+                    AuditLog.tenant_id == "proj-1",
+                    AuditLog.diagnosis_id == body["id"],
+                    AuditLog.action == "provider_key_created",
+                )
+            ).scalar_one()
+            assert audit.actor_subject
+            assert "1234567890" not in audit.metadata_json
 
     def test_402_create_requires_provider_key_vault_entitlement(
         self, client: TestClient
@@ -791,19 +836,37 @@ class TestDetailRoute:
 
 class TestDeleteRoute:
     def test_revoke_200(self, client: TestClient) -> None:
+        headers, _ = _authenticated_admin_headers(client, "proj-1")
         created = client.post(
             "/v1/providers/keys",
-            headers={PROJECT_HEADER: "proj-1"},
+            headers=headers,
             json={"provider": "openai", "plaintext_key": "sk-1234567890"},
         ).json()
         response = client.delete(
             f"/v1/providers/keys/{created['id']}",
-            headers={PROJECT_HEADER: "proj-1"},
+            headers=headers,
         )
         assert response.status_code == 200
         body = response.json()
         assert body["is_active"] is False
         assert body["revoked_at"] is not None
+
+        again = client.delete(
+            f"/v1/providers/keys/{created['id']}",
+            headers=headers,
+        )
+        assert again.status_code == 200
+
+        session_factory = client._session_factory  # type: ignore[attr-defined]
+        with session_factory() as session:
+            audit_count = session.execute(
+                select(func.count()).select_from(AuditLog).where(
+                    AuditLog.tenant_id == "proj-1",
+                    AuditLog.diagnosis_id == created["id"],
+                    AuditLog.action == "provider_key_revoked",
+                )
+            ).scalar_one()
+        assert audit_count == 1
 
     def test_revoke_idempotent(self, client: TestClient) -> None:
         created = client.post(

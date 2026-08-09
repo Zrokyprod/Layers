@@ -34,6 +34,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import ProviderKeyVault
+from app.services.audit_logs import (
+    AUDIT_ACTION_PROVIDER_KEY_CREATED,
+    AUDIT_ACTION_PROVIDER_KEY_REVOKED,
+    add_audit_log,
+)
 from app.services.provider_key_cipher import (
     EnvelopeBundle,
     EnvelopeFormatError,
@@ -124,6 +129,7 @@ def store_provider_key(
     plaintext_key: str,
     label: str | None = None,
     created_by_user_id: str | None = None,
+    actor_subject: str | None = None,
 ) -> ProviderKeyVault:
     """Encrypt + persist a plaintext provider key.
 
@@ -196,6 +202,14 @@ def store_provider_key(
         created_by_user_id=created_by_user_id,
     )
     db.add(new_row)
+    add_audit_log(
+        db,
+        tenant_id=project_id,
+        diagnosis_id=new_row.id,
+        action=AUDIT_ACTION_PROVIDER_KEY_CREATED,
+        actor_subject=actor_subject,
+        metadata={"provider": provider_norm, "rotated_key_count": len(active_rows)},
+    )
 
     try:
         db.commit()
@@ -224,6 +238,7 @@ def revoke_provider_key(
     *,
     project_id: str,
     key_id: str,
+    actor_subject: str | None = None,
 ) -> ProviderKeyVault | None:
     """Mark a key inactive. Idempotent — calling on an already-revoked
     row is a no-op (returns the row unchanged).
@@ -243,6 +258,14 @@ def revoke_provider_key(
         row.is_active = False
         row.revoked_at = datetime.now(timezone.utc)
         db.add(row)
+        add_audit_log(
+            db,
+            tenant_id=project_id,
+            diagnosis_id=row.id,
+            action=AUDIT_ACTION_PROVIDER_KEY_REVOKED,
+            actor_subject=actor_subject,
+            metadata={"provider": row.provider},
+        )
         db.commit()
         db.refresh(row)
         logger.info(
