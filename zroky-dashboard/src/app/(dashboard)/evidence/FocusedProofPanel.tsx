@@ -13,13 +13,20 @@ type FocusedProofPanelProps = {
   row: EvidenceLedgerRow | null;
 };
 
-function flag(value: boolean): string {
-  return value ? "yes" : "no";
-}
-
 function effectTone(effect: OutcomeGraphEffectRow): "danger" | "neutral" | "success" | "warning" {
   if (effect.conflicted || !effect.observed) return "warning";
   return effect.matched && !effect.stale ? "success" : "danger";
+}
+
+function effectStatus(effect: OutcomeGraphEffectRow): string {
+  if (effect.conflicted) return "Conflicted";
+  if (effect.stale) return "Stale";
+  if (!effect.observed) return "Not observed";
+  return effect.matched ? "Matched" : "Mismatch";
+}
+
+function objectLabel(value: Record<string, unknown>, fallback: string): string {
+  return humanize(String(value.object_type ?? fallback));
 }
 
 function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
@@ -65,15 +72,32 @@ function ReasonCodeAction({ row }: { row: EvidenceLedgerRow }) {
 
 function EffectRow({ effect }: { effect: OutcomeGraphEffectRow }) {
   return (
-    <div className="outcomes-diff-row" data-tone={effectTone(effect)}>
-      <strong>{effect.effectKey}</strong>
-      <span>{humanize(String(effect.expected.object_type ?? "-"))}</span>
-      <span>observed {flag(effect.observed)}</span>
-      <span>matched {flag(effect.matched)}</span>
-      <span>stale {flag(effect.stale)}</span>
-      <span>conflicted {flag(effect.conflicted)}</span>
-      <code>{effect.observationDigest ?? "no observation digest"}</code>
-    </div>
+    <article className="ev-effect-card" data-tone={effectTone(effect)} aria-label={`Effect ${effect.effectKey}`}>
+      <header>
+        <strong>{effect.effectKey}</strong>
+        <StatusPill value={effectStatus(effect)} label={effectStatus(effect)} tone={effectTone(effect)} />
+      </header>
+      <div className="ev-effect-comparison">
+        <div>
+          <span>Expected</span>
+          <strong>{objectLabel(effect.expected, "declared effect")}</strong>
+        </div>
+        <div>
+          <span>Observed</span>
+          <strong>{objectLabel(effect.actual, effect.observed ? "observed record" : "no observation")}</strong>
+        </div>
+      </div>
+      <dl className="ev-effect-flags">
+        <div><dt>Observed</dt><dd>{effect.observed ? "Yes" : "No"}</dd></div>
+        <div><dt>Matched</dt><dd>{effect.matched ? "Yes" : "No"}</dd></div>
+        <div><dt>Stale</dt><dd>{effect.stale ? "Yes" : "No"}</dd></div>
+        <div><dt>Conflicted</dt><dd>{effect.conflicted ? "Yes" : "No"}</dd></div>
+      </dl>
+      <div className="ev-effect-proof">
+        <span>Proof reference</span>
+        <code>{effect.observationDigest ?? "No observation digest"}</code>
+      </div>
+    </article>
   );
 }
 
@@ -126,20 +150,11 @@ export function FocusedProofPanel({ isExporting, onExport, row }: FocusedProofPa
                 <StatusPill value={row.reasonCode} label={humanize(row.reasonCode)} tone="warning" />
               ) : null}
             </header>
-            <div className="outcomes-diff-table">
-              <div className="outcomes-diff-head">
-                <span>Effect</span>
-                <span>Object</span>
-                <span>Observed</span>
-                <span>Matched</span>
-                <span>Stale</span>
-                <span>Conflict</span>
-                <span>Proof ref</span>
-              </div>
+            <div className="ev-effect-list">
               {(row.effects ?? []).length > 0 ? (
                 (row.effects ?? []).map((effect) => <EffectRow effect={effect} key={effect.effectKey} />)
               ) : (
-                <div className="outcomes-diff-empty">No effect rows in this graph.</div>
+                <div className="ev-empty-state">No effect rows in this graph.</div>
               )}
             </div>
             <ReasonCodeAction row={row} />

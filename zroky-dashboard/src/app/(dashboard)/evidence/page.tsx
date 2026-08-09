@@ -31,6 +31,11 @@ type EvidenceVerdict = {
   tone: "danger" | "neutral" | "success" | "warning";
 };
 
+type EvidenceNotice = {
+  message: string;
+  tone: "error" | "success";
+};
+
 const caughtClassifications: OutcomeGraphClassification[] = ["wrong", "missing", "forbidden", "duplicate"];
 const attentionClassifications: OutcomeGraphClassification[] = ["stale", "conflicted", "unknown"];
 const outcomeGraphPageSize = 100;
@@ -213,7 +218,7 @@ export default function EvidencePage() {
   const [filter, setFilter] = useState<EvidenceLedgerFilter>(() => evidenceFilter(searchParams.get("filter")));
   const [search, setSearch] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(routeGraphId);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<EvidenceNotice | null>(null);
   const [exporting, setExporting] = useState(false);
 
   const graphQuery = useInfiniteQuery({
@@ -229,6 +234,7 @@ export default function EvidencePage() {
     queryKey: ["outcome-graphs", "coverage-summary"],
     queryFn: ({ signal }) => fetchOutcomeGraphCoverage(signal),
   });
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = graphQuery;
 
   const graphItems = useMemo(
     () => graphQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -238,7 +244,8 @@ export default function EvidencePage() {
   const loading = graphQuery.isLoading || coverageQuery.isLoading;
   const error = graphQuery.error || coverageQuery.error;
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
-  const focusedRow = selectedRow ?? rows[0] ?? null;
+  const resolvingSelection = Boolean(selectedRowId && !selectedRow && hasNextPage);
+  const focusedRow = resolvingSelection ? null : selectedRow ?? rows[0] ?? null;
   const verdict = buildVerdict({ error, loading, summary: coverageQuery.data });
   const metrics = metricsForSummary(coverageQuery.data);
   const caught = caughtCount(coverageQuery.data);
@@ -258,8 +265,12 @@ export default function EvidencePage() {
 
   useEffect(() => {
     if (loading || selectedRowId && rows.some((row) => row.id === selectedRowId)) return;
+    if (selectedRowId && hasNextPage) {
+      if (!isFetchingNextPage) void fetchNextPage();
+      return;
+    }
     setSelectedRowId(rows[0]?.id ?? null);
-  }, [loading, rows, selectedRowId]);
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, loading, rows, selectedRowId]);
 
   function applyFilter(nextFilter: EvidenceLedgerFilter) {
     setFilter(nextFilter);
@@ -281,11 +292,13 @@ export default function EvidencePage() {
     await Promise.all([graphQuery.refetch(), coverageQuery.refetch()]);
   }
 
-  function exportRows() {
+  function exportRows(rowsToExport: EvidenceLedgerRow[]) {
     setExporting(true);
     try {
-      downloadJsonFile({ artifact: "zroky.outcome_graph_view", rows }, "zroky-outcome-graphs.json");
-      setMessage(`Exported ${rows.length} outcome graph${rows.length === 1 ? "" : "s"}.`);
+      downloadJsonFile({ artifact: "zroky.outcome_graph_view", rows: rowsToExport }, "zroky-outcome-graphs.json");
+      setNotice({ message: `Exported ${rowsToExport.length} outcome graph${rowsToExport.length === 1 ? "" : "s"}.`, tone: "success" });
+    } catch {
+      setNotice({ message: "Outcome graph view could not be exported. Try again.", tone: "error" });
     } finally {
       setExporting(false);
     }
@@ -297,7 +310,9 @@ export default function EvidencePage() {
     try {
       const evidencePack = await fetchOutcomeGraphEvidenceExport(focusedRow.id);
       downloadJsonFile(evidencePack, `zroky-evidence-${focusedRow.id}.json`);
-      setMessage("Evidence pack exported.");
+      setNotice({ message: "Evidence pack exported.", tone: "success" });
+    } catch {
+      setNotice({ message: "Evidence pack could not be exported. Verify signing readiness and try again.", tone: "error" });
     } finally {
       setExporting(false);
     }
@@ -305,11 +320,21 @@ export default function EvidencePage() {
 
   return (
     <div className="dashboard-page evidence-page evidence-ledger-page ev-page">
-      {message ? <div className="alert-strip ev-alert-strip" role="status" aria-live="polite">{message}</div> : null}
+      {notice ? (
+        <div
+          className="alert-strip ev-alert-strip"
+          data-tone={notice.tone}
+          role={notice.tone === "error" ? "alert" : "status"}
+          aria-live={notice.tone === "error" ? "assertive" : "polite"}
+        >
+          {notice.message}
+        </div>
+      ) : null}
       <EvidenceVerdictHero
         {...verdict}
         isRefreshing={isRefreshing}
         metrics={metrics}
+        onCtaClick={applyFilterHref}
         onMetricClick={applyFilterHref}
         onRefresh={() => void refreshEvidence()}
         summaryDetail={total === 0 ? "Declare your first intent" : `${coverageQuery.data?.coverage_percent ?? 0}% verified in system of record`}

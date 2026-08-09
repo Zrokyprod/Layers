@@ -115,4 +115,81 @@ test.describe("dashboard modules", () => {
     await expect(editor).toBeVisible();
     await expect(editor).toHaveAttribute("rows", "12");
   });
+
+  test("evidence ledger and effect proof stay readable at the viewport width", async ({ page }) => {
+    await page.route("**/outcome-graphs**", async (route) => {
+      if (route.request().url().includes("coverage-summary")) {
+        await route.fulfill({
+          json: {
+            counts: { conflicted: 0, duplicate: 0, forbidden: 0, missing: 0, pending: 0, stale: 0, unknown: 0, verified: 1, wrong: 0 },
+            coverage_percent: 100,
+            total: 1,
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          items: [{
+            id: "graph-e2e",
+            project_id: "demo-refund-money-path",
+            environment: "production",
+            intent_id: "intent-e2e-refund",
+            graph_digest: "sha256:graph-e2e",
+            graph: {
+              workflow_key: "refund_flow_v1",
+              expected_effects: [{ effect_key: "refund_posted", object_type: "refund" }],
+              actual_effects: [{
+                effect_key: "refund_posted",
+                object_type: "refund",
+                observed: true,
+                matched: true,
+                stale: false,
+                conflicted: false,
+                observation_digest: "sha256:observation-e2e",
+              }],
+            },
+            verification_status: "verified",
+            classification: "verified",
+            reason_code: null,
+            last_checked_at: "2026-08-09T07:00:00Z",
+            next_check_at: null,
+            verified_at: "2026-08-09T07:00:00Z",
+            created_at: "2026-08-09T06:59:00Z",
+          }],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      });
+    });
+    await page.goto("/evidence");
+    await expectDashboardShell(page);
+    await expectNoHorizontalOverflow(page);
+
+    const ledger = page.getByLabel("Evidence ledger");
+    const tableWrap = ledger.locator(".ev-ledger-table-wrap");
+    await expect(tableWrap).toBeVisible();
+    await expect.poll(() => tableWrap.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
+
+    const viewportWidth = page.viewportSize()?.width ?? 1280;
+    if (viewportWidth <= 640) {
+      await expect.poll(() => tableWrap.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(200);
+    }
+
+    const headers = await ledger.locator("th").evaluateAll((elements) => elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { left: bounds.left, right: bounds.right };
+    }));
+    expect(headers.every((header, index) => index === 0 || header.left >= headers[index - 1].right - 1)).toBe(true);
+
+    const selectedProof = ledger.locator(".ev-proof-name[aria-pressed='true']");
+    await expect(selectedProof).toHaveCount(1);
+    const effect = page.locator(".ev-effect-card").first();
+    await expect(effect).toBeVisible();
+    const comparison = effect.locator(".ev-effect-comparison");
+    await expect(comparison.getByText("Expected")).toBeVisible();
+    await expect(comparison.getByText("Observed")).toBeVisible();
+    await expect(effect.getByText("Proof reference")).toBeVisible();
+  });
 });

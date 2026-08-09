@@ -10239,7 +10239,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 0.8rem !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .ev-skeleton-list span {
+.app-shell[data-dashboard-system="control-v1"] .ev-skeleton-list span:not(.sr-only) {
   height: 54px !important;
   border-radius: 8px !important;
   background: linear-gradient(90deg, rgba(210, 204, 188, 0.5), rgba(255, 255, 255, 0.8), rgba(210, 204, 188, 0.5)) !important;
@@ -25624,7 +25624,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   color: #09090b !important;
   font-size: 24px !important;
   font-weight: 700 !important;
-  letter-spacing: -0.03em !important;
+  letter-spacing: 0 !important;
   line-height: 1.15 !important;
 }
 
@@ -25656,7 +25656,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   color: #71717a !important;
   font-size: 10px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.08em !important;
+  letter-spacing: 0 !important;
   line-height: 1.2 !important;
   text-transform: uppercase !important;
 }
@@ -25666,7 +25666,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   color: #111827 !important;
   font-size: 30px !important;
   font-weight: 760 !important;
-  letter-spacing: -0.06em !important;
+  letter-spacing: 0 !important;
   line-height: 1 !important;
 }
 
@@ -25692,7 +25692,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 25px !important;
   font-weight: 760 !important;
-  letter-spacing: -0.055em !important;
+  letter-spacing: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-summary span {
@@ -25805,7 +25805,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   font-family: var(--font-jetbrains-mono), "SF Mono", Consolas, monospace !important;
   font-size: 25px !important;
   font-weight: 700 !important;
-  letter-spacing: -0.03em !important;
+  letter-spacing: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-proof-summary-strip .dashboard-metric-card strong {
@@ -25841,7 +25841,17 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   color: #0f172a !important;
   font-size: 16px !important;
   font-weight: 700 !important;
-  letter-spacing: -0.02em !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .dashboard-metric-card[data-tone="success"] .dashboard-metric-head {
+  color: #15803d !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-section-head > strong,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-manifest-scope :is(strong, span),
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-meta dt {
+  color: #52525b !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-section-head p,
@@ -25991,11 +26001,25 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta {
+  gap: 0 !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  border-top: 1px solid var(--zk-border) !important;
+  border-bottom: 1px solid var(--zk-border) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta div {
   padding: 10px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta div:nth-child(even) {
+  border-left: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta div:nth-child(n + 3) {
+  border-top: 1px solid var(--zk-border) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list {
@@ -26004,7 +26028,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   background: #ffffff !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list span {
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-skeleton-list span:not(.sr-only) {
   border: 1px solid var(--zk-border) !important;
   background: #f4f4f5 !important;
 }
@@ -26023,32 +26047,27 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(1),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(1) {
-  width: 23% !important;
+  width: 20% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(2),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(2) {
-  width: 21% !important;
+  width: 25% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(3),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(3) {
-  width: 19% !important;
+  width: 20% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(4),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(4) {
-  width: 15% !important;
+  width: 16% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(5),
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(5) {
-  width: 12% !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table th:nth-child(6),
-.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table td:nth-child(6) {
-  width: 10% !important;
+  width: 19% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table .ev-ledger-row {
@@ -26271,6 +26290,105 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   text-transform: none !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-alert-strip[data-tone="error"] {
+  border-color: #fecaca !important;
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-list {
+  display: grid !important;
+  gap: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-card {
+  display: grid !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  padding: 12px !important;
+  border: 1px solid var(--zk-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-card > header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-card > header > strong {
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  color: #0f172a !important;
+  font-size: 13px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  border-top: 1px solid var(--zk-border) !important;
+  border-bottom: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison > div {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  padding: 10px 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison > div + div {
+  padding-left: 12px !important;
+  border-left: 1px solid var(--zk-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison span,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-proof span,
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-flags dt {
+  color: #52525b !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison strong {
+  overflow-wrap: anywhere !important;
+  color: #1e293b !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-flags {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-flags > div {
+  display: grid !important;
+  gap: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-flags dd {
+  margin: 0 !important;
+  color: #0f172a !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-proof {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-proof code {
+  overflow-wrap: anywhere !important;
+  color: #334155 !important;
+  font-size: 11px !important;
+}
+
 @media (max-width: 640px) {
   .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-operator-hero-top {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -26280,6 +26398,30 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
     padding: 14px 0 0 !important;
     border-top: 1px solid var(--zk-border) !important;
     border-left: 0 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-ledger-table {
+    min-width: 700px !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta,
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta div:nth-child(even),
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison > div + div {
+    padding-left: 0 !important;
+    border-left: 0 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-focused-card .ev-focused-meta div:nth-child(n + 2),
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-comparison > div + div {
+    border-top: 1px solid var(--zk-border) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .evidence-page .ev-effect-flags {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
