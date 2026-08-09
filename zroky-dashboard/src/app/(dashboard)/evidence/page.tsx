@@ -99,8 +99,8 @@ function buildVerdict({
     return {
       badge: "Unavailable",
       copy: "Outcome graph ledger could not load.",
-      ctaHref: "/integrations",
-      ctaLabel: "Check integrations",
+      ctaHref: "/evidence",
+      ctaLabel: "Retry loading",
       title: "Proof ledger unavailable",
       tone: "danger",
     };
@@ -247,7 +247,11 @@ export default function EvidencePage() {
   const resolvingSelection = Boolean(selectedRowId && !selectedRow && hasNextPage);
   const focusedRow = resolvingSelection ? null : selectedRow ?? rows[0] ?? null;
   const verdict = buildVerdict({ error, loading, summary: coverageQuery.data });
-  const metrics = metricsForSummary(coverageQuery.data);
+  const metrics: EvidenceProofMetric[] = error
+    ? [{ detail: "No proof state inferred", href: "/evidence", label: "Status", tone: "danger", value: "Unavailable" }]
+    : loading
+      ? [{ detail: "Reading outcome graph coverage", href: "/evidence", label: "Status", tone: "neutral", value: "Loading" }]
+      : metricsForSummary(coverageQuery.data);
   const caught = caughtCount(coverageQuery.data);
   const total = coverageQuery.data?.total ?? 0;
   const filteredTotal = graphQuery.data?.pages[0]?.total ?? 0;
@@ -281,6 +285,14 @@ export default function EvidencePage() {
   function applyFilterHref(href: string) {
     const value = new URL(href, "http://zroky.local").searchParams.get("filter") as EvidenceLedgerFilter | null;
     applyFilter(value ?? "all");
+  }
+
+  function applyCtaHref(href: string) {
+    if (href === "/evidence") {
+      void refreshEvidence();
+      return;
+    }
+    applyFilterHref(href);
   }
 
   function selectRow(row: EvidenceLedgerRow) {
@@ -334,11 +346,23 @@ export default function EvidencePage() {
         {...verdict}
         isRefreshing={isRefreshing}
         metrics={metrics}
-        onCtaClick={applyFilterHref}
-        onMetricClick={applyFilterHref}
+        onCtaClick={applyCtaHref}
+        onMetricClick={applyCtaHref}
         onRefresh={() => void refreshEvidence()}
-        summaryDetail={total === 0 ? "Declare your first intent" : `${coverageQuery.data?.coverage_percent ?? 0}% verified in system of record`}
-        summaryTitle={total === 0 ? "No outcome graphs yet" : `${actionCountLabel(caught)} claimed but not proven`}
+        summaryDetail={error
+          ? "No proof state inferred"
+          : loading
+            ? "Waiting for outcome graph coverage"
+            : total === 0
+              ? "Declare your first intent"
+              : `${coverageQuery.data?.coverage_percent ?? 0}% verified in system of record`}
+        summaryTitle={error
+          ? "Coverage unavailable"
+          : loading
+            ? "Reading coverage"
+            : total === 0
+              ? "No outcome graphs yet"
+              : `${actionCountLabel(caught)} claimed but not proven`}
       />
       <DashboardWorkspace
         left={(

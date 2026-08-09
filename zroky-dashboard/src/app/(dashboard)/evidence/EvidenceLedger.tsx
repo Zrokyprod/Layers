@@ -199,9 +199,15 @@ export function EvidenceLedger({
                         ) : "-"}
                       </td>
                       <td>
-                        <Link href={`/operations?intent_id=${encodeURIComponent(row.intentId ?? "")}`} onClick={(event) => event.stopPropagation()}>
-                          <code>{shortId(row.intentId)}</code>
-                        </Link>
+                        {row.intentId ? (
+                          <Link
+                            aria-label={`Open intent ${row.intentId} in Operations`}
+                            href={`/operations?intent_id=${encodeURIComponent(row.intentId)}`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <code>{shortId(row.intentId)}</code>
+                          </Link>
+                        ) : "-"}
                       </td>
                     </tr>
                   );

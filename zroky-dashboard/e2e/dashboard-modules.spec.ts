@@ -117,47 +117,58 @@ test.describe("dashboard modules", () => {
   });
 
   test("evidence ledger and effect proof stay readable at the viewport width", async ({ page }) => {
+    const classificationCases = [
+      { classification: "verified", reason: null, tone: "success" },
+      { classification: "wrong", reason: null, tone: "danger" },
+      { classification: "missing", reason: null, tone: "danger" },
+      { classification: "forbidden", reason: null, tone: "danger" },
+      { classification: "duplicate", reason: null, tone: "danger" },
+      { classification: "pending", reason: "runner_offline", tone: "warning" },
+      { classification: "stale", reason: null, tone: "warning" },
+      { classification: "conflicted", reason: null, tone: "warning" },
+      { classification: "unknown", reason: "no_connector", tone: "warning" },
+    ] as const;
     await page.route("**/outcome-graphs**", async (route) => {
       if (route.request().url().includes("coverage-summary")) {
         await route.fulfill({
           json: {
-            counts: { conflicted: 0, duplicate: 0, forbidden: 0, missing: 0, pending: 0, stale: 0, unknown: 0, verified: 1, wrong: 0 },
-            coverage_percent: 100,
-            total: 1,
+            counts: { conflicted: 1, duplicate: 1, forbidden: 1, missing: 1, pending: 1, stale: 1, unknown: 1, verified: 1, wrong: 1 },
+            coverage_percent: 11.11,
+            total: 9,
           },
         });
         return;
       }
       await route.fulfill({
         json: {
-          items: [{
-            id: "graph-e2e",
+          items: classificationCases.map(({ classification, reason }) => ({
+            id: `graph-${classification}`,
             project_id: "demo-refund-money-path",
             environment: "production",
-            intent_id: "intent-e2e-refund",
-            graph_digest: "sha256:graph-e2e",
+            intent_id: `intent-${classification}`,
+            graph_digest: `sha256:graph-${classification}`,
             graph: {
-              workflow_key: "refund_flow_v1",
+              workflow_key: `${classification}_workflow`,
               expected_effects: [{ effect_key: "refund_posted", object_type: "refund" }],
               actual_effects: [{
                 effect_key: "refund_posted",
                 object_type: "refund",
-                observed: true,
-                matched: true,
-                stale: false,
-                conflicted: false,
-                observation_digest: "sha256:observation-e2e",
+                observed: classification !== "missing" && classification !== "pending" && classification !== "unknown",
+                matched: classification === "verified",
+                stale: classification === "stale",
+                conflicted: classification === "conflicted",
+                observation_digest: `sha256:observation-${classification}`,
               }],
             },
-            verification_status: "verified",
-            classification: "verified",
-            reason_code: null,
+            verification_status: classification === "verified" ? "verified" : classification === "pending" ? "pending" : "inconclusive",
+            classification,
+            reason_code: reason,
             last_checked_at: "2026-08-09T07:00:00Z",
-            next_check_at: null,
-            verified_at: "2026-08-09T07:00:00Z",
+            next_check_at: classification === "pending" || classification === "unknown" ? "2026-08-09T08:00:00Z" : null,
+            verified_at: classification === "verified" ? "2026-08-09T07:00:00Z" : null,
             created_at: "2026-08-09T06:59:00Z",
-          }],
-          total: 1,
+          })),
+          total: classificationCases.length,
           limit: 100,
           offset: 0,
         },
@@ -185,6 +196,33 @@ test.describe("dashboard modules", () => {
 
     const selectedProof = ledger.locator(".ev-proof-name[aria-pressed='true']");
     await expect(selectedProof).toHaveCount(1);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    for (const { classification, tone } of classificationCases) {
+      const row = ledger.getByRole("row").filter({ hasText: `${classification}_workflow` });
+      await expect(row.locator(".status-pill")).toHaveAttribute("data-tone", tone);
+    }
+    await expect(page.getByRole("link", { name: "Open intent intent-verified in Operations" })).toHaveAttribute(
+      "href",
+      "/operations?intent_id=intent-verified",
+    );
+
+    const allFilter = ledger.getByRole("button", { name: "All" });
+    const provenFilter = ledger.getByRole("button", { name: "Proven" });
+    await allFilter.focus();
+    await page.keyboard.press("Tab");
+    await expect(provenFilter).toBeFocused();
+    expect(await provenFilter.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return style.outlineStyle !== "none" || style.boxShadow !== "none";
+    })).toBe(true);
+
+    const unknownProof = ledger.getByRole("button", { name: "Inspect unknown_workflow proof" });
+    await unknownProof.focus();
+    await expect(unknownProof).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(unknownProof).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("link", { name: "Open integrations" })).toHaveAttribute("href", "/integrations");
+
     const effect = page.locator(".ev-effect-card").first();
     await expect(effect).toBeVisible();
     const comparison = effect.locator(".ev-effect-comparison");

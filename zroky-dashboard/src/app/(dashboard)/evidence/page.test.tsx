@@ -130,6 +130,35 @@ describe("EvidencePage", () => {
     expect(screen.getByText("36.36% verified in system of record")).toBeInTheDocument();
   });
 
+  it("does not invent zero coverage while proof data is loading", () => {
+    api.fetchOutcomeGraphCoverage.mockReturnValue(new Promise(() => undefined));
+    api.fetchOutcomeGraphs.mockReturnValue(new Promise(() => undefined));
+
+    renderEvidencePage();
+
+    expect(screen.getByRole("heading", { name: "Loading proof ledger" })).toBeInTheDocument();
+    expect(screen.getByText("Reading coverage")).toBeInTheDocument();
+    expect(screen.getByText("Loading", { selector: ".dashboard-metric-card strong" })).toBeInTheDocument();
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    expect(screen.queryByText("No outcome graphs yet")).not.toBeInTheDocument();
+  });
+
+  it("shows unavailable proof state and retries after a coverage error", async () => {
+    api.fetchOutcomeGraphCoverage.mockRejectedValue(new Error("coverage unavailable"));
+    api.fetchOutcomeGraphs.mockRejectedValue(new Error("ledger unavailable"));
+
+    renderEvidencePage();
+
+    expect(await screen.findByRole("heading", { name: "Proof ledger unavailable" })).toBeInTheDocument();
+    expect(screen.getByText("Coverage unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable", { selector: ".dashboard-metric-card strong" })).toBeInTheDocument();
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Retry loading" }));
+    await waitFor(() => expect(api.fetchOutcomeGraphCoverage).toHaveBeenCalledTimes(2));
+    expect(api.fetchOutcomeGraphs).toHaveBeenCalledTimes(2);
+  });
+
   it("uses singular copy when exactly one action is caught", async () => {
     api.fetchOutcomeGraphCoverage.mockResolvedValue(coverage({
       counts: {
@@ -233,6 +262,34 @@ describe("EvidencePage", () => {
     expect(await screen.findByText("4 of 8 shown")).toBeInTheDocument();
   });
 
+  it("renders every classification with honest badge semantics", async () => {
+    const cases = [
+      ["verified", "success"],
+      ["wrong", "danger"],
+      ["missing", "danger"],
+      ["forbidden", "danger"],
+      ["duplicate", "danger"],
+      ["pending", "warning"],
+      ["stale", "warning"],
+      ["conflicted", "warning"],
+      ["unknown", "warning"],
+    ] as const;
+    api.fetchOutcomeGraphs.mockResolvedValue(graphPage(cases.map(([classification]) => graph({
+      classification,
+      id: `graph_${classification}`,
+      graph: { workflow_key: `${classification}_workflow` },
+    }))));
+
+    renderEvidencePage();
+
+    const ledger = screen.getByLabelText("Evidence ledger");
+    await within(ledger).findByText("Verified", { selector: ".status-pill" });
+    for (const [classification, tone] of cases) {
+      const label = classification[0].toUpperCase() + classification.slice(1);
+      expect(within(ledger).getByText(label, { selector: ".status-pill" }).getAttribute("data-tone")).toBe(tone);
+    }
+  });
+
   it("loads older evidence pages on demand", async () => {
     api.fetchOutcomeGraphs.mockImplementation(async ({ offset = 0 }) => graphPage(
       [graph({ id: `graph_${offset}`, graph: { workflow_key: offset === 0 ? "first_workflow" : "older_workflow" } })],
@@ -253,18 +310,18 @@ describe("EvidencePage", () => {
   it("loads additional pages to resolve a graph deep link", async () => {
     navigation.searchParams = new URLSearchParams("graph_id=graph_older");
     window.history.replaceState({}, "", "/evidence?graph_id=graph_older");
-    api.fetchOutcomeGraphs.mockImplementation(async ({ offset = 0 }) => graphPage(
-      [graph({
-        id: offset === 0 ? "graph_first" : "graph_older",
-        graph: { workflow_key: offset === 0 ? "first_workflow" : "older_workflow" },
-      })],
-      { total: 2, offset },
-    ));
+    const firstPage = Array.from({ length: 100 }, (_, index) => graph({
+      id: `graph_${index}`,
+      graph: { workflow_key: `workflow_${index}` },
+    }));
+    api.fetchOutcomeGraphs.mockImplementation(async ({ offset = 0 }) => offset === 0
+      ? graphPage(firstPage, { total: 101, offset })
+      : graphPage([graph({ id: "graph_older", graph: { workflow_key: "older_workflow" } })], { total: 101, offset }));
 
     renderEvidencePage();
 
     await waitFor(() => expect(api.fetchOutcomeGraphs).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 1 }),
+      expect.objectContaining({ offset: 100 }),
       expect.any(AbortSignal),
     ));
     const panel = screen.getByLabelText("Focused proof panel");
@@ -291,6 +348,46 @@ describe("EvidencePage", () => {
     const effect = within(panel).getByLabelText("Effect refund_created");
     expect(within(effect).getByText("Expected")).toBeInTheDocument();
     expect(within(effect).getAllByText("Observed")).toHaveLength(2);
+  });
+
+  it.each([
+    {
+      href: "/operations?view=unverifiable",
+      link: "Open runner status",
+      message: "The private runner is offline",
+      reason: "runner_offline",
+    },
+    {
+      href: null,
+      link: null,
+      message: "No matching record was found in the system of record",
+      reason: "no_sor_trace",
+    },
+    {
+      href: null,
+      link: null,
+      message: "The system was unreachable; Zroky will retry",
+      reason: "sor_unreachable",
+    },
+  ])("renders the $reason finding without overstating proof", async ({ href, link, message, reason }) => {
+    api.fetchOutcomeGraphs.mockResolvedValue(graphPage([graph({
+      classification: "unknown",
+      next_check_at: "2026-08-09T08:00:00Z",
+      reason_code: reason as OutcomeGraphRow["reason_code"],
+      verification_status: "inconclusive",
+    })]));
+
+    renderEvidencePage();
+
+    await screen.findByText(message);
+    const panel = screen.getByLabelText("Focused proof panel");
+    expect(within(panel).getByText(message)).toBeInTheDocument();
+    if (href && link) {
+      expect(within(panel).getByRole("link", { name: link }).getAttribute("href")).toBe(href);
+    } else {
+      expect(within(panel).queryByRole("link")).not.toBeInTheDocument();
+    }
+    if (reason === "sor_unreachable") expect(within(panel).getByText(/Next check/)).toBeInTheDocument();
   });
 
   it("shows setup empty state when coverage total is zero", async () => {
