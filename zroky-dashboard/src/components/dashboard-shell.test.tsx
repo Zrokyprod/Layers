@@ -508,6 +508,37 @@ describe("DashboardShell primary navigation", () => {
     expect(storeState.setSelectedProject).not.toHaveBeenCalled();
   });
 
+  it("keeps personal account controls accessible without a selected project", () => {
+    navState.pathname = "/account";
+    storeState.selectedProject = null;
+    navState.projectData = undefined;
+    navState.myProjects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "Acme Corp",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        membership_id: "mem_2",
+        project_id: "proj_2",
+        project_name: "Beta Lab",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-01-02T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ];
+
+    render(<DashboardShell>personal account controls</DashboardShell>);
+
+    expect(screen.getByText("personal account controls")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Select a project to load this dashboard" })).not.toBeInTheDocument();
+  });
+
   it("auto-selects the only active project", async () => {
     storeState.selectedProject = null;
 

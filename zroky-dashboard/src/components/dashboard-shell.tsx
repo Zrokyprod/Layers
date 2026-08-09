@@ -302,6 +302,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     && !projectSelectionRequired
     && !noActiveProjects
     && (!myProjectsQuery.data || selectedProjectMembership != null));
+  const projectContextOptional = pathname === "/account";
 
   useEffect(() => {
     if (!myProjectsQuery.data) return;
@@ -606,7 +607,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </header>
 
         <main className="content-inner page-enter">
-          {projectContextReady ? (
+          {projectContextOptional || projectContextReady ? (
             children
           ) : (
             <ProjectContextGate

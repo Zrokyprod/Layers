@@ -965,7 +965,7 @@ def change_password(
     user.password_hash = hash_password(body.new_password)
     db.commit()
     token_store.revoke_all_user_tokens(user.id)
-    return {"detail": "Password changed successfully."}
+    return {"detail": "Password changed. Sign in again to continue."}
 
 
 @router.post("/me/mfa/totp/start", response_model=MfaTotpStartResponse)

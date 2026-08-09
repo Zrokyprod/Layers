@@ -591,6 +591,7 @@ def test_change_password_revokes_existing_sessions(client):
         },
     )
     assert changed.status_code == 200
+    assert changed.json()["detail"] == "Password changed. Sign in again to continue."
 
     old_me = client.get("/v1/auth/me", headers=headers)
     assert old_me.status_code == 401
