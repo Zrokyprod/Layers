@@ -508,6 +508,38 @@ describe("OperationsPage", () => {
     render(<OperationsPage />);
 
     expect(await screen.findByLabelText("Incidents table")).toBeInTheDocument();
+    expect(operationViewButton(/Incidents/).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("starts on the requested view while live data is still loading", () => {
+    queryState.overrides = {
+      "final-runs:latest": { isLoading: true },
+    };
+    window.history.pushState(null, "", "/operations?view=incidents");
+
+    render(<OperationsPage />);
+
+    expect(screen.getByLabelText("Incidents table")).toBeInTheDocument();
+    expect(operationViewButton(/Incidents/).getAttribute("aria-pressed")).toBe("true");
+    expect(operationViewButton(/Operator queue/).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("exposes selected view, agent, and row states", async () => {
+    const user = userEvent.setup();
+    render(<OperationsPage />);
+
+    expect(operationViewButton(/Operator queue/).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true");
+    await user.click(operationViewButton(/Runs/));
+    expect(operationViewButton(/Runs/).getAttribute("aria-pressed")).toBe("true");
+    const agentSummary = screen.getByLabelText("Agent summary");
+    const allAgents = within(agentSummary).getByRole("button", { name: /All agents/ });
+    const stripeAgent = within(agentSummary).getByRole("button", { name: /stripe-agent/ });
+    expect(allAgents.getAttribute("aria-pressed")).toBe("true");
+    await user.click(stripeAgent);
+    expect(allAgents.getAttribute("aria-pressed")).toBe("false");
+    expect(stripeAgent.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /refund-workflow/ }).getAttribute("aria-current")).toBe("true");
   });
 
   it.each([

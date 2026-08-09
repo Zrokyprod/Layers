@@ -602,12 +602,12 @@ function AgentFacet({
   if (stats.length === 0) return null;
   return (
     <div className={styles.agentFacet} aria-label="Agent summary">
-      <button type="button" data-active={!activeAgent} onClick={() => onSelect(null)}>
+      <button type="button" aria-pressed={!activeAgent} data-active={!activeAgent} onClick={() => onSelect(null)}>
         All agents
         <strong>{stats.reduce((sum, stat) => sum + stat.total, 0)}</strong>
       </button>
       {stats.map((stat) => (
-        <button type="button" key={stat.agent} data-active={activeAgent === stat.agent} onClick={() => onSelect(stat.agent)}>
+        <button type="button" key={stat.agent} aria-pressed={activeAgent === stat.agent} data-active={activeAgent === stat.agent} onClick={() => onSelect(stat.agent)}>
           <span>{stat.agent}</span>
           <small>{stat.total} runs · {stat.mismatches} mismatch · {stat.unverifiable} unverifiable · {stat.recovery} recovery</small>
           <em>{stat.lastSeen}</em>
@@ -618,6 +618,15 @@ function AgentFacet({
 }
 
 type OperationsUrlSelection = { agentName: string | null; id: string | null; tab: OpsTab };
+
+function tabHintFromSearchParams(params: Pick<URLSearchParams, "get">): OpsTab | null {
+  if (params.get("incident_id")) return "incidents";
+  if (params.get("approval_id") || params.get("decision_id")) return "approvals";
+  if (params.get("run_id") || params.get("action_id") || params.get("agent_name")) return "runs";
+  if (params.get("intent_id")) return null;
+  const view = params.get("view");
+  return TABS.some((tab) => tab.id === view) ? view as OpsTab : null;
+}
 
 function selectionFromUrl(
   runs: FinalRunResponse[],
@@ -1043,7 +1052,7 @@ export default function OperationsPage() {
   });
   const projects = useQuery({ queryKey: ["my-projects"], queryFn: ({ signal }) => listMyProjects(signal), enabled: !localPreview });
 
-  const [activeTab, setActiveTab] = useState<OpsTab>("attention");
+  const [activeTab, setActiveTab] = useState<OpsTab>(() => tabHintFromSearchParams(searchParams) ?? "attention");
   const [activeView, setActiveView] = useState<SavedView>("All");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [incidentLocalStates, setIncidentLocalStates] = useState<Record<string, IncidentLocalState>>({});
@@ -1147,6 +1156,12 @@ export default function OperationsPage() {
   useEffect(() => {
     setExplicitDemo(demoOperationsEnabled());
   }, []);
+
+  useEffect(() => {
+    if (deepLinkHandled.current === deepLinkKey) return;
+    const tab = tabHintFromSearchParams(searchParams);
+    if (tab) setActiveTab(tab);
+  }, [deepLinkKey, searchParams]);
 
   useEffect(() => {
     if (deepLinkHandled.current === deepLinkKey || isLoading) return;
@@ -1283,6 +1298,7 @@ export default function OperationsPage() {
             <button
               key={tab.id}
               type="button"
+              aria-pressed={activeTab === tab.id}
               className={activeTab === tab.id ? styles.activeTab : undefined}
               onClick={() => {
                 setActiveTab(tab.id);
@@ -1301,7 +1317,7 @@ export default function OperationsPage() {
       {activeTab === "attention" ? (
         <section className={styles.filterBar} aria-label="Operations filters">
           {SAVED_VIEWS.map((view) => (
-            <button type="button" key={view} data-active={activeView === view} onClick={() => selectSavedView(view)}>
+            <button type="button" key={view} aria-pressed={activeView === view} data-active={activeView === view} onClick={() => selectSavedView(view)}>
               {view}
             </button>
           ))}
@@ -1333,6 +1349,7 @@ export default function OperationsPage() {
               <button
                 type="button"
                 key={row.id}
+                aria-current={selectedRow?.id === row.id ? "true" : undefined}
                 className={`${styles.attentionRow} ${selectedRow?.id === row.id ? styles.selectedRow : ""}`}
                 onClick={() => selectRow(row)}
               >
