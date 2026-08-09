@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
+import { SettingsConfirmationDialog } from "@/components/settings-confirmation-dialog";
 import { SettingsHero, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import { useDashboardStore } from "@/lib/store";
@@ -294,18 +295,30 @@ export default function TeamPage() {
   const activeMembers = members.filter((member) => member.is_active);
   const pendingInvitationItems = invitations.filter((invitation) => invitationStatus(invitation) === "pending");
   const pendingInvites = pendingInvitationItems.length;
+  const heroPill = !projectId
+    ? "Project missing"
+    : queryError
+      ? "Unavailable"
+      : loading
+        ? "Loading"
+        : `${activeMembers.length} active`;
+  const membersCopy = membersQuery.error
+    ? "Member data unavailable."
+    : membersQuery.isLoading
+      ? "Loading members."
+      : `${activeMembers.length} active member${activeMembers.length === 1 ? "" : "s"} · ${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"}.`;
 
   return (
-    <SettingsScaffold className="team-settings-page" aria-labelledby="team-settings-title">
+    <SettingsScaffold className="team-settings-page">
       <SettingsHero
         ariaLabel="Members settings"
         eyebrow="Members"
         icon={<Users aria-hidden="true" />}
         title="Members"
         copy="Invite teammates, change roles, and remove access from one place."
-        tone={!projectId || error ? "danger" : "success"}
-        pill={projectId ? `${activeMembers.length} active` : "Project missing"}
-        updatedLabel={loading ? "Refreshing" : "Settings live"}
+        tone={!projectId || error ? "danger" : loading ? "neutral" : "success"}
+        pill={heroPill}
+        updatedLabel={queryError ? "Unavailable" : loading ? "Refreshing" : "Settings live"}
         actions={
           <DashboardButton icon={<RefreshCw />} onClick={() => void refreshTeamData()} disabled={loading || !projectId} variant="soft">
             Refresh
@@ -376,11 +389,13 @@ export default function TeamPage() {
         id="project-members"
         eyebrow="Members"
         title="Project members"
-        copy={`${activeMembers.length} active member${activeMembers.length === 1 ? "" : "s"} · ${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"}.`}
+        copy={membersCopy}
         className="team-list-section"
       >
 
-        {loading && members.length === 0 ? (
+        {membersQuery.error ? (
+          <div className="empty">Member data is unavailable. Refresh before changing access.</div>
+        ) : loading && members.length === 0 ? (
           <div className="loading" />
         ) : members.length === 0 ? (
           <div className="empty">No members found.</div>
@@ -460,7 +475,9 @@ export default function TeamPage() {
         className="team-list-section"
       >
 
-        {loading && pendingInvitationItems.length === 0 ? (
+        {invitationsQuery.error ? (
+          <div className="empty">Invitation data is unavailable. Refresh before managing invites.</div>
+        ) : loading && pendingInvitationItems.length === 0 ? (
           <div className="loading" />
         ) : pendingInvitationItems.length === 0 ? (
           <div className="empty">No pending invitations.</div>
@@ -512,100 +529,84 @@ export default function TeamPage() {
       </SettingsSection>
 
       {roleChangeTarget ? (
-        <div
-          className="fix-modal-backdrop"
-          role="presentation"
-          onClick={() => !busyMemberId && setRoleChangeTarget(null)}
+        <SettingsConfirmationDialog
+          ariaLabel="Confirm role change"
+          busy={Boolean(busyMemberId)}
+          onClose={() => setRoleChangeTarget(null)}
         >
-          <section
-            className="panel keys-revoke-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm role change"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="panel-header">
-              <div>
-                <h3>Confirm Role Change</h3>
-                <p>
-                  Change <strong>{roleChangeTarget.member.email ?? roleChangeTarget.member.subject}</strong> from {roleChangeTarget.member.role} to {roleChangeTarget.role}.
-                </p>
-              </div>
-            </header>
-            <div className="actions">
-              <DashboardButton
-                type="button"
-                variant="primary"
-                loading={busyMemberId === roleChangeTarget.member.membership_id}
-                disabled={busyMemberId === roleChangeTarget.member.membership_id}
-                onClick={() => void changeMemberRole(roleChangeTarget.member, roleChangeTarget.role)}
-              >
-                {busyMemberId === roleChangeTarget.member.membership_id ? "Saving..." : "Apply role change"}
-              </DashboardButton>
-              <DashboardButton
-                type="button"
-                variant="soft"
-                disabled={busyMemberId === roleChangeTarget.member.membership_id}
-                onClick={() => setRoleChangeTarget(null)}
-              >
-                Cancel
-              </DashboardButton>
+          <header className="panel-header">
+            <div>
+              <h3>Confirm Role Change</h3>
+              <p>
+                Change <strong>{roleChangeTarget.member.email ?? roleChangeTarget.member.subject}</strong> from {roleChangeTarget.member.role} to {roleChangeTarget.role}.
+              </p>
             </div>
-          </section>
-        </div>
+          </header>
+          <div className="actions">
+            <DashboardButton
+              type="button"
+              variant="primary"
+              loading={busyMemberId === roleChangeTarget.member.membership_id}
+              disabled={busyMemberId === roleChangeTarget.member.membership_id}
+              onClick={() => void changeMemberRole(roleChangeTarget.member, roleChangeTarget.role)}
+            >
+              {busyMemberId === roleChangeTarget.member.membership_id ? "Saving..." : "Apply role change"}
+            </DashboardButton>
+            <DashboardButton
+              type="button"
+              variant="soft"
+              disabled={busyMemberId === roleChangeTarget.member.membership_id}
+              onClick={() => setRoleChangeTarget(null)}
+            >
+              Cancel
+            </DashboardButton>
+          </div>
+        </SettingsConfirmationDialog>
       ) : null}
 
       {activeChangeTarget ? (
-        <div
-          className="fix-modal-backdrop"
-          role="presentation"
-          onClick={() => !busyMemberId && setActiveChangeTarget(null)}
+        <SettingsConfirmationDialog
+          ariaLabel={activeChangeTarget.active ? "Reactivate member" : "Remove member"}
+          busy={Boolean(busyMemberId)}
+          onClose={() => setActiveChangeTarget(null)}
         >
-          <section
-            className="panel keys-revoke-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={activeChangeTarget.active ? "Reactivate member" : "Remove member"}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="panel-header">
-              <div>
-                <h3>{activeChangeTarget.active ? "Reactivate Member" : "Remove Member"}</h3>
-                <p>
-                  {activeChangeTarget.active ? "Restore project access for" : "Remove project access for"}{" "}
-                  <strong>{activeChangeTarget.member.email ?? activeChangeTarget.member.subject}</strong>.
-                </p>
-              </div>
-            </header>
-            <div className="settings-modal-facts">
-              <span>Role stays <strong>{activeChangeTarget.member.role}</strong></span>
-              <span>Subject <strong className="mono">{activeChangeTarget.member.subject}</strong></span>
+          <header className="panel-header">
+            <div>
+              <h3>{activeChangeTarget.active ? "Reactivate Member" : "Remove Member"}</h3>
+              <p>
+                {activeChangeTarget.active ? "Restore project access for" : "Remove project access for"}{" "}
+                <strong>{activeChangeTarget.member.email ?? activeChangeTarget.member.subject}</strong>.
+              </p>
             </div>
-            <div className="actions">
-              <DashboardButton
-                type="button"
-                variant={activeChangeTarget.active ? "primary" : "danger"}
-                loading={busyMemberId === activeChangeTarget.member.membership_id}
-                disabled={busyMemberId === activeChangeTarget.member.membership_id}
-                onClick={() => void setMemberActive()}
-              >
-                {busyMemberId === activeChangeTarget.member.membership_id
-                  ? "Saving..."
-                  : activeChangeTarget.active
-                    ? "Reactivate member"
-                    : "Remove member"}
-              </DashboardButton>
-              <DashboardButton
-                type="button"
-                variant="soft"
-                disabled={busyMemberId === activeChangeTarget.member.membership_id}
-                onClick={() => setActiveChangeTarget(null)}
-              >
-                Cancel
-              </DashboardButton>
-            </div>
-          </section>
-        </div>
+          </header>
+          <div className="settings-modal-facts">
+            <span>Role stays <strong>{activeChangeTarget.member.role}</strong></span>
+            <span>Subject <strong className="mono">{activeChangeTarget.member.subject}</strong></span>
+          </div>
+          <div className="actions">
+            <DashboardButton
+              type="button"
+              variant={activeChangeTarget.active ? "primary" : "danger"}
+              loading={busyMemberId === activeChangeTarget.member.membership_id}
+              disabled={busyMemberId === activeChangeTarget.member.membership_id}
+              onClick={() => void setMemberActive()}
+            >
+              {busyMemberId === activeChangeTarget.member.membership_id
+                ? "Saving..."
+                : activeChangeTarget.active
+                  ? "Reactivate member"
+                  : "Remove member"}
+            </DashboardButton>
+            <DashboardButton
+              type="button"
+              variant="soft"
+              disabled={busyMemberId === activeChangeTarget.member.membership_id}
+              onClick={() => setActiveChangeTarget(null)}
+            >
+              Cancel
+            </DashboardButton>
+          </div>
+        </SettingsConfirmationDialog>
       ) : null}
     </SettingsScaffold>
   );

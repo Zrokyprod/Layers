@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   FolderOpen,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 
@@ -55,7 +56,8 @@ export default function WorkspaceSettingsPage() {
   );
   const workspaceName = safeString(project?.name ?? membership?.project_name, "Project unavailable");
   const loading = projectQuery.isLoading || projectsQuery.isLoading;
-  const active = project?.is_active === false || membership?.is_active === false ? false : true;
+  const error = projectQuery.error?.message ?? projectsQuery.error?.message ?? null;
+  const active = !loading && !error && project?.is_active !== false && membership?.is_active !== false;
   const role = roleLabel(membership?.role);
   const renameAllowed = canRenameWorkspace(membership?.role);
   const renameDisabled = !renameAllowed || !projectId || updateProject.isPending || draftName.trim().length < 2;
@@ -91,19 +93,39 @@ export default function WorkspaceSettingsPage() {
     }
   }
 
+  async function refreshWorkspace() {
+    await Promise.all([projectQuery.refetch(), projectsQuery.refetch()]);
+  }
+
   return (
-    <SettingsScaffold className="workspace-settings-page" aria-labelledby="workspace-settings-title">
+    <SettingsScaffold className="workspace-settings-page">
       <SettingsHero
         ariaLabel="Workspace settings"
         eyebrow="Workspace"
         icon={<FolderOpen aria-hidden="true" />}
         title="Workspace"
         copy="Manage the project name and stable workspace identifiers used across Zroky."
-        tone={active ? "success" : "danger"}
-        pill={active ? "Active" : "Inactive"}
-        updatedLabel={loading ? "Loading" : "Settings live"}
+        tone={error ? "danger" : loading ? "neutral" : active ? "success" : "danger"}
+        pill={error ? "Unavailable" : loading ? "Loading" : active ? "Active" : "Inactive"}
+        updatedLabel={loading ? "Loading" : error ? "Unavailable" : "Settings live"}
+        notices={error ? <div className="alert-strip alert-strip-error">{error}</div> : null}
+        actions={error ? (
+          <DashboardButton icon={<RefreshCw />} onClick={() => void refreshWorkspace()} variant="soft">
+            Retry
+          </DashboardButton>
+        ) : undefined}
       />
 
+      {loading ? (
+        <div className="loading" />
+      ) : error ? (
+        <SettingsSection
+          title="Workspace unavailable"
+          copy="No workspace state has been inferred. Retry before changing project metadata."
+        >
+          <div className="empty">Workspace data is unavailable.</div>
+        </SettingsSection>
+      ) : (
       <SettingsSection
         id="workspace-identity"
         eyebrow="Identity"
@@ -202,6 +224,7 @@ export default function WorkspaceSettingsPage() {
           </article>
         </div>
       </SettingsSection>
+      )}
 
     </SettingsScaffold>
   );

@@ -147,6 +147,9 @@ describe("BillingPage", () => {
     expect(within(teamCard).queryByText(/Unlimited approver seats/)).not.toBeInTheDocument();
     expect(within(teamCard).queryByText(/Bypass detection/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upgrade to Team" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Contact sales" }).getAttribute("href")).toBe(
+      "/contact?source=billing&intent=enterprise",
+    );
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
 

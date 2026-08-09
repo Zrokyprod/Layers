@@ -136,6 +136,24 @@ describe("ApiKeysPage", () => {
     expect(screen.getByRole("button", { name: "Create key" }).getAttribute("disabled")).not.toBeNull();
   });
 
+  it("does not claim zero active keys while key data is loading or unavailable", () => {
+    hooks.useListProjectApiKeys.mockReturnValue({ data: undefined, isLoading: true, error: null });
+    const { rerender } = render(<ApiKeysPage />);
+
+    expect(screen.getByText("Loading", { selector: ".dashboard-verdict-pill" })).toBeInTheDocument();
+    expect(screen.queryByText("No active key")).not.toBeInTheDocument();
+
+    hooks.useListProjectApiKeys.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error("Key service unavailable."),
+    });
+    rerender(<ApiKeysPage />);
+
+    expect(screen.getByText("Unavailable", { selector: ".dashboard-verdict-pill" })).toBeInTheDocument();
+    expect(screen.queryByText("No active key")).not.toBeInTheDocument();
+  });
+
   it("keeps agent configuration out of API Keys even with setup query params", () => {
     render(<ApiKeysPage />);
 
@@ -228,7 +246,9 @@ describe("ApiKeysPage", () => {
     render(<ApiKeysPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    expect(screen.getByRole("dialog", { name: "Revoke API key" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Revoke API key" });
+    expect(dialog).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Yes, revoke key" }));
 
     await waitFor(() => expect(revokeMutateAsync).toHaveBeenCalledWith({ projectId: "proj_1", keyId: "key_1" }));

@@ -124,6 +124,21 @@ describe("TeamPage", () => {
     expect(api.listProjectMembers).toHaveBeenCalledWith("proj_1");
   });
 
+  it("does not turn failed member queries into zero-member claims", async () => {
+    api.listProjectMembers.mockRejectedValue(new Error("Member service unavailable."));
+    api.listProjectInvitations.mockRejectedValue(new Error("Invitation service unavailable."));
+
+    renderTeamPage();
+
+    expect(await screen.findByText("Unavailable", { selector: ".dashboard-verdict-pill" })).toBeInTheDocument();
+    expect(screen.getByText("Member data unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("Member data is unavailable. Refresh before changing access.")).toBeInTheDocument();
+    expect(screen.getByText("Invitation data is unavailable. Refresh before managing invites.")).toBeInTheDocument();
+    expect(screen.queryByText("No members found.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No pending invitations.")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 active")).not.toBeInTheDocument();
+  });
+
   it("prevents the last active owner from being demoted or removed", async () => {
     renderTeamPage();
 

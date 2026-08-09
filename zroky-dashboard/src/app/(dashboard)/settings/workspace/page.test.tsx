@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import WorkspaceSettingsPage from "./page";
 
 const clipboardWrite = vi.hoisted(() => vi.fn());
+const refetchWorkspace = vi.hoisted(() => vi.fn());
 const updateProject = vi.hoisted(() => vi.fn());
 
 const hookState = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ const hookState = vi.hoisted(() => ({
   ],
   selectedProject: "proj_1234567890abcdef" as string | null,
   loading: false,
+  error: null as Error | null,
 }));
 
 vi.mock("next/link", () => ({
@@ -51,10 +53,14 @@ vi.mock("@/lib/hooks", () => ({
   useProjectSettings: () => ({
     data: hookState.project,
     isLoading: hookState.loading,
+    error: hookState.error,
+    refetch: refetchWorkspace,
   }),
   useMyProjects: () => ({
     data: hookState.projects,
     isLoading: hookState.loading,
+    error: hookState.error,
+    refetch: refetchWorkspace,
   }),
   useUpdateProjectSettings: () => ({
     mutateAsync: updateProject,
@@ -69,9 +75,13 @@ vi.mock("@/lib/store", () => ({
 
 describe("WorkspaceSettingsPage", () => {
   beforeEach(() => {
+    hookState.loading = false;
+    hookState.error = null;
     clipboardWrite.mockReset();
     clipboardWrite.mockResolvedValue(undefined);
     updateProject.mockReset();
+    refetchWorkspace.mockReset();
+    refetchWorkspace.mockResolvedValue(undefined);
     updateProject.mockResolvedValue({
       ...hookState.project,
       name: "Revenue Operations",
@@ -113,5 +123,17 @@ describe("WorkspaceSettingsPage", () => {
 
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith({ name: "Revenue Operations" }));
     expect(await screen.findByText("Workspace name updated.")).toBeInTheDocument();
+  });
+
+  it("does not infer an active workspace when settings cannot load", () => {
+    hookState.error = new Error("Workspace service unavailable.");
+
+    render(<WorkspaceSettingsPage />);
+
+    expect(screen.getByText("Unavailable", { selector: ".dashboard-verdict-pill" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Workspace unavailable" })).toBeInTheDocument();
+    expect(screen.getByText("Workspace data is unavailable.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active", { selector: ".dashboard-verdict-pill" })).not.toBeInTheDocument();
   });
 });

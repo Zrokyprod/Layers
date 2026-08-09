@@ -9,21 +9,16 @@ import {
 import { cn } from "@/lib/utils";
 
 export type SettingsScaffoldProps = {
-  "aria-labelledby"?: string;
   children: ReactNode;
   className?: string;
 };
 
 export function SettingsScaffold({
-  "aria-labelledby": ariaLabelledBy,
   children,
   className,
 }: SettingsScaffoldProps) {
   return (
-    <div
-      className={cn("settings-control-page", className)}
-      aria-labelledby={ariaLabelledBy}
-    >
+    <div className={cn("settings-control-page", className)}>
       {children}
     </div>
   );

@@ -13,7 +13,7 @@ import {
 describe("Settings scaffold", () => {
   it("renders settings surfaces through shared dashboard primitives", () => {
     const { container } = render(
-      <SettingsScaffold aria-labelledby="settings-title">
+      <SettingsScaffold>
         <SettingsHero
           eyebrow="Settings"
           title="API Keys"
