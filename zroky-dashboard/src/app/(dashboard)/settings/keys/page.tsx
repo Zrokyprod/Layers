@@ -23,6 +23,7 @@ import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 import {
   useListProjectApiKeys,
   useCreateProjectApiKey,
+  useMyProjects,
   useRevokeProjectApiKey,
   useRotateProjectApiKey,
 } from "@/lib/hooks";
@@ -74,9 +75,18 @@ function expiryWarningLabel(key: ApiKeyResponse): string | null {
   return `Expires in ${days} days. Rotate before production agents lose auth.`;
 }
 
-function ApiKeysContent() {
-  const projectId = useDashboardStore((state) => state.selectedProject) ?? "";
-  const keysQuery = useListProjectApiKeys(projectId);
+function canManageApiKeys(role: string | null | undefined): boolean {
+  const normalized = role?.trim().toLowerCase();
+  return normalized === "owner" || normalized === "admin";
+}
+
+function ApiKeysContent({ projectId }: { projectId: string }) {
+  const projectsQuery = useMyProjects();
+  const membership = projectId
+    ? projectsQuery.data?.find((project) => project.project_id === projectId) ?? null
+    : null;
+  const canManageKeys = canManageApiKeys(membership?.role);
+  const keysQuery = useListProjectApiKeys(canManageKeys ? projectId : "");
 
   const createMutation = useCreateProjectApiKey();
   const revokeMutation = useRevokeProjectApiKey();
@@ -99,6 +109,57 @@ function ApiKeysContent() {
     resolver: zodResolver(apiKeySchema),
     defaultValues: { name: defaultKeyName },
   });
+
+  if (projectId && projectsQuery.isLoading) {
+    return (
+      <SettingsScaffold className="keys-setup-page">
+        <SettingsHero
+          ariaLabel="API key access"
+          eyebrow="API Keys"
+          icon={<KeyRound aria-hidden="true" />}
+          title="Checking API key access"
+          copy="Confirming your role for this workspace."
+          tone="neutral"
+          pill="Loading"
+          updatedLabel="Checking access"
+        />
+      </SettingsScaffold>
+    );
+  }
+
+  if (projectId && projectsQuery.error) {
+    return (
+      <SettingsScaffold className="keys-setup-page">
+        <SettingsHero
+          ariaLabel="API key access"
+          eyebrow="API Keys"
+          icon={<KeyRound aria-hidden="true" />}
+          title="Workspace access unavailable"
+          copy="Zroky could not confirm your workspace role. No API key data was requested or shown."
+          tone="danger"
+          pill="Unavailable"
+          updatedLabel="Access check failed"
+        />
+      </SettingsScaffold>
+    );
+  }
+
+  if (projectId && !canManageKeys) {
+    return (
+      <SettingsScaffold className="keys-setup-page">
+        <SettingsHero
+          ariaLabel="API key access"
+          eyebrow="API Keys"
+          icon={<KeyRound aria-hidden="true" />}
+          title="API key access restricted"
+          copy="API keys are workspace credentials. Only workspace owners and admins can create, rotate, revoke, or view key metadata."
+          tone="neutral"
+          pill="Admin access required"
+          updatedLabel="Key data hidden"
+        />
+      </SettingsScaffold>
+    );
+  }
 
   const onCreate = handleSubmit(async (data) => {
     if (!projectId) return;
@@ -279,7 +340,7 @@ function ApiKeysContent() {
         copy={
           error
             ? "Key data did not refresh. Retry before rotating or revoking keys."
-            : "Create one key for your agent runtime. Copy it once, then rotate or revoke when needed."
+            : "Project keys authenticate agent runtimes for this workspace. Only owners and admins can manage them, and full secrets are shown once."
         }
         tone={heroTone}
         pill={heroPill}
@@ -444,5 +505,6 @@ function ApiKeysContent() {
 }
 
 export default function ApiKeysPage() {
-  return <ApiKeysContent />;
+  const projectId = useDashboardStore((state) => state.selectedProject) ?? "";
+  return <ApiKeysContent key={projectId} projectId={projectId} />;
 }

@@ -7,6 +7,7 @@ import ApiKeysPage from "./page";
 const hooks = vi.hoisted(() => ({
   useListProjectApiKeys: vi.fn(),
   useCreateProjectApiKey: vi.fn(),
+  useMyProjects: vi.fn(),
   useRevokeProjectApiKey: vi.fn(),
   useRotateProjectApiKey: vi.fn(),
 }));
@@ -85,6 +86,12 @@ describe("ApiKeysPage", () => {
     });
     clipboardWrite.mockResolvedValue(undefined);
 
+    hooks.useMyProjects.mockReturnValue({
+      data: [{ project_id: "proj_1", role: "owner", is_active: true }],
+      isLoading: false,
+      error: null,
+    });
+
     hooks.useListProjectApiKeys.mockReturnValue({
       data: [],
       isLoading: false,
@@ -134,6 +141,26 @@ describe("ApiKeysPage", () => {
 
     expect(hooks.useListProjectApiKeys).toHaveBeenCalledWith("");
     expect(screen.getByRole("button", { name: "Create key" }).getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("does not request or render key metadata for a non-admin member", () => {
+    hooks.useMyProjects.mockReturnValue({
+      data: [{ project_id: "proj_1", role: "member", is_active: true }],
+      isLoading: false,
+      error: null,
+    });
+    hooks.useListProjectApiKeys.mockReturnValue({
+      data: [apiKey({ key_prefix: "must_not_render" })],
+      isLoading: false,
+      error: null,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(hooks.useListProjectApiKeys).toHaveBeenCalledWith("");
+    expect(screen.getByText("Admin access required")).toBeInTheDocument();
+    expect(screen.queryByText(/must_not_render/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create key" })).not.toBeInTheDocument();
   });
 
   it("does not claim zero active keys while key data is loading or unavailable", () => {
@@ -190,6 +217,25 @@ describe("ApiKeysPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));
+  });
+
+  it("clears a one-time secret when the selected workspace changes", async () => {
+    createMutateAsync.mockResolvedValue(createdKey());
+    const view = render(<ApiKeysPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    expect(await screen.findByText("zk_live_created_secret")).toBeInTheDocument();
+
+    dashboardStore.selectedProject = "proj_2";
+    hooks.useMyProjects.mockReturnValue({
+      data: [{ project_id: "proj_2", role: "owner", is_active: true }],
+      isLoading: false,
+      error: null,
+    });
+    view.rerender(<ApiKeysPage />);
+
+    expect(screen.queryByText("zk_live_created_secret")).not.toBeInTheDocument();
+    expect(hooks.useListProjectApiKeys).toHaveBeenLastCalledWith("proj_2");
   });
 
   it("blocks invalid expiry values before creating a key", async () => {

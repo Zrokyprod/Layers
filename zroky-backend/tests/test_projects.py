@@ -156,6 +156,62 @@ def test_project_and_api_key_flow(client: TestClient) -> None:
     assert settings_response.json()["name"] == "Acme Verified Actions"
 
 
+def test_api_key_routes_isolate_users_and_projects(client: TestClient) -> None:
+    project_a = client.post(
+        "/v1/projects",
+        json={"name": "Tenant A", "owner_ref": "owner-a"},
+    ).json()["project_id"]
+    project_b = client.post(
+        "/v1/projects",
+        json={"name": "Tenant B", "owner_ref": "owner-b"},
+    ).json()["project_id"]
+    headers_a = _project_auth_headers(project_a, "owner-a")
+    headers_b = _project_auth_headers(project_b, "owner-b")
+
+    key_a = client.post(
+        f"/v1/projects/{project_a}/api-keys",
+        headers=headers_a,
+        json={"name": "tenant-a-key"},
+    ).json()
+    key_b = client.post(
+        f"/v1/projects/{project_b}/api-keys",
+        headers=headers_b,
+        json={"name": "tenant-b-key"},
+    ).json()
+
+    list_a = client.get(f"/v1/projects/{project_a}/api-keys", headers=headers_a)
+    assert list_a.status_code == 200
+    assert [row["key_id"] for row in list_a.json()] == [key_a["key_id"]]
+    assert key_b["key_id"] not in list_a.text
+    assert key_b["key_prefix"] not in list_a.text
+    assert key_a["api_key"] not in list_a.text
+    assert all("api_key" not in row and "key_hash" not in row for row in list_a.json())
+
+    assert client.get(f"/v1/projects/{project_b}/api-keys", headers=headers_a).status_code == 403
+    assert client.post(
+        f"/v1/projects/{project_b}/api-keys/{key_b['key_id']}/rotate",
+        headers=headers_a,
+    ).status_code == 403
+    assert client.post(
+        f"/v1/projects/{project_b}/api-keys/{key_b['key_id']}/revoke",
+        headers=headers_a,
+    ).status_code == 403
+
+    assert client.post(
+        f"/v1/projects/{project_a}/api-keys/{key_b['key_id']}/rotate",
+        headers=headers_a,
+    ).status_code == 404
+    assert client.post(
+        f"/v1/projects/{project_a}/api-keys/{key_b['key_id']}/revoke",
+        headers=headers_a,
+    ).status_code == 404
+
+    list_b = client.get(f"/v1/projects/{project_b}/api-keys", headers=headers_b)
+    assert list_b.status_code == 200
+    assert [row["key_id"] for row in list_b.json()] == [key_b["key_id"]]
+    assert key_a["key_id"] not in list_b.text
+
+
 def test_invalid_api_key_rejected(client: TestClient) -> None:
     response = client.post(
         "/v1/diagnosis/submit",
