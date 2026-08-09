@@ -401,6 +401,23 @@ def upsert_project_membership(
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
+    existing_membership = db.execute(
+        select(ProjectMembership)
+        .join(User, User.id == ProjectMembership.user_id)
+        .where(
+            ProjectMembership.project_id == project_id,
+            User.subject == body.subject,
+        )
+    ).scalar_one_or_none()
+    if getattr(request.state, "project_role", None) != "owner" and (
+        body.role == "owner"
+        or (existing_membership is not None and existing_membership.role == "owner")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a project owner can grant or change owner access.",
+        )
+
     try:
         membership = upsert_project_membership_record(
             db,
@@ -517,6 +534,13 @@ def invite_project_member(
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
+    normalized_role = normalize_project_role(body.role)
+    if normalized_role == "owner" and getattr(request.state, "project_role", None) != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a project owner can grant owner access.",
+        )
+
     existing_user = db.execute(
         select(User).where(User.email_hash == compute_email_hash(body.email.strip().lower()))
     ).scalar_one_or_none()
@@ -526,7 +550,7 @@ def invite_project_member(
             db=db,
             project_id=project_id,
             subject=existing_user.subject,
-            role=normalize_project_role(body.role),
+            role=normalized_role,
         )
         send_email(
             to=[body.email],

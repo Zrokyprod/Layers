@@ -603,6 +603,51 @@ def test_upsert_project_membership_allows_owner_demotion_when_another_owner_exis
     assert demote_response.json()["role"] == "admin"
 
 
+def test_admin_cannot_grant_or_change_owner_access(client: TestClient) -> None:
+    project_id = client.post(
+        "/v1/projects",
+        json={"name": "Owner Authority Project", "owner_ref": "owner-authority"},
+    ).json()["project_id"]
+    owner_headers = _project_auth_headers(project_id, "owner-authority")
+    admin_headers = _project_auth_headers(project_id, "admin-authority")
+
+    admin_membership = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=owner_headers,
+        json={"subject": "admin-authority", "email": "admin@example.com", "role": "admin"},
+    )
+    assert admin_membership.status_code == 200
+
+    promote_self = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=admin_headers,
+        json={"subject": "admin-authority", "email": "admin@example.com", "role": "owner"},
+    )
+    assert promote_self.status_code == 403
+
+    demote_owner = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=admin_headers,
+        json={"subject": "owner-authority", "role": "admin"},
+    )
+    assert demote_owner.status_code == 403
+
+    legacy_owner_invite = client.post(
+        f"/v1/projects/{project_id}/invite",
+        headers=admin_headers,
+        json={"email": "future-owner@example.com", "role": "owner"},
+    )
+    assert legacy_owner_invite.status_code == 403
+
+    owner_promotion = client.post(
+        f"/v1/projects/{project_id}/memberships",
+        headers=owner_headers,
+        json={"subject": "admin-authority", "email": "admin@example.com", "role": "owner"},
+    )
+    assert owner_promotion.status_code == 200
+    assert owner_promotion.json()["role"] == "owner"
+
+
 def test_project_scoped_route_allows_owner_membership_without_provisioning_token(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

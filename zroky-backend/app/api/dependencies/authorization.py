@@ -28,6 +28,7 @@ def require_project_role(min_role: str) -> Callable:
         db: Session = Depends(get_db_session),
     ) -> str:
         if has_strict_provisioning_access(request):
+            request.state.project_role = "owner"
             return project_id or ""
 
         settings = get_settings()
@@ -70,6 +71,7 @@ def require_project_role(min_role: str) -> Callable:
                 detail=f"Project role '{context.role}' does not allow this action.",
             )
 
+        request.state.project_role = context.role
         return context.tenant_id
 
     return _dependency
