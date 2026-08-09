@@ -443,6 +443,41 @@ describe("DashboardShell primary navigation", () => {
     });
   });
 
+  it("switches workspaces from the sidebar and follows a project detail route", () => {
+    navState.pathname = "/projects/proj_1";
+    navState.myProjects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "Acme Corp",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        membership_id: "mem_2",
+        project_id: "proj_2",
+        project_name: "Beta Lab",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-01-02T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ];
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
+    expect(screen.getByRole("menu", { name: "Workspaces" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Manage projects/ }).getAttribute("href")).toBe("/projects");
+    fireEvent.click(screen.getByRole("menuitem", { name: /Beta Lab/ }));
+
+    expect(storeState.setSelectedProject).toHaveBeenCalledWith("proj_2");
+    expect(routerState.replace).toHaveBeenCalledWith("/projects/proj_2");
+    expect(screen.queryByRole("menu", { name: "Workspaces" })).not.toBeInTheDocument();
+  });
+
   it("shows a project selection state for multi-project users without a selected project", () => {
     storeState.selectedProject = null;
     navState.projectData = undefined;

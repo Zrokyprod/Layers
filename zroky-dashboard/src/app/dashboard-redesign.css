@@ -1394,7 +1394,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .sidebar-backdrop {
     position: fixed !important;
     inset: 0 !important;
-    z-index: 50 !important;
+    z-index: 40 !important;
     border: 0 !important;
     background: rgba(24, 24, 27, 0.28) !important;
   }
@@ -27955,6 +27955,19 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
   border: 1px solid #e4e4e7 !important;
   border-radius: 8px !important;
   box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-context-menu {
+  position: relative !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .sidebar-context-popover {
+  position: absolute !important;
+  top: calc(100% - 8px) !important;
+  right: 12px !important;
+  left: 12px !important;
+  max-height: min(420px, calc(100vh - 120px)) !important;
+  overflow-y: auto !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .sidebar-context-card:hover,

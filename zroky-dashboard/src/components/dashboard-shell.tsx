@@ -237,11 +237,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const appShellRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
   const [compactShell, setCompactShell] = useState(false);
   const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(false);
   const accountMenuOpen = openMenu === "account";
+  const workspaceMenuOpen = openMenu === "workspace";
 
   const {
     toggleSidebar,
@@ -324,7 +326,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node;
-      const isInsideMenu = accountMenuRef.current?.contains(target);
+      const isInsideMenu = accountMenuRef.current?.contains(target) || workspaceMenuRef.current?.contains(target);
       if (!isInsideMenu) setOpenMenu(null);
     }
 
@@ -391,9 +393,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
     setSelectedProject(projectId);
     setOpenMenu(null);
+    setCompactSidebarOpen(false);
     void queryClient.invalidateQueries({
       predicate: (query) => query.queryKey[0] !== "me",
     });
+    if (pathname.startsWith("/projects/")) {
+      router.replace(`/projects/${encodeURIComponent(projectId)}`);
+    }
   }
 
   async function onLogout() {
@@ -434,15 +440,63 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <Link href="/projects" className="sidebar-context-card" aria-label="Open project context">
-          <span className="sidebar-context-mark" aria-hidden="true">
-            <FolderOpen size={14} />
-          </span>
-          <span className="sidebar-context-copy">
-            <strong>{workspaceName}</strong>
-          </span>
-          <ChevronDown size={13} aria-hidden="true" />
-        </Link>
+        <div className="sidebar-context-menu" ref={workspaceMenuRef}>
+          <button
+            type="button"
+            className="sidebar-context-card"
+            aria-label="Switch workspace"
+            aria-haspopup="menu"
+            aria-expanded={workspaceMenuOpen}
+            onClick={() => toggleMenu("workspace")}
+          >
+            <span className="sidebar-context-mark" aria-hidden="true">
+              <FolderOpen size={14} />
+            </span>
+            <span className="sidebar-context-copy">
+              <strong>{workspaceName}</strong>
+            </span>
+            <ChevronDown size={13} aria-hidden="true" />
+          </button>
+
+          {workspaceMenuOpen ? (
+            <div className="shell-popover sidebar-context-popover" role="menu" aria-label="Workspaces">
+              <div className="shell-popover-head">
+                <strong>Workspaces</strong>
+              </div>
+              {myProjects.map((project) => {
+                const active = project.project_id === selectedProject;
+                return (
+                  <button
+                    key={project.project_id}
+                    type="button"
+                    className={`shell-menu-item${active ? " is-active" : ""}`}
+                    role="menuitem"
+                    aria-current={active ? "true" : undefined}
+                    onClick={() => switchProject(project.project_id)}
+                  >
+                    <FolderOpen size={15} aria-hidden="true" />
+                    <span>
+                      <strong>{project.project_name}</strong>
+                      <small>{project.role.charAt(0).toUpperCase() + project.role.slice(1)}</small>
+                    </span>
+                    {active ? <small>Active</small> : null}
+                  </button>
+                );
+              })}
+              <Link
+                href="/projects"
+                className="shell-menu-item"
+                role="menuitem"
+                onClick={() => setOpenMenu(null)}
+              >
+                <Settings2 size={15} aria-hidden="true" />
+                <span>
+                  <strong>Manage projects</strong>
+                </span>
+              </Link>
+            </div>
+          ) : null}
+        </div>
 
         <nav className="nav-links" aria-label="Primary">
           <span className="nav-section-label">Navigation</span>

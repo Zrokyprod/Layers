@@ -8,6 +8,7 @@ import bcrypt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./.data/test_auth.db")
 os.environ.setdefault("AUTH_JWT_SECRET", "test-secret-key-for-auth-tests")
@@ -19,7 +20,12 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.core.config import get_settings
 from app.main import app
-from app.api.routes.auth import AuthTokenResponse, _store_email_verification_token, _store_oauth_handoff
+from app.api.routes.auth import (
+    AuthTokenResponse,
+    _lock_user_project_creation,
+    _store_email_verification_token,
+    _store_oauth_handoff,
+)
 from app.services.mfa import TOTP_PERIOD_SECONDS, _totp_at
 from app.services.security import hash_password
 
@@ -67,6 +73,26 @@ def test_register_creates_account_and_returns_token(client):
         project = session.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
         assert membership.role == "owner"
         assert project.name == "My Project"
+
+
+def test_project_creation_uses_a_database_row_lock():
+    statements = []
+
+    class Result:
+        @staticmethod
+        def scalar_one():
+            return "user-1"
+
+    class Database:
+        @staticmethod
+        def execute(statement):
+            statements.append(statement)
+            return Result()
+
+    _lock_user_project_creation(Database(), "user-1")
+
+    sql = str(statements[0].compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in sql
 
 
 def test_register_login_alias_paths_under_api_v1(client):

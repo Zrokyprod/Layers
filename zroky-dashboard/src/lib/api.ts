@@ -5580,14 +5580,21 @@ export function listProjectActionExecutionAttempts(
   });
 }
 
-export function listActionRunners(signal?: AbortSignal): Promise<ActionRunnerListResponse> {
-  return request<ActionRunnerListResponse>("/v1/action-runners", { signal });
+export function listActionRunners(
+  signal?: AbortSignal,
+  projectIdOverride?: string | null,
+): Promise<ActionRunnerListResponse> {
+  return request<ActionRunnerListResponse>("/v1/action-runners", { signal, projectIdOverride });
 }
 
-export function registerActionRunner(payload: ActionRunnerRegisterPayload): Promise<ActionRunnerResponse> {
+export function registerActionRunner(
+  payload: ActionRunnerRegisterPayload,
+  projectIdOverride?: string | null,
+): Promise<ActionRunnerResponse> {
   return request<ActionRunnerResponse>("/v1/action-runners", {
     method: "POST",
     body: payload,
+    projectIdOverride,
   });
 }
 

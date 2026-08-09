@@ -119,6 +119,16 @@ describe("ProjectsPage", () => {
     expect(screen.getByText("Admin")).toBeInTheDocument();
   });
 
+  it("opens project details without silently switching the active workspace", async () => {
+    render(<ProjectsPage />);
+
+    const link = await screen.findByRole("link", { name: "Open Checkout Agent" });
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
+
+    expect(store.setSelectedProject).not.toHaveBeenCalled();
+  });
+
   it("creates a project inside the active project context and opens its detail page", async () => {
     api.listMyProjects.mockResolvedValue([projectRows[0]]);
     api.createCurrentUserProject.mockResolvedValue({
