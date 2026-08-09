@@ -56,6 +56,7 @@ vi.mock("@/lib/api", async () => {
 });
 
 const now = "2026-05-29T10:00:00.000Z";
+const future = "2099-05-29T10:00:00.000Z";
 
 function renderTeamPage() {
   const queryClient = new QueryClient({
@@ -132,7 +133,7 @@ describe("TeamPage", () => {
     expect(screen.getByText("Member data is unavailable. Refresh before changing access.")).toBeInTheDocument();
     expect(screen.getByText("Invitation data is unavailable. Refresh before managing invites.")).toBeInTheDocument();
     expect(screen.queryByText("No members found.")).not.toBeInTheDocument();
-    expect(screen.queryByText("No pending invitations.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No open invitations.")).not.toBeInTheDocument();
     expect(screen.queryByText("0 active")).not.toBeInTheDocument();
   });
 
@@ -252,6 +253,26 @@ describe("TeamPage", () => {
     expect((screen.getAllByRole("button", { name: "Remove" })[0] as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("does not let admins reactivate an owner", async () => {
+    membershipState.role = "admin";
+    api.listProjectMembers.mockResolvedValue([{
+      membership_id: "m_owner",
+      project_id: "proj_1",
+      user_id: "u_owner",
+      subject: "user:owner@example.com",
+      email: "owner@example.com",
+      role: "owner",
+      is_active: false,
+      created_at: now,
+      updated_at: now,
+    }]);
+
+    renderTeamPage();
+
+    expect(await screen.findByText("owner@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reactivate" })).toHaveProperty("disabled", true);
+  });
+
   it("clears project-bound form state when the workspace changes", async () => {
     const view = renderTeamPage();
 
@@ -291,7 +312,7 @@ describe("TeamPage", () => {
       email: "new@example.com",
       role: "member",
       invited_by_subject: "user:owner@example.com",
-      expires_at: now,
+      expires_at: future,
       accepted_at: null,
       revoked_at: null,
       created_at: now,
@@ -318,7 +339,7 @@ describe("TeamPage", () => {
       email: "pending@example.com",
       role: "viewer",
       invited_by_subject: "user:owner@example.com",
-      expires_at: now,
+      expires_at: future,
       accepted_at: null,
       revoked_at: null,
       created_at: now,
@@ -334,5 +355,28 @@ describe("TeamPage", () => {
 
     expect(await screen.findByText("Invitation email resent to pending@example.com.")).toBeInTheDocument();
     expect(api.resendProjectInvitation).toHaveBeenCalledWith("proj_1", "inv_1");
+  });
+
+  it("shows expired invitations honestly without exposing identity prefixes", async () => {
+    api.listProjectInvitations.mockResolvedValue([{
+      invitation_id: "inv_expired",
+      project_id: "proj_1",
+      email: "expired@example.com",
+      role: "member",
+      invited_by_subject: "user:owner@example.com",
+      expires_at: "2020-05-29T10:00:00.000Z",
+      accepted_at: null,
+      revoked_at: null,
+      created_at: now,
+      email_sent: null,
+    }]);
+
+    renderTeamPage();
+
+    expect(await screen.findByRole("heading", { name: "Open invitations" })).toBeInTheDocument();
+    expect(await screen.findByText("expired@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Expired", { selector: ".status-pill" })).toBeInTheDocument();
+    expect(screen.getByText(/Invited by owner@example\.com\. Expired/)).toBeInTheDocument();
+    expect(screen.queryByText(/user:owner@example\.com/)).not.toBeInTheDocument();
   });
 });

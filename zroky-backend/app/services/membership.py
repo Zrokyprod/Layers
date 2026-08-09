@@ -14,6 +14,10 @@ class LastUserProjectOwnerError(ValueError):
     """Raised when account removal would orphan one or more projects."""
 
 
+class InactiveProjectUserError(ValueError):
+    """Raised when access is assigned to a deleted or disabled user."""
+
+
 def normalize_project_role(role: str) -> str:
     normalized = role.strip().lower()
     if normalized not in VALID_PROJECT_ROLES:
@@ -113,6 +117,8 @@ def upsert_project_membership(
 ) -> ProjectMembership:
     normalized_role = normalize_project_role(role)
     user = get_or_create_user(db, subject=subject, email=email)
+    if not user.is_active:
+        raise InactiveProjectUserError("Inactive users cannot be assigned project access")
 
     query = select(ProjectMembership).where(
         ProjectMembership.project_id == project_id,
@@ -135,13 +141,18 @@ def upsert_project_membership(
         and membership.is_active
         and not (normalized_role == "owner" and is_active)
     ):
+        db.execute(
+            select(Project.id).where(Project.id == project_id).with_for_update()
+        ).scalar_one_or_none()
         active_owner_count = db.execute(
             select(func.count())
             .select_from(ProjectMembership)
+            .join(User, User.id == ProjectMembership.user_id)
             .where(
                 ProjectMembership.project_id == project_id,
                 ProjectMembership.role == "owner",
                 ProjectMembership.is_active.is_(True),
+                User.is_active.is_(True),
             )
         ).scalar_one()
         if active_owner_count <= 1:

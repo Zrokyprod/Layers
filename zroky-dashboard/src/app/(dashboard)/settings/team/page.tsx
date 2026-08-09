@@ -53,10 +53,18 @@ function initialsFor(value: string): string {
   return `${first}${second}`.toUpperCase();
 }
 
-function invitationStatus(invitation: ProjectInvitationItem): "accepted" | "revoked" | "pending" {
+function invitationStatus(invitation: ProjectInvitationItem): "accepted" | "revoked" | "expired" | "pending" {
   if (invitation.accepted_at) return "accepted";
   if (invitation.revoked_at) return "revoked";
+  if (Date.parse(invitation.expires_at) <= Date.now()) return "expired";
   return "pending";
+}
+
+function inviterLabel(subject: string | null, members: ProjectMembershipResponse[]): string {
+  if (!subject || subject === "unknown") return "workspace admin";
+  if (subject.startsWith("deleted:")) return "former member";
+  const member = members.find((item) => item.subject === subject);
+  return member ? principalLabel(member) : subject.replace(/^(email|user):/, "");
 }
 
 function TeamPageContent({ projectId }: { projectId: string | null }) {
@@ -330,8 +338,13 @@ function TeamPageContent({ projectId }: { projectId: string | null }) {
   }
 
   const activeMembers = members.filter((member) => member.is_active);
-  const pendingInvitationItems = invitations.filter((invitation) => invitationStatus(invitation) === "pending");
-  const pendingInvites = pendingInvitationItems.length;
+  const openInvitationItems = invitations.filter((invitation) => {
+    const currentStatus = invitationStatus(invitation);
+    return currentStatus === "pending" || currentStatus === "expired";
+  });
+  const pendingInvites = openInvitationItems.filter(
+    (invitation) => invitationStatus(invitation) === "pending",
+  ).length;
   const heroPill = !projectId
     ? "Project missing"
     : queryError
@@ -343,7 +356,7 @@ function TeamPageContent({ projectId }: { projectId: string | null }) {
     ? "Member data unavailable."
     : membersQuery.isLoading
       ? "Loading members."
-      : `${activeMembers.length} active member${activeMembers.length === 1 ? "" : "s"} · ${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"}.`;
+      : `${activeMembers.length} active member${activeMembers.length === 1 ? "" : "s"}, ${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"}.`;
 
   return (
     <SettingsScaffold className="team-settings-page">
@@ -495,7 +508,12 @@ function TeamPageContent({ projectId }: { projectId: string | null }) {
                       type="button"
                       variant="primary"
                       onClick={() => requestMemberActive(m, true)}
-                      disabled={!canManageAccess || busyMemberId === m.membership_id}
+                      disabled={
+                        !canManageAccess
+                        || busyMemberId === m.membership_id
+                        || (!canManageOwners && m.role === "owner")
+                      }
+                      title={!canManageOwners && m.role === "owner" ? "Only a project owner can change owner access." : "Reactivate member"}
                     >
                       Reactivate
                     </DashboardButton>
@@ -514,21 +532,23 @@ function TeamPageContent({ projectId }: { projectId: string | null }) {
       <SettingsSection
         id="pending-invitations"
         eyebrow="Invitations"
-        title="Pending invites"
-        copy="Revoke invites that should not become access."
+        title="Open invitations"
+        copy="Resend expired invitations or revoke access that should not be granted."
         className="team-list-section"
       >
 
         {invitationsQuery.error ? (
           <div className="empty">Invitation data is unavailable. Refresh before managing invites.</div>
-        ) : loading && pendingInvitationItems.length === 0 ? (
+        ) : loading && openInvitationItems.length === 0 ? (
           <div className="loading" />
-        ) : pendingInvitationItems.length === 0 ? (
-          <div className="empty">No pending invitations.</div>
+        ) : openInvitationItems.length === 0 ? (
+          <div className="empty">No open invitations.</div>
         ) : (
           <div className="team-member-list">
-            {pendingInvitationItems.map((inv) => (
-              <div key={inv.invitation_id} className="team-member-row team-invitation-row">
+            {openInvitationItems.map((inv) => {
+              const currentStatus = invitationStatus(inv);
+              return (
+                <div key={inv.invitation_id} className="team-member-row team-invitation-row">
                 <div className="team-inv-icon" aria-hidden="true">
                   <Clock3 />
                 </div>
@@ -538,11 +558,11 @@ function TeamPageContent({ projectId }: { projectId: string | null }) {
                     <span className={`team-role-badge is-${inv.role}`}>{roleLabel(inv.role)}</span>
                   </div>
                   <span className="provider-meta">
-                    Invited by {inv.invited_by_subject ?? "workspace admin"}. Expires {formatDateTime(inv.expires_at)}.
+                    Invited by {inviterLabel(inv.invited_by_subject, members)}. {currentStatus === "expired" ? "Expired" : "Expires"} {formatDateTime(inv.expires_at)}.
                   </span>
                 </div>
                 <div className="team-invite-actions">
-                  <StatusPill value="pending" label="Pending" tone="warning" />
+                  <StatusPill value={currentStatus} label={currentStatus === "expired" ? "Expired" : "Pending"} tone="warning" />
                   <DashboardButton
                     type="button"
                     size="sm"
@@ -566,8 +586,9 @@ function TeamPageContent({ projectId }: { projectId: string | null }) {
                     Revoke
                   </DashboardButton>
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </SettingsSection>

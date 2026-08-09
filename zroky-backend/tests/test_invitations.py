@@ -194,6 +194,91 @@ def test_project_invitation_create_list_duplicate_and_revoke(
             item for item in revoked_list_response.json() if item["invitation_id"] == created["invitation_id"]
         )
         assert revoked["revoked_at"] is not None
+
+        reinvite_response = client.post(
+            f"/v1/invitations/projects/{project_id}/invitations",
+            headers=auth_headers,
+            json={"email": "new.teammate@zroky.local", "role": "viewer"},
+        )
+        assert reinvite_response.status_code == 201
+        assert reinvite_response.json()["invitation_id"] == created["invitation_id"]
+        assert reinvite_response.json()["role"] == "viewer"
+        assert reinvite_response.json()["revoked_at"] is None
+    finally:
+        get_settings.cache_clear()
+
+
+def test_invitation_acceptance_is_idempotent(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing_key = "jwt-secret-for-tests-minimum-32-bytes-2026"
+    owner_subject = "owner-accept-sub"
+    sent_messages: list[str] = []
+
+    def fake_send_email(to, subject, html_body, *, plain_body=None):
+        del to, subject, html_body
+        sent_messages.append(str(plain_body))
+        return True
+
+    monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "true")
+    monkeypatch.setenv("PROVISIONING_TOKEN", "top-secret")
+    monkeypatch.setenv("JWT_SIGNING_KEY", signing_key)
+    monkeypatch.setenv("JWT_ALGORITHMS", "HS256")
+    monkeypatch.setenv("FRONTEND_URL", "https://app.example.com")
+    monkeypatch.setattr("app.api.routes.invitations.send_email", fake_send_email)
+    get_settings.cache_clear()
+
+    try:
+        project_id = client.post(
+            "/v1/projects",
+            headers={"X-Zroky-Admin-Token": "top-secret"},
+            json={"name": "Accept Project", "owner_ref": owner_subject},
+        ).json()["project_id"]
+        owner_headers = {
+            "Authorization": f"Bearer {jwt.encode({'sub': owner_subject, 'project_id': project_id}, signing_key, algorithm='HS256')}"
+        }
+        created = client.post(
+            f"/v1/invitations/projects/{project_id}/invitations",
+            headers=owner_headers,
+            json={"email": "accept@example.com", "role": "member"},
+        )
+        assert created.status_code == 201
+        accept_url = next(
+            line.removeprefix("Accept invitation: ")
+            for line in sent_messages[-1].splitlines()
+            if line.startswith("Accept invitation: ")
+        )
+        raw_token = parse_qs(urlparse(accept_url).query)["token"][0]
+
+        registered = client.post(
+            "/v1/auth/register",
+            json={
+                "email": "accept@example.com",
+                "password": "secureaccept123",
+                "confirm_password": "secureaccept123",
+            },
+        )
+        assert registered.status_code == 201
+        invitee_headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+
+        first_accept = client.post(
+            "/v1/invitations/accept",
+            headers=invitee_headers,
+            json={"token": raw_token},
+        )
+        assert first_accept.status_code == 200
+        assert first_accept.json()["success"] is True
+        assert first_accept.json()["project_id"] == project_id
+
+        retry_accept = client.post(
+            "/v1/invitations/accept",
+            headers=invitee_headers,
+            json={"token": raw_token},
+        )
+        assert retry_accept.status_code == 200, retry_accept.json()
+        assert retry_accept.json()["success"] is True
+        assert retry_accept.json()["membership_id"] == first_accept.json()["membership_id"]
     finally:
         get_settings.cache_clear()
 

@@ -12,7 +12,12 @@ from app.core.config import get_settings
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.api.routes.projects import _rotated_api_key_expiry
-from app.db.models import ApiKey
+from app.db.models import ApiKey, Project, ProjectMembership, User
+from app.services.membership import (
+    InactiveProjectUserError,
+    LastProjectOwnerError,
+    upsert_project_membership,
+)
 
 
 TEST_JWT_SIGNING_KEY = "jwt-secret-for-tests-minimum-32-bytes-2026"
@@ -563,6 +568,41 @@ def test_upsert_project_membership_rejects_removing_last_owner(client: TestClien
 
     assert deactivate_response.status_code == 409
     assert deactivate_response.json()["detail"] == "Project must keep at least one active owner"
+
+
+def test_membership_integrity_ignores_inactive_owners_and_rejects_inactive_users(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'membership_integrity.db'}", future=True)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    with session_factory() as session:
+        project = Project(id="proj_integrity", name="Integrity")
+        active_owner = User(subject="owner-active", is_active=True)
+        inactive_owner = User(subject="owner-inactive", is_active=False)
+        session.add_all([project, active_owner, inactive_owner])
+        session.flush()
+        session.add_all([
+            ProjectMembership(project_id=project.id, user_id=active_owner.id, role="owner", is_active=True),
+            ProjectMembership(project_id=project.id, user_id=inactive_owner.id, role="owner", is_active=True),
+        ])
+        session.commit()
+
+        with pytest.raises(LastProjectOwnerError):
+            upsert_project_membership(
+                session,
+                project_id=project.id,
+                subject=active_owner.subject,
+                role="admin",
+            )
+        with pytest.raises(InactiveProjectUserError):
+            upsert_project_membership(
+                session,
+                project_id=project.id,
+                subject=inactive_owner.subject,
+                role="member",
+            )
+
+    engine.dispose()
 
 
 def test_upsert_project_membership_allows_owner_demotion_when_another_owner_exists(

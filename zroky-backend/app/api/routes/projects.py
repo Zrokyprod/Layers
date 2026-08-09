@@ -26,6 +26,7 @@ from app.schemas.project import (
 )
 from app.services.email_sender import send_email
 from app.services.membership import (
+    InactiveProjectUserError,
     LastProjectOwnerError,
     normalize_project_role,
     upsert_project_membership as upsert_project_membership_record,
@@ -427,7 +428,7 @@ def upsert_project_membership(
             role=body.role,
             is_active=body.is_active,
         )
-    except LastProjectOwnerError as exc:
+    except (InactiveProjectUserError, LastProjectOwnerError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.commit()
     db.refresh(membership)
@@ -454,7 +455,10 @@ def list_project_memberships(
     query = (
         select(ProjectMembership, User)
         .join(User, User.id == ProjectMembership.user_id)
-        .where(ProjectMembership.project_id == project_id)
+        .where(
+            ProjectMembership.project_id == project_id,
+            User.is_active.is_(True),
+        )
         .order_by(ProjectMembership.created_at.desc())
     )
     rows = db.execute(query).all()
