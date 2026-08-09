@@ -14,7 +14,7 @@ os.environ.setdefault("AUTH_JWT_SECRET", "test-secret-key-for-auth-tests")
 os.environ.setdefault("ALLOW_PROJECT_HEADER_CONTEXT", "true")
 os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
 
-from app.db.models import Project, ProjectMembership, User, compute_email_hash
+from app.db.models import Project, ProjectInvitation, ProjectMembership, User, compute_email_hash
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.core.config import get_settings
@@ -816,6 +816,17 @@ def test_delete_account_scrubs_identity_credentials_and_memberships(client):
         membership = session.execute(
             select(ProjectMembership).where(ProjectMembership.user_id == user.id)
         ).scalar_one()
+        invitation = ProjectInvitation(
+            project_id=membership.project_id,
+            email="invited@example.com",
+            role="member",
+            invited_by_subject=user.subject,
+            token_hash="a" * 64,
+            expires_at=datetime.now(UTC) + timedelta(days=7),
+        )
+        session.add(invitation)
+        session.flush()
+        invitation_id = invitation.id
         surviving_owner = User(
             subject="email:surviving-owner@example.com",
             email="surviving-owner@example.com",
@@ -876,6 +887,9 @@ def test_delete_account_scrubs_identity_credentials_and_memberships(client):
         project = session.get(Project, deleted_user.memberships[0].project_id)
         assert project is not None
         assert project.owner_ref == "email:surviving-owner@example.com"
+        invitation = session.get(ProjectInvitation, invitation_id)
+        assert invitation is not None
+        assert invitation.invited_by_subject == f"deleted:{deleted_user_id}"
 
     assert client.get("/v1/auth/me", headers=headers).status_code == 401
 

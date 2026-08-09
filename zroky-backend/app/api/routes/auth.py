@@ -66,7 +66,7 @@ from app.api.routes._internal.auth_tokens import (
 from app.auth.identity import extract_bearer_token
 from app.core.config import get_settings
 from app.core.limiter import limiter
-from app.db.models import Project, ProjectMembership, User, compute_email_hash
+from app.db.models import Project, ProjectInvitation, ProjectMembership, User, compute_email_hash
 from app.db.session import get_db_session as get_db
 from app.services import entitlements_resolver, token_store
 from app.services.email_sender import send_email
@@ -1105,6 +1105,12 @@ def delete_account(
         )
     ).scalars().all()
     previous_subject = user.subject
+    deleted_subject = f"deleted:{user.id}"
+    invitations = db.execute(
+        select(ProjectInvitation).where(ProjectInvitation.invited_by_subject == previous_subject)
+    ).scalars().all()
+    for invitation in invitations:
+        invitation.invited_by_subject = deleted_subject
     for membership in memberships:
         project = db.get(Project, membership.project_id)
         if project is not None and project.owner_ref == previous_subject:
@@ -1125,7 +1131,7 @@ def delete_account(
 
     # Soft-delete the row while removing identity, credential, and verification data.
     user.is_active = False
-    user.subject = f"deleted:{user.id}"
+    user.subject = deleted_subject
     user.email = None
     user.email_hash = None
     user.password_hash = None

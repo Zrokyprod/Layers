@@ -6,14 +6,16 @@ invitations via a secure token link.
 import secrets
 from datetime import UTC, datetime, timedelta
 from html import escape
+from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.authorization import require_project_role
 from app.api.dependencies.tenant import require_tenant_context, TenantContext
+from app.api.routes._internal.auth_current_user import _get_current_user
 from app.core.limiter import limiter
 from app.core.config import get_settings
 from app.db.models import (
@@ -138,16 +140,27 @@ def create_invitation(
             detail="This user is already an active project member.",
         )
 
-    # Prevent duplicate pending invitations
+    now = datetime.now(UTC)
     existing = db.execute(
         select(ProjectInvitation).where(
             ProjectInvitation.project_id == project_id,
             ProjectInvitation.email == normalized_email,
-            ProjectInvitation.accepted_at.is_(None),
-            ProjectInvitation.revoked_at.is_(None),
         )
     ).scalar_one_or_none()
+    existing_expires_at = None
     if existing is not None:
+        existing_expires_at = (
+            existing.expires_at
+            if existing.expires_at.tzinfo is not None
+            else existing.expires_at.replace(tzinfo=UTC)
+        )
+    if (
+        existing is not None
+        and existing.accepted_at is None
+        and existing.revoked_at is None
+        and existing_expires_at is not None
+        and now <= existing_expires_at
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A pending invitation already exists for this email.",
@@ -155,17 +168,26 @@ def create_invitation(
 
     raw_token = secrets.token_urlsafe(_INVITATION_TOKEN_BYTES)
     token_hash = _hash_token(raw_token)
-    expires_at = datetime.now(UTC) + timedelta(days=_INVITATION_EXPIRE_DAYS)
+    expires_at = now + timedelta(days=_INVITATION_EXPIRE_DAYS)
 
-    invitation = ProjectInvitation(
-        project_id=project_id,
-        email=normalized_email,
-        role=normalized_role,
-        invited_by_subject=context.subject or "unknown",
-        token_hash=token_hash,
-        expires_at=expires_at,
-    )
-    db.add(invitation)
+    if existing is None:
+        invitation = ProjectInvitation(
+            project_id=project_id,
+            email=normalized_email,
+            role=normalized_role,
+            invited_by_subject=context.subject or "unknown",
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
+        db.add(invitation)
+    else:
+        invitation = existing
+        invitation.role = normalized_role
+        invitation.invited_by_subject = context.subject or "unknown"
+        invitation.token_hash = token_hash
+        invitation.expires_at = expires_at
+        invitation.accepted_at = None
+        invitation.revoked_at = None
     db.commit()
     db.refresh(invitation)
 
@@ -294,40 +316,50 @@ def accept_invitation(
     request: Request,
     body: AcceptInvitationRequest = Body(...),
     db: Session = Depends(get_db_session),
-    context: TenantContext = Depends(require_tenant_context),
+    authorization: Annotated[str | None, Header()] = None,
 ) -> AcceptInvitationResponse:
     """Accept an invitation using the raw token."""
     token_hash = _hash_token(body.token.strip())
     invitation = db.execute(
         select(ProjectInvitation).where(
             ProjectInvitation.token_hash == token_hash,
-            ProjectInvitation.accepted_at.is_(None),
-            ProjectInvitation.revoked_at.is_(None),
         )
     ).scalar_one_or_none()
 
-    if invitation is None:
+    if invitation is None or invitation.revoked_at is not None:
         return AcceptInvitationResponse(success=False, message="Invalid or expired invitation token.")
 
     expires_at = invitation.expires_at if invitation.expires_at.tzinfo is not None else invitation.expires_at.replace(tzinfo=UTC)
     if datetime.now(UTC) > expires_at:
         return AcceptInvitationResponse(success=False, message="Invitation has expired.")
 
-    # Resolve accepting user from context
-    if not context.subject:
-        return AcceptInvitationResponse(success=False, message="User identity not found.")
-    user = db.execute(
-        select(User).where(User.subject == context.subject)
-    ).scalar_one_or_none()
-    if user is None:
-        return AcceptInvitationResponse(success=False, message="User identity not found.")
+    user = _get_current_user(authorization=authorization, db=db)
     if not user.email or user.email.strip().lower() != invitation.email:
         return AcceptInvitationResponse(
             success=False,
             message="Sign in with the email address that received this invitation.",
         )
 
-    # Create or update membership
+    if invitation.accepted_at is not None:
+        existing_membership = db.execute(
+            select(ProjectMembership).where(
+                ProjectMembership.project_id == invitation.project_id,
+                ProjectMembership.user_id == user.id,
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one_or_none()
+        if existing_membership is None:
+            return AcceptInvitationResponse(
+                success=False,
+                message="Invitation has already been used.",
+            )
+        return AcceptInvitationResponse(
+            success=True,
+            message="Invitation accepted. You already have access to the project.",
+            project_id=invitation.project_id,
+            membership_id=existing_membership.id,
+        )
+
     membership = upsert_project_membership(
         db,
         project_id=invitation.project_id,
@@ -336,11 +368,9 @@ def accept_invitation(
         role=invitation.role,
         is_active=True,
     )
-    db.commit()
-    db.refresh(membership)
-
     invitation.accepted_at = datetime.now(UTC)
     db.commit()
+    db.refresh(membership)
 
     return AcceptInvitationResponse(
         success=True,
