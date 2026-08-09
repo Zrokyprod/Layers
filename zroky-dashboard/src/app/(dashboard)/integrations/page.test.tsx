@@ -151,14 +151,6 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
-vi.mock("./system-of-record-connectors", () => ({
-  default: () => (
-    <section aria-label="Integration status">
-      GitHub Slack system-of-record status
-    </section>
-  ),
-}));
-
 function mcpStatus(overrides: Partial<McpUpstreamBindingResponse> = {}): McpUpstreamBindingResponse {
   return {
     endpoint_url: "https://mcp.example.com/mcp",
@@ -1234,6 +1226,13 @@ describe("IntegrationsPage", () => {
     }));
   });
 
+  it("does not infer missing connectors while status feeds are loading", () => {
+    render(<IntegrationsPage />);
+
+    expect(screen.getAllByRole("status").some((item) => item.textContent?.includes("Loading connector status"))).toBe(true);
+    expect(screen.queryByText("Missing / Not connected")).not.toBeInTheDocument();
+  });
+
   it("frames connectors as a simple verifier inventory with search", async () => {
     render(<IntegrationsPage />);
 
@@ -1244,6 +1243,8 @@ describe("IntegrationsPage", () => {
     expect(screen.getByRole("region", { name: "Recent test-reads" })).toBeInTheDocument();
     expect(screen.getByText("Primitive")).toBeInTheDocument();
     expect(screen.queryByText("Action")).not.toBeInTheDocument();
+    const selectedConnector = await screen.findByRole("button", { name: /Stripe.*Selected/i });
+    expect(selectedConnector.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
 
@@ -1252,7 +1253,13 @@ describe("IntegrationsPage", () => {
     expect(screen.getAllByText("Missing / Not connected").length).toBeGreaterThan(0);
     clickFirstButton("Connect Stripe");
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
-    await waitFor(() => expect(api.listSourceConnectors).toHaveBeenCalled());
+    expect(screen.getByText("Connector setup")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View manifest" })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("Selected verifier setup status")).getByText("Missing")).toBeInTheDocument();
+    await waitFor(() => expect(api.listSourceConnectors).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect((screen.getByLabelText("Credential environment variable") as HTMLInputElement).disabled).toBe(false);
+    });
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
@@ -1307,6 +1314,17 @@ describe("IntegrationsPage", () => {
     await waitFor(() => expect(api.getZohoCrmConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getPostgresReadConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getToolRegistry).toHaveBeenCalledTimes(1));
+  });
+
+  it("marks a failed connector status feed as unavailable instead of not connected", async () => {
+    api.getHubSpotCrmConnectorStatus.mockRejectedValue(new Error("status unavailable"));
+    renderWithConnector("hubspot_crm");
+
+    await screen.findByText("Status unavailable");
+    const inspector = screen.getByRole("region", { name: "Selected connector" });
+    expect(within(inspector).getByText("Status unavailable")).toBeInTheDocument();
+    expect(within(inspector).queryByText("Missing / Not connected")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert").textContent).toContain("Some connector status checks could not load");
   });
 
   it("keeps connect primary and lets refresh retry connector feeds", async () => {
@@ -1556,9 +1574,10 @@ describe("IntegrationsPage", () => {
 
     renderWithConnector("stripe_refund");
 
-    const inspector = await screen.findByRole("region", { name: "Selected connector" });
-    expect(within(inspector).queryByText("Missing / Not connected")).not.toBeInTheDocument();
+    await screen.findByText("Saved");
+    const inspector = screen.getByRole("region", { name: "Selected connector" });
     expect(within(inspector).getByText("Saved")).toBeInTheDocument();
+    expect(within(inspector).queryByText("Missing / Not connected")).not.toBeInTheDocument();
     expect(within(inspector).getByRole("button", { name: "Manage Stripe" })).toBeInTheDocument();
   });
 
@@ -1574,7 +1593,8 @@ describe("IntegrationsPage", () => {
 
     renderWithConnector("stripe_refund");
 
-    const inspector = await screen.findByRole("region", { name: "Selected connector" });
+    await screen.findByText("Missing / Not connected");
+    const inspector = screen.getByRole("region", { name: "Selected connector" });
     expect(within(inspector).getByText("Missing / Not connected")).toBeInTheDocument();
     expect(within(inspector).getByRole("button", { name: "Connect Stripe" })).toBeInTheDocument();
   });

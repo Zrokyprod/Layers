@@ -28508,7 +28508,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .connectors-source-audit-table {
-  overflow: hidden !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
   border: 1px solid #e4e4e7 !important;
   border-radius: 8px !important;
 }
@@ -28589,6 +28590,44 @@ body:has(.app-shell[data-dashboard-system="control-v1"] .fi-home-option-a) {
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .connectors-source-audit-panel {
   margin-top: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-page :is(.dashboard-eyebrow, .connector-fact span) {
+  color: var(--mc-text-secondary) !important;
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inspector-panel > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inspector-head {
+    min-height: 0 !important;
+    padding: 2px 0 12px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inspector-title {
+    min-width: 0 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inspector-actions {
+    position: static !important;
+    margin: 12px 0 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page .connector-inspector-actions .dashboard-button {
+    width: 100% !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page :is(.connector-launch-grid, .connector-setup-matrix) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-page .connectors-source-audit-row {
+    min-width: 650px !important;
+  }
 }
 
 .app-shell[data-dashboard-system="control-v1"] .projects-page {
