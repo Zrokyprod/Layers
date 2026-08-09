@@ -1,15 +1,27 @@
 // SPDX-License-Identifier: FSL-1.1-MIT
 // Copyright 2026 Zroky AI
 
-const SECRET_KEYS = new Set([
-  "api_key",
+const SECRET_KEY_MARKERS = [
   "apikey",
   "authorization",
+  "cookie",
+  "credential",
   "password",
   "secret",
   "token",
-  "access_token",
-  "refresh_token",
+];
+
+const NON_SECRET_TOKEN_KEYS = new Set([
+  "cachecreationtokens",
+  "cachereadtokens",
+  "completiontokens",
+  "estimatedprompttokens",
+  "prompttokens",
+  "reasoningtokens",
+  "tokenestimatorversion",
+  "tokenrulesversion",
+  "tokenunit",
+  "totaltokens",
 ]);
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
@@ -46,7 +58,10 @@ export function maskPayload<T>(value: T): T {
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (SECRET_KEYS.has(normalizedKey)) {
+      if (
+        !NON_SECRET_TOKEN_KEYS.has(normalizedKey) &&
+        SECRET_KEY_MARKERS.some((marker) => normalizedKey.includes(marker))
+      ) {
         out[key] = "[REDACTED_KEY]";
       } else if (SYSTEM_IDENTIFIER_KEYS.has(normalizedKey)) {
         out[key] = item;

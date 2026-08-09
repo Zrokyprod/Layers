@@ -15,9 +15,7 @@ var patterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)"authorization"\s*:\s*"[^"]+"`),
 	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),
 	regexp.MustCompile(`\b\d{13,19}\b`), // credit-card-like digit runs
-	regexp.MustCompile(`(?i)"password"\s*:\s*"[^"]+"`),
-	regexp.MustCompile(`(?i)"secret"\s*:\s*"[^"]+"`),
-	regexp.MustCompile(`(?i)"token"\s*:\s*"[^"]+"`),
+	regexp.MustCompile(`(?i)"(?:password|secret|client[_-]?secret|token|access[_-]?token|refresh[_-]?token|cookie|credential)"\s*:\s*"[^"]+"`),
 }
 
 const redacted = "[REDACTED]"

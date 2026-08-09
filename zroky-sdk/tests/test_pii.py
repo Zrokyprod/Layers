@@ -88,6 +88,20 @@ def test_mask_value_recurses_nested_tool_arguments():
     assert "[REDACTED_KEY]" in rendered
 
 
+def test_mask_value_redacts_opaque_tokens_without_hiding_usage_counts():
+    masked = mask_value(
+        {
+            "access_token": "opaque-access-value",
+            "refreshToken": "opaque-refresh-value",
+            "prompt_tokens": 42,
+        }
+    )
+
+    assert masked["access_token"] == "[REDACTED_KEY]"
+    assert masked["refreshToken"] == "[REDACTED_KEY]"
+    assert masked["prompt_tokens"] == 42
+
+
 def test_masks_base64_payloads():
     payload = "a" * 120
     assert mask_text(payload) == "[REDACTED]"

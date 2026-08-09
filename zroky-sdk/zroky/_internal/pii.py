@@ -15,6 +15,27 @@ _DATA_URL_RE = re.compile(r"^data:[^;,\s]+;base64,", re.IGNORECASE)
 _UUID_RE = re.compile(
     r"(?i)(?<![0-9a-f])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-f])"
 )
+_SENSITIVE_KEY_MARKERS = (
+    "apikey",
+    "authorization",
+    "cookie",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
+_NON_SECRET_TOKEN_KEYS = {
+    "cachecreationtokens",
+    "cachereadtokens",
+    "completiontokens",
+    "estimatedprompttokens",
+    "prompttokens",
+    "reasoningtokens",
+    "tokenestimatorversion",
+    "tokenrulesversion",
+    "tokenunit",
+    "totaltokens",
+}
 _STREET_SUFFIXES = (
     "street",
     "st",
@@ -170,7 +191,17 @@ def mask_value(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(mask_value(item) for item in value)
     if isinstance(value, dict):
-        return {key: mask_value(item) for key, item in value.items()}
+        masked: dict[Any, Any] = {}
+        for key, item in value.items():
+            normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if (
+                normalized_key not in _NON_SECRET_TOKEN_KEYS
+                and any(marker in normalized_key for marker in _SENSITIVE_KEY_MARKERS)
+            ):
+                masked[key] = "[REDACTED_KEY]" if item not in (None, "") else item
+            else:
+                masked[key] = mask_value(item)
+        return masked
     return deepcopy(value)
 
 
