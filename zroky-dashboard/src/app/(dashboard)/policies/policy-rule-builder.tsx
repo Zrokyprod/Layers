@@ -471,7 +471,15 @@ export function PolicyRuleBuilder({
                   <span>{rule.is_enabled ? "Active" : "Disabled"}</span>
                   <DashboardButton aria-label={`Edit ${rule.name}`} icon={<Pencil size={15} />} onClick={() => editRule(rule)} size="sm" variant="soft" />
                   {rule.is_enabled ? (
-                    <DashboardButton aria-label={`Disable ${rule.name}`} disabled={disabled} icon={<Trash2 size={15} />} loading={disabling} onClick={() => onDisable(rule.id)} size="sm" variant="danger" />
+                    <DashboardButton
+                      aria-label={`Disable ${rule.name}`}
+                      disabled={disabled}
+                      icon={<Trash2 size={15} />}
+                      loading={disabling}
+                      onClick={() => window.confirm(`Disable ${rule.name}? This removes its runtime guardrails.`) && onDisable(rule.id)}
+                      size="sm"
+                      variant="danger"
+                    />
                   ) : null}
                 </article>
               );

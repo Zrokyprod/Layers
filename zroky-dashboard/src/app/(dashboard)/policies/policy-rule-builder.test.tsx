@@ -116,6 +116,7 @@ describe("policy rule builder", () => {
 
   it("shows saved policies and exposes edit and disable commands", () => {
     const onDisable = vi.fn();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const rule = {
       id: "rule_1",
       name: "Release Agent: Deploy change - Review",
@@ -141,6 +142,7 @@ describe("policy rule builder", () => {
 
     expect(screen.getByText("1 active")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `Disable ${rule.name}` }));
+    expect(confirm).toHaveBeenCalledWith(`Disable ${rule.name}? This removes its runtime guardrails.`);
     expect(onDisable).toHaveBeenCalledWith("rule_1");
   });
 

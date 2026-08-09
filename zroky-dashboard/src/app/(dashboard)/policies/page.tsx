@@ -29,6 +29,7 @@ import {
   disableRuntimePolicyRule,
   dryRunRuntimePolicy,
   listAgentProfiles,
+  listMyProjects,
   listRuntimePolicyApprovals,
   listRuntimePolicyRules,
   resolveRuntimePolicyPreview,
@@ -49,6 +50,7 @@ import {
   POLICY_ACTION_OPTIONS,
   buildPolicyRulesView,
 } from "@/lib/policy-rules-view";
+import { useDashboardStore } from "@/lib/store";
 import { PolicyGenerator } from "./policy-generator";
 import { PolicyRuleBuilder } from "./policy-rule-builder";
 
@@ -347,6 +349,7 @@ function TextareaField({
 
 export default function PoliciesPage() {
   const queryClient = useQueryClient();
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const [policy, setPolicy] = useState<PilotPolicyPayload | null>(null);
   const [allowedTools, setAllowedTools] = useState("");
   const [sensitiveTools, setSensitiveTools] = useState("");
@@ -368,6 +371,12 @@ export default function PoliciesPage() {
   const billingQuery = useQuery({
     queryKey: ["billing", "me"],
     queryFn: ({ signal }) => getBillingMe(signal),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const projectsQuery = useQuery({
+    queryKey: ["me", "projects"],
+    queryFn: ({ signal }) => listMyProjects(signal),
     staleTime: 60_000,
     retry: false,
   });
@@ -528,18 +537,18 @@ export default function PoliciesPage() {
     },
     {
       id: "pending",
-      label: "Pending approvals",
+      label: "Recent pending approvals",
       value: approvalsQuery.isLoading ? DASH : approvalsQuery.isError ? "Unavailable" : String(pendingApprovals),
-      helper: "Approval queue items waiting on a human decision.",
+      helper: "Pending items within the latest 100 policy decisions.",
       tone: approvalsQuery.isError || pendingApprovals > 0 ? "warning" : "neutral",
       href: "/approvals",
       icon: <Clock3 size={16} />,
     },
     {
       id: "blocked",
-      label: "Blocked actions",
+      label: "Recent blocked actions",
       value: approvalsQuery.isLoading ? DASH : approvalsQuery.isError ? "Unavailable" : String(blockedActions),
-      helper: "Rejected or blocked policy decisions visible in the audit trail.",
+      helper: "Rejected or blocked items within the latest 100 policy decisions.",
       tone: approvalsQuery.isError ? "warning" : blockedActions > 0 ? "danger" : "neutral",
       href: "/approvals",
       icon: <AlertTriangle size={16} />,
@@ -602,11 +611,18 @@ export default function PoliciesPage() {
   }
 
   const killSwitchActive = policy?.kill_switch === true;
-  const canConfigurePolicy = hasFeatureAccess(
+  const hasPolicyFeature = hasFeatureAccess(
     billingQuery.data?.plan_template,
     billingQuery.data?.plan_code,
     "pilot.autopilot_enabled",
   );
+  const selectedMembership = selectedProject
+    ? projectsQuery.data?.find((project) => project.project_id === selectedProject)
+    : projectsQuery.data?.length === 1
+      ? projectsQuery.data[0]
+      : null;
+  const canAdministerPolicy = ["admin", "owner"].includes(selectedMembership?.role.toLowerCase() ?? "");
+  const canConfigurePolicy = hasPolicyFeature && canAdministerPolicy;
   const killSwitchConfirmationActive = killSwitchTarget !== null;
   const killSwitchActionLabel =
     killSwitchTarget === true
@@ -676,13 +692,23 @@ export default function PoliciesPage() {
         </div>
       ) : null}
 
-      {policy && !canConfigurePolicy ? (
+      {policy && !hasPolicyFeature ? (
         <div className="policies-read-only-banner" role="status">
           <LockKeyhole size={16} aria-hidden="true" />
           <span>Read-only policy view. Upgrade to change guardrails, scoped rules, kill switch, or run dry-runs.</span>
           <DashboardButtonLink href="/settings/billing" size="sm" variant="soft">
             Upgrade plan
           </DashboardButtonLink>
+        </div>
+      ) : null}
+      {policy && hasPolicyFeature && !canAdministerPolicy && !projectsQuery.isLoading ? (
+        <div className="policies-read-only-banner" role="status">
+          <LockKeyhole size={16} aria-hidden="true" />
+          <span>
+            {projectsQuery.isError
+              ? "Policy permissions could not be confirmed. Editing is disabled."
+              : "Read-only policy view. A project admin or owner can change runtime controls."}
+          </span>
         </div>
       ) : null}
 
@@ -778,12 +804,6 @@ export default function PoliciesPage() {
                     description="Evaluate risky actions before execution."
                     checked={policy.runtime_enabled}
                     onChange={(checked) => updatePolicyField("runtime_enabled", checked)}
-                  />
-                  <ToggleRow
-                    label="Kill switch"
-                    description="Stop autonomous actions until the project is manually reopened."
-                    checked={policy.kill_switch}
-                    onChange={(checked) => updatePolicyField("kill_switch", checked)}
                   />
                   <ToggleRow
                     label="Sensitive actions require approval"

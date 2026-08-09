@@ -529,6 +529,12 @@ def put_policy(
     type + range constraints (booleans, ge=0, ≤1, etc.); the service
     layer merges with the stored policy, re-validates, and trims string
     entries before persisting."""
+    if context.role not in {"admin", "owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Project role '{context.role}' does not allow this action.",
+        )
+
     current_policy = get_or_create_policy(db, project_id=context.tenant_id)
     if body.expected_updated_at is not None and _normalized_timestamp(
         current_policy.updated_at

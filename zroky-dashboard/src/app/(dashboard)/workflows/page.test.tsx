@@ -35,6 +35,13 @@ describe("WorkflowsPage", () => {
     api.listAssurancePacks.mockResolvedValue([]);
   });
 
+  it("links workflow owners to runtime policies", async () => {
+    render(<WorkflowsPage />);
+
+    const link = await screen.findByRole("link", { name: "Runtime policies" });
+    expect(link.getAttribute("href")).toBe("/policies");
+  });
+
   it("drafts and validates a workflow assurance pack", async () => {
     render(<WorkflowsPage />);
 
