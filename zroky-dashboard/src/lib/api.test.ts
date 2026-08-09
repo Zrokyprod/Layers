@@ -22,6 +22,7 @@ import {
   getOutcomeMismatchResponse,
   getOutcomeReconciliationSummary,
   getPostgresReadConnectorStatus,
+  getProjectSettings,
   listActionExecutionAttempts,
   listActionContracts,
   listActionIntents,
@@ -46,7 +47,36 @@ import {
   testCustomerRecordConnector,
   testLedgerRefundConnector,
   testPostgresReadConnector,
+  updateProjectSettings,
 } from "@/lib/api";
+
+describe("workspace settings API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("pins reads and writes to the requested project", async () => {
+    const response = {
+      project_id: "proj_explicit",
+      name: "Explicit Workspace",
+      owner_ref: null,
+      is_active: true,
+      created_at: "2026-08-09T00:00:00Z",
+      updated_at: "2026-08-09T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(response), { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjectSettings("proj_explicit");
+    await updateProjectSettings({ name: "Renamed Workspace" }, "proj_explicit");
+
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1]?.headers as Record<string, string>)["x-project-id"]).toBe("proj_explicit");
+    }
+  });
+});
 
 describe("evidence ledger API", () => {
   it("sends authoritative timeframe, filter, search, and pagination query values", async () => {

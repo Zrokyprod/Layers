@@ -38,28 +38,37 @@ function canRenameWorkspace(role: string | null | undefined): boolean {
   return normalized === "owner" || normalized === "admin";
 }
 
-export default function WorkspaceSettingsPage() {
-  const selectedProject = useDashboardStore((state) => state.selectedProject);
-  const projectQuery = useProjectSettings();
+type ActionStatus = { tone: "error" | "success"; text: string } | null;
+
+function WorkspaceSettingsPageContent({ projectId }: { projectId: string | null }) {
+  const projectQuery = useProjectSettings(projectId);
   const projectsQuery = useMyProjects();
-  const updateProject = useUpdateProjectSettings();
+  const updateProject = useUpdateProjectSettings(projectId);
   const [copied, setCopied] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
+  const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
 
-  const project = projectQuery.data ?? null;
+  const projectMismatch = Boolean(
+    projectId && projectQuery.data && projectQuery.data.project_id !== projectId,
+  );
+  const project = projectMismatch ? null : projectQuery.data ?? null;
   const memberships = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
-  const projectId = project?.project_id ?? selectedProject;
   const membership = useMemo(
     () => memberships.find((item) => item.project_id === projectId) ?? null,
     [memberships, projectId],
   );
   const workspaceName = safeString(project?.name ?? membership?.project_name, "Project unavailable");
-  const loading = projectQuery.isLoading || projectsQuery.isLoading;
-  const error = projectQuery.error?.message ?? projectsQuery.error?.message ?? null;
-  const active = !loading && !error && project?.is_active !== false && membership?.is_active !== false;
-  const role = roleLabel(membership?.role);
-  const renameAllowed = canRenameWorkspace(membership?.role);
+  const loading = projectsQuery.isLoading || Boolean(projectId && projectQuery.isLoading);
+  const error = loading
+    ? null
+    : !projectId
+      ? "Select a workspace before managing project metadata."
+      : projectMismatch
+        ? "Workspace selection changed while data was loading. Refresh to continue."
+        : projectQuery.error?.message ?? projectsQuery.error?.message ?? null;
+  const active = Boolean(!loading && !error && project?.is_active && membership?.is_active);
+  const role = membership ? roleLabel(membership.role) : "Unavailable";
+  const renameAllowed = active && canRenameWorkspace(membership?.role);
   const renameDisabled = !renameAllowed || !projectId || updateProject.isPending || draftName.trim().length < 2;
   const dashboardEnvironment = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
   const projectTimestamp = formatDateTime(project?.updated_at ?? membership?.updated_at);
@@ -84,16 +93,20 @@ export default function WorkspaceSettingsPage() {
     event.preventDefault();
     const name = draftName.trim();
     if (renameDisabled || name === workspaceName) return;
-    setStatusMessage("");
+    setActionStatus(null);
     try {
       await updateProject.mutateAsync({ name });
-      setStatusMessage("Workspace name updated.");
+      setActionStatus({ tone: "success", text: "Workspace name updated." });
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Workspace rename failed.");
+      setActionStatus({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Workspace rename failed.",
+      });
     }
   }
 
   async function refreshWorkspace() {
+    setActionStatus(null);
     await Promise.all([projectQuery.refetch(), projectsQuery.refetch()]);
   }
 
@@ -177,9 +190,12 @@ export default function WorkspaceSettingsPage() {
                 Save name
               </DashboardButton>
             </form>
-            {statusMessage ? (
-              <p className={statusMessage.toLowerCase().includes("failed") ? "field-error" : "field-success"}>
-                {statusMessage}
+            {actionStatus ? (
+              <p
+                className={actionStatus.tone === "error" ? "field-error" : "field-success"}
+                role={actionStatus.tone === "error" ? "alert" : "status"}
+              >
+                {actionStatus.text}
               </p>
             ) : null}
           </article>
@@ -209,7 +225,7 @@ export default function WorkspaceSettingsPage() {
                 <strong>{role}</strong>
               </div>
               <div>
-                <span>Environment</span>
+                <span>Dashboard environment</span>
                 <strong>{roleLabel(dashboardEnvironment)}</strong>
               </div>
               <div>
@@ -227,5 +243,15 @@ export default function WorkspaceSettingsPage() {
       )}
 
     </SettingsScaffold>
+  );
+}
+
+export default function WorkspaceSettingsPage() {
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
+  return (
+    <WorkspaceSettingsPageContent
+      key={selectedProject ?? "none"}
+      projectId={selectedProject}
+    />
   );
 }

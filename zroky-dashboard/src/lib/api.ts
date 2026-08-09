@@ -1994,14 +1994,21 @@ export function testAlertChannel(channel: AlertChannel): Promise<AlertChannelTes
   });
 }
 
-export function getProjectSettings(signal?: AbortSignal): Promise<ProjectResponse> {
-  return request<ProjectResponse>("/v1/settings/project", { signal });
+export function getProjectSettings(
+  projectIdOverride?: string | null,
+  signal?: AbortSignal,
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>("/v1/settings/project", { projectIdOverride, signal });
 }
 
-export function updateProjectSettings(body: { name: string }): Promise<ProjectResponse> {
+export function updateProjectSettings(
+  body: { name: string },
+  projectIdOverride?: string | null,
+): Promise<ProjectResponse> {
   return request<ProjectResponse>("/v1/settings/project", {
     method: "PATCH",
     body,
+    projectIdOverride,
   });
 }
 

@@ -7,6 +7,8 @@ import WorkspaceSettingsPage from "./page";
 const clipboardWrite = vi.hoisted(() => vi.fn());
 const refetchWorkspace = vi.hoisted(() => vi.fn());
 const updateProject = vi.hoisted(() => vi.fn());
+const projectSettingsProjectId = vi.hoisted(() => vi.fn());
+const updateSettingsProjectId = vi.hoisted(() => vi.fn());
 
 const hookState = vi.hoisted(() => ({
   project: {
@@ -50,22 +52,28 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/lib/hooks", () => ({
-  useProjectSettings: () => ({
-    data: hookState.project,
-    isLoading: hookState.loading,
-    error: hookState.error,
-    refetch: refetchWorkspace,
-  }),
+  useProjectSettings: (projectId: string | null) => {
+    projectSettingsProjectId(projectId);
+    return {
+      data: hookState.project,
+      isLoading: hookState.loading,
+      error: hookState.error,
+      refetch: refetchWorkspace,
+    };
+  },
   useMyProjects: () => ({
     data: hookState.projects,
     isLoading: hookState.loading,
     error: hookState.error,
     refetch: refetchWorkspace,
   }),
-  useUpdateProjectSettings: () => ({
-    mutateAsync: updateProject,
-    isPending: false,
-  }),
+  useUpdateProjectSettings: (projectId: string | null) => {
+    updateSettingsProjectId(projectId);
+    return {
+      mutateAsync: updateProject,
+      isPending: false,
+    };
+  },
 }));
 
 vi.mock("@/lib/store", () => ({
@@ -75,6 +83,26 @@ vi.mock("@/lib/store", () => ({
 
 describe("WorkspaceSettingsPage", () => {
   beforeEach(() => {
+    hookState.project = {
+      project_id: "proj_1234567890abcdef",
+      name: "Refund Operations",
+      owner_ref: "user_owner_1234567890",
+      is_active: true,
+      created_at: "2026-06-20T10:00:00Z",
+      updated_at: "2026-06-24T12:30:00Z",
+    };
+    hookState.projects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1234567890abcdef",
+        project_name: "Refund Operations",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-06-20T10:00:00Z",
+        updated_at: "2026-06-24T12:30:00Z",
+      },
+    ];
+    hookState.selectedProject = "proj_1234567890abcdef";
     hookState.loading = false;
     hookState.error = null;
     clipboardWrite.mockReset();
@@ -82,6 +110,8 @@ describe("WorkspaceSettingsPage", () => {
     updateProject.mockReset();
     refetchWorkspace.mockReset();
     refetchWorkspace.mockResolvedValue(undefined);
+    projectSettingsProjectId.mockReset();
+    updateSettingsProjectId.mockReset();
     updateProject.mockResolvedValue({
       ...hookState.project,
       name: "Revenue Operations",
@@ -105,7 +135,7 @@ describe("WorkspaceSettingsPage", () => {
     expect(screen.queryByLabelText("Workspace authority")).not.toBeInTheDocument();
     expect(screen.getAllByText("Owner").length).toBeGreaterThan(0);
     expect(screen.getByText("Project ID")).toBeInTheDocument();
-    expect(screen.getByText("Environment")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard environment")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open projects" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Manage members" })).not.toBeInTheDocument();
 
@@ -123,6 +153,55 @@ describe("WorkspaceSettingsPage", () => {
 
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith({ name: "Revenue Operations" }));
     expect(await screen.findByText("Workspace name updated.")).toBeInTheDocument();
+    expect(updateSettingsProjectId).toHaveBeenCalledWith("proj_1234567890abcdef");
+  });
+
+  it("renders backend rename failures as errors", async () => {
+    updateProject.mockRejectedValue(new Error("Only owners and admins can rename this workspace."));
+    render(<WorkspaceSettingsPage />);
+
+    fireEvent.change(screen.getByLabelText("Workspace name"), {
+      target: { value: "Revenue Operations" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Only owners and admins");
+    expect(alert.className).toContain("field-error");
+  });
+
+  it("keeps workspace metadata read-only for viewers", () => {
+    hookState.projects[0].role = "viewer";
+    render(<WorkspaceSettingsPage />);
+
+    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Save name" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Read only")).toBeInTheDocument();
+  });
+
+  it("resets project-bound form state when the workspace changes", () => {
+    const view = render(<WorkspaceSettingsPage />);
+    fireEvent.change(screen.getByLabelText("Workspace name"), {
+      target: { value: "Unsaved name" },
+    });
+
+    hookState.selectedProject = "proj_2";
+    hookState.project = {
+      ...hookState.project,
+      project_id: "proj_2",
+      name: "Second Workspace",
+    };
+    hookState.projects = [{
+      ...hookState.projects[0],
+      membership_id: "mem_2",
+      project_id: "proj_2",
+      project_name: "Second Workspace",
+    }];
+    view.rerender(<WorkspaceSettingsPage />);
+
+    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).value).toBe("Second Workspace");
+    expect(projectSettingsProjectId).toHaveBeenCalledWith("proj_2");
+    expect(updateSettingsProjectId).toHaveBeenCalledWith("proj_2");
   });
 
   it("does not infer an active workspace when settings cannot load", () => {
